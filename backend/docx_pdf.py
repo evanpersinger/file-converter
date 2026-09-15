@@ -34,36 +34,52 @@ def setup_directories(input_dir="input", output_dir="output"):
 
 
 # convert a docx table to a pdf table and add it to the story
-def add_table_to_story(story, table):
-    # Get table data
+def add_table_to_story(story, table, available_width):
+    styles = getSampleStyleSheet()
+    header_cell_style = ParagraphStyle(
+        'TableHeaderCell', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=10, textColor=colors.whitesmoke,
+    )
+    body_cell_style = ParagraphStyle(
+        'TableBodyCell', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=9,
+    )
+
+    # Get table data. Cells are wrapped in Paragraphs (rather than left as plain
+    # strings) so ReportLab wraps long text to the column width instead of
+    # overflowing past the page edge.
     data = []
-    for row in table.rows:
+    for row_index, row in enumerate(table.rows):
+        cell_style = header_cell_style if row_index == 0 else body_cell_style
         row_data = []
         for cell in row.cells:
             # Get text from cell, replacing newlines with spaces
             cell_text = cell.text.replace('\n', ' ')
-            row_data.append(cell_text)
+            row_data.append(Paragraph(cell_text, cell_style))
         data.append(row_data)
-    
+
+    if not data:
+        return
+
+    # Split the available page width evenly across columns so the table never
+    # exceeds the page, whatever column count the original docx table has.
+    num_cols = len(data[0])
+    col_widths = [available_width / num_cols] * num_cols
+
     # Create PDF table
-    pdf_table = Table(data)
-    
+    pdf_table = Table(data, colWidths=col_widths)
+
     # Style the table
     pdf_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
         ('TOPPADDING', (0, 1), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))
-    
+
     story.append(pdf_table)
     story.append(Spacer(1, 12))
 
@@ -234,7 +250,7 @@ def convert_docx_to_pdf(docx_path: str, output_path: str | None = None, input_di
             # Check if it's a table
             elif elem_id in table_map:
                 story.append(Spacer(1, 12))
-                add_table_to_story(story, table_map[elem_id])
+                add_table_to_story(story, table_map[elem_id], doc.width)
 
         # Build PDF
         print(f"Converting '{full_input_path}' to '{full_output_path}'...")
