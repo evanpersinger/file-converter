@@ -180,11 +180,15 @@ local Ollama vision model) for high-quality conversion.
 
 **Usage:**
 ```bash
-python backend/llm_pdf_md.py            # OpenAI (default)
+python backend/llm_pdf_md.py            # no args: menu of ChatGPT/Anthropic/OS models to pick from
 python backend/llm_pdf_md.py anthropic  # Claude
 python backend/llm_pdf_md.py local              # local Ollama, prompts you to pick a model
 python backend/llm_pdf_md.py local qwen3.5:9b   # local Ollama, model given directly
 ```
+
+Conversion isn't instant, especially on the local Ollama path: each page is a separate
+model call, and a local vision model can take well over a minute per page depending on
+your hardware. Expect it to take a while, particularly with OS models.
 
 **Python packages:**
 - vision-parse>=0.1.13 (OpenAI path)

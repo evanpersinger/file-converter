@@ -324,7 +324,7 @@ def _prompt_for_local_model() -> str:
     for i, name in enumerate(models, start=1):
         print(f"  {i}) {name}")
 
-    choice = input("Which model? [1]: ").strip()
+    choice = input("Select a model: ").strip()
     if not choice:
         return models[0]
     if choice.isdigit() and 1 <= int(choice) <= len(models):
@@ -334,14 +334,56 @@ def _prompt_for_local_model() -> str:
     return models[0]
 
 
+def _prompt_for_provider() -> tuple[str, str | None]:
+    """Ask the user to pick a model across all three provider sections. CLI entry point
+    only, callers going through the web UI or the agent must pass a provider instead of
+    hitting this.
+
+    Returns (provider, model). model is only meaningful for "local", the OpenAI and
+    Claude paths each use one hardcoded model (OPENAI_MODEL / ANTHROPIC_MODEL).
+    """
+    try:
+        local_models = list_ollama_models()
+    except requests.exceptions.RequestException:
+        local_models = []
+
+    entries: list[tuple[str, str | None]] = [("openai", None), ("anthropic", None)]
+    entries += [("local", name) for name in local_models]
+
+    print("ChatGPT models:")
+    print(f"  1) {OPENAI_MODEL}")
+    print("Anthropic models:")
+    print(f"  2) {ANTHROPIC_MODEL}")
+    print("OS models:")
+    if local_models:
+        for i, name in enumerate(local_models, start=3):
+            print(f"  {i}) {name}")
+    else:
+        print("  (none installed)")
+
+    choice = input("Select a model: ").strip()
+    if not choice:
+        return entries[0]
+    if choice.isdigit() and 1 <= int(choice) <= len(entries):
+        return entries[int(choice) - 1]
+
+    print(f"Invalid choice, using {OPENAI_MODEL}")
+    return entries[0]
+
+
 if __name__ == "__main__":
     # Usage: python backend/llm_pdf_md.py [openai|anthropic|local] [model]
+    # With no arguments, shows a menu of ChatGPT/Anthropic/OS models to pick from.
     # For "local" with no model given, prompts interactively from installed Ollama models.
-    provider = sys.argv[1] if len(sys.argv) > 1 else "openai"
+    if len(sys.argv) > 1:
+        provider = sys.argv[1]
+        chosen_model = sys.argv[2] if len(sys.argv) > 2 else None
+    else:
+        provider, chosen_model = _prompt_for_provider()
+
     if provider == "anthropic":
         print(convert_pdf_to_markdown_anthropic())
     elif provider == "local":
-        chosen_model = sys.argv[2] if len(sys.argv) > 2 else _prompt_for_local_model()
-        print(convert_pdf_to_markdown_local(chosen_model))
+        print(convert_pdf_to_markdown_local(chosen_model or _prompt_for_local_model()))
     else:
         print(convert_pdf_to_markdown_openai())
