@@ -22,6 +22,7 @@ from docx_md import convert_docx_to_markdown
 from docx_pdf import convert_docx_to_pdf
 from heic_jpg import convert_heic_to_jpg
 from heic_md import convert_heic_to_markdown
+from heic_pdf import convert_heic_to_pdf
 from heic_png import convert_heic_to_png
 from html_pdf import convert_html_to_pdf
 from ipynb_pdf import convert_notebook_to_pdf
@@ -148,6 +149,7 @@ agent = Agent(
         function_tool(convert_pptx_to_pdf),
         function_tool(convert_heic_to_jpg),
         function_tool(convert_heic_to_markdown),
+        function_tool(convert_heic_to_pdf),
         function_tool(convert_heic_to_png),
         function_tool(convert_jpg_to_markdown),
         function_tool(convert_jpg_to_pdf),
@@ -222,6 +224,7 @@ agent = Agent(
     - convert_pptx_to_pdf: PowerPoint -> PDF (needs LibreOffice)
     - convert_heic_to_jpg: HEIC -> JPG
     - convert_heic_to_markdown: HEIC -> Markdown via OCR
+    - convert_heic_to_pdf: HEIC -> PDF
     - convert_jpg_to_markdown: JPG -> Markdown via OCR
     - convert_jpg_to_pdf: JPG -> PDF
     - convert_jpg_to_ocr: JPG -> plain text via OCR

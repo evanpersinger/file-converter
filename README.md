@@ -414,6 +414,24 @@ python backend/heic_jpg.py
 2. Converts images to JPG format at 95% quality
 3. Saves JPG files to the `output/` folder
 
+### heic_pdf.py
+Converts HEIC images (typically from iPhone/iPad) to PDF files, one page per image.
+
+**Usage:**
+```bash
+python backend/heic_pdf.py
+```
+
+**Python packages:**
+- pillow>=11.3.0
+- pillow-heif>=0.22.0
+
+**How it works:**
+1. Automatically processes ALL HEIC files in the `input/` folder
+2. Converts each image to RGB and saves it as a single-page PDF
+3. Saves PDF files to the `output/` folder
+4. Shows summary of successful/failed conversions
+
 ### jpg_pdf.py
 Converts JPG/JPEG images to PDF files.
 
