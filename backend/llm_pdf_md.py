@@ -1,6 +1,7 @@
-"""Convert PDFs in input/ to Markdown in output/ using an LLM. Slower than pdf_md.py, costs money.
+"""Convert PDFs in input/ to Markdown in output/ using an LLM. Slower than pdf_md.py.
 
-OpenAI path needs OPENAI_API_KEY, Claude path needs ANTHROPIC_API_KEY (env or .env).
+OpenAI path needs OPENAI_API_KEY, Claude path needs ANTHROPIC_API_KEY (env or .env), both
+cost money. Local path needs Ollama running with a vision model pulled, free.
 """
 
 import base64
@@ -11,6 +12,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import anthropic
+import fitz  # PyMuPDF
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,12 +25,22 @@ output_dir = script_dir / "output"  # Folder where converted markdown files will
 
 OPENAI_MODEL = "gpt-4o-mini"
 ANTHROPIC_MODEL = "claude-sonnet-5"
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_MODEL = "qwen3.5:9b"
+LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
 
 _MARKDOWN_PROMPT = (
     "Convert this PDF to Markdown. Reproduce the text faithfully and completely, do not "
     "summarize or paraphrase. Keep headings, lists, and emphasis. Render tables as "
     "Markdown tables and equations as LaTeX. Separate pages with a blank line. Output "
     "only the Markdown, with no preamble or commentary."
+)
+
+_LOCAL_PAGE_PROMPT = (
+    "Convert this page image to Markdown. Reproduce the text faithfully and completely, do "
+    "not summarize or paraphrase. Keep headings, lists, and emphasis. Render tables as "
+    "Markdown tables and equations as LaTeX. Output only the Markdown for this page, with no "
+    "preamble or commentary."
 )
 
 
@@ -129,6 +142,54 @@ def _convert_pdf_anthropic(client: anthropic.Anthropic, pdf_path: Path) -> str:
     return "".join(block.text for block in message.content if block.type == "text")
 
 
+# Local (Ollama reads each page as an image, no API key or internet needed)
+def _convert_page_ollama(image_b64: str, model: str) -> str:
+    """Send one rendered page to the local Ollama vision model and return its Markdown."""
+    response = requests.post(
+        f"{OLLAMA_HOST}/api/chat",
+        json={
+            "model": model,
+            "messages": [{"role": "user", "content": _LOCAL_PAGE_PROMPT, "images": [image_b64]}],
+            "stream": False,
+            # Faithful transcription, not conversation. The model's default (1) leaves room
+            # to paraphrase; 0 keeps it deterministic, same reasoning as the OpenAI/Claude paths.
+            "options": {"temperature": 0},
+        },
+        # Local vision models are slow, especially on CPU. A single page can take a while.
+        timeout=300,
+    )
+    response.raise_for_status()
+    return response.json()["message"]["content"]
+
+
+def _convert_pdf_local(pdf_path: Path, model: str) -> str:
+    """Render each page of the PDF to an image and transcribe it with the local Ollama model.
+
+    Page by page, like the OpenAI path, since local vision models handle one image far more
+    reliably than a whole multi-page document at once.
+    """
+    doc = fitz.open(pdf_path)
+    if doc.is_encrypted and not doc.authenticate(""):
+        doc.close()
+        raise ValueError("PDF is password protected")
+
+    pages = []
+    for page in doc:
+        png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
+        image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
+        pages.append(_convert_page_ollama(image_b64, model))
+    doc.close()
+
+    return "\n\n".join(pages)
+
+
+def list_ollama_models() -> list[str]:
+    """Return the names of models currently pulled in the local Ollama installation."""
+    response = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
+    response.raise_for_status()
+    return [m["name"] for m in response.json().get("models", [])]
+
+
 # Shared folder loop
 def _convert_all(convert_one: Callable[[Path], str]) -> str:
     """Run convert_one over every PDF in input_dir and write each result to output_dir.
@@ -221,10 +282,64 @@ def convert_pdf_to_markdown_anthropic() -> str:
     return _convert_all(lambda pdf_path: _convert_pdf_anthropic(client, pdf_path))
 
 
+def convert_pdf_to_markdown_local(model: str = OLLAMA_MODEL) -> str:
+    """Convert all PDF files in the input folder to Markdown using a local Ollama vision model.
+
+    Free, no API key or internet needed. Requires Ollama running locally with a vision-capable
+    model pulled. Slower than the cloud paths and quality depends on the model.
+
+    Args:
+        model: name of a locally pulled Ollama model, as shown by `ollama list`. Defaults to
+            OLLAMA_MODEL.
+
+    Returns:
+        A summary of what was converted, suitable for showing to a caller.
+    """
+    # Checked here rather than at import time, so importing this module never kills the
+    # calling process, and checked once up front instead of once per PDF.
+    try:
+        requests.get(f"{OLLAMA_HOST}/api/version", timeout=2).raise_for_status()
+    except requests.exceptions.RequestException:
+        return f"Error: Ollama not reachable at {OLLAMA_HOST}. Run `ollama serve` (or open the Ollama app)."
+
+    return _convert_all(lambda pdf_path: _convert_pdf_local(pdf_path, model))
+
+
+def _prompt_for_local_model() -> str:
+    """Ask the user to pick one of the locally installed Ollama models. CLI entry point only,
+    callers going through the web UI or the agent must pass a model instead of hitting this."""
+    try:
+        models = list_ollama_models()
+    except requests.exceptions.RequestException:
+        print(f"Could not reach Ollama at {OLLAMA_HOST}, using default: {OLLAMA_MODEL}")
+        return OLLAMA_MODEL
+
+    if not models:
+        print(f"No Ollama models installed, using default: {OLLAMA_MODEL}")
+        return OLLAMA_MODEL
+
+    print("Installed Ollama models:")
+    for i, name in enumerate(models, start=1):
+        print(f"  {i}) {name}")
+
+    choice = input("Which model? [1]: ").strip()
+    if not choice:
+        return models[0]
+    if choice.isdigit() and 1 <= int(choice) <= len(models):
+        return models[int(choice) - 1]
+
+    print(f"Invalid choice, using {models[0]}")
+    return models[0]
+
+
 if __name__ == "__main__":
-    # Usage: python backend/llm_pdf_md.py [openai|anthropic]   (defaults to openai)
+    # Usage: python backend/llm_pdf_md.py [openai|anthropic|local] [model]
+    # For "local" with no model given, prompts interactively from installed Ollama models.
     provider = sys.argv[1] if len(sys.argv) > 1 else "openai"
     if provider == "anthropic":
         print(convert_pdf_to_markdown_anthropic())
+    elif provider == "local":
+        chosen_model = sys.argv[2] if len(sys.argv) > 2 else _prompt_for_local_model()
+        print(convert_pdf_to_markdown_local(chosen_model))
     else:
         print(convert_pdf_to_markdown_openai())
