@@ -154,7 +154,8 @@ def combine_files(file_paths: list[str], output_path: str | None = None) -> bool
         output_type = get_file_type(Path(output_name))
     
     full_output_path = output_dir / output_name
-    
+    existed_before = full_output_path.exists()
+
     # Combine files based on detected type
     try:
         if output_type == 'image':
@@ -245,6 +246,8 @@ def combine_files(file_paths: list[str], output_path: str | None = None) -> bool
         
         if full_output_path.exists():
             print(f"Successfully combined {len(full_input_paths)} file(s) into '{full_output_path}'")
+            if existed_before:
+                print(f"Overwrote existing file: {full_output_path.name}")
             return True
         else:
             print("Error: Output file was not created")

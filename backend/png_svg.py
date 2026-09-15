@@ -42,8 +42,6 @@ def convert_png_to_svg() -> str:
             return "That file is already in svg format"
         return "No PNG files found in input folder"
 
-    print(f"Found {len(png_files)} PNG files to convert")
-
     converted = []
     errors = []
 
@@ -52,10 +50,15 @@ def convert_png_to_svg() -> str:
             filename = os.path.splitext(os.path.basename(png_file))[0]
             svg_file = os.path.join(output_folder, f"{filename}.svg")
 
+            existed_before = os.path.exists(svg_file)
+            print(f"Converting {os.path.basename(png_file)} to svg")
+
             # vtracer's defaults suit flat-color art. colormode, mode and
             # filter_speckle are the knobs to reach for otherwise, see the README.
             vtracer.convert_image_to_svg_py(png_file, svg_file)
-            print(f"Converted: {os.path.basename(png_file)} -> {filename}.svg")
+            print(f"Converted {os.path.basename(png_file)} to {filename}.svg")
+            if existed_before:
+                print(f"Overwrote existing file: {filename}.svg")
             converted.append(f"{filename}.svg")
 
         # vtracer is a Rust extension: on an unreadable file it panics, and pyo3's
@@ -78,4 +81,6 @@ def convert_png_to_svg() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_png_to_svg())
+    result = convert_png_to_svg()
+    if not result.startswith("Converted"):
+        print(result)

@@ -118,8 +118,6 @@ def convert_jpg_to_markdown() -> str:
             return "That file is already in markdown format"
         return "No JPG files found in input folder"
 
-    print(f"Found {len(jpg_files)} JPG files to convert")
-
     converted = []
     errors = []
 
@@ -128,6 +126,8 @@ def convert_jpg_to_markdown() -> str:
             # Get filename without extension
             filename = os.path.splitext(os.path.basename(jpg_file))[0]
             md_file = os.path.join(output_folder, f"{filename}.md")
+
+            print(f"Converting {os.path.basename(jpg_file)} to md")
 
             # Open and process image
             with Image.open(jpg_file) as img:
@@ -146,10 +146,13 @@ def convert_jpg_to_markdown() -> str:
                 text = clean_text(text)
 
                 # Write to markdown file
+                existed_before = os.path.exists(md_file)
                 with open(md_file, 'w', encoding='utf-8') as f:
                     f.write(text)
 
-                print(f"Converted: {os.path.basename(jpg_file)} -> {filename}.md")
+                print(f"Converted {os.path.basename(jpg_file)} to {filename}.md")
+                if existed_before:
+                    print(f"Overwrote existing file: {filename}.md")
                 converted.append(f"{filename}.md")
 
         except Exception as e:
@@ -166,4 +169,6 @@ def convert_jpg_to_markdown() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_jpg_to_markdown())
+    result = convert_jpg_to_markdown()
+    if not result.startswith("Converted"):
+        print(result)

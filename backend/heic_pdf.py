@@ -46,8 +46,6 @@ def convert_heic_to_pdf() -> str:
             return "That file is already in pdf format"
         return "No HEIC files found in input folder"
 
-    print(f"Found {len(heic_files)} HEIC files to convert")
-
     converted = []
     errors = []
 
@@ -56,11 +54,16 @@ def convert_heic_to_pdf() -> str:
             filename = os.path.splitext(os.path.basename(heic_file))[0]
             pdf_file = os.path.join(output_folder, f"{filename}.pdf")
 
+            existed_before = os.path.exists(pdf_file)
+            print(f"Converting {os.path.basename(heic_file)} to pdf")
+
             with Image.open(heic_file) as img:
                 if img.mode != 'RGB':
                     img = img.convert('RGB')
                 img.save(pdf_file, "PDF", resolution=100.0)
-                print(f"Converted: {os.path.basename(heic_file)} -> {filename}.pdf")
+                print(f"Converted {os.path.basename(heic_file)} to {filename}.pdf")
+                if existed_before:
+                    print(f"Overwrote existing file: {filename}.pdf")
                 converted.append(f"{filename}.pdf")
 
         except Exception as e:
@@ -77,4 +80,6 @@ def convert_heic_to_pdf() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_heic_to_pdf())
+    result = convert_heic_to_pdf()
+    if not result.startswith("Converted"):
+        print(result)

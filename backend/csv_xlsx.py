@@ -68,8 +68,6 @@ def convert_csv_to_xlsx() -> str:
             return "That file is already in Excel format"
         return "No CSV files found in input folder"
 
-    print(f"Found {len(csv_files)} CSV file(s)")
-
     converted = []
     errors = []
 
@@ -82,6 +80,8 @@ def convert_csv_to_xlsx() -> str:
             xlsx_filename = os.path.splitext(filename)[0] + '.xlsx'
             xlsx_path = os.path.join(output_folder, xlsx_filename)
 
+            print(f"Converting {filename} to xlsx")
+
             # Read as text so pandas' own guessing can't damage anything, then put back
             # only the types that survive being printed out again.
             df = pd.read_csv(file, dtype=str).apply(_infer_lossless)
@@ -89,6 +89,7 @@ def convert_csv_to_xlsx() -> str:
             # xlsxwriter rather than the default openpyxl. openpyxl stores any string
             # starting with '=' as a live formula, which both loses the original text
             # and hands the user a workbook their spreadsheet will execute on open.
+            existed_before = os.path.exists(xlsx_path)
             with pd.ExcelWriter(
                 xlsx_path,
                 engine="xlsxwriter",
@@ -96,6 +97,8 @@ def convert_csv_to_xlsx() -> str:
             ) as writer:
                 df.to_excel(writer, index=False)
             print(f"Converted {filename} to {xlsx_filename}")
+            if existed_before:
+                print(f"Overwrote existing file: {xlsx_filename}")
             converted.append(xlsx_filename)
 
         except Exception as e:
@@ -112,4 +115,6 @@ def convert_csv_to_xlsx() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_csv_to_xlsx())
+    result = convert_csv_to_xlsx()
+    if not result.startswith("Converted"):
+        print(result)

@@ -251,12 +251,15 @@ def convert_r_to_rmd(r_path: str, output_path: str | None = None,
             rmd_lines.append("\n")
         
         # Write Rmd file
-        print(f"Converting '{full_input_path}' to '{full_output_path}'...")
+        existed_before = full_output_path.exists()
+        print(f"Converting {full_input_path.name} to Rmd")
         with open(full_output_path, 'w', encoding='utf-8') as f:
             f.writelines(rmd_lines)
-        
+
         if full_output_path.exists():
-            print(f"Successfully converted to '{full_output_path}'")
+            print(f"Converted {full_input_path.name} to {full_output_path.name}")
+            if existed_before:
+                print(f"Overwrote existing file: {full_output_path.name}")
             return True
         else:
             print("Rmd file creation failed")

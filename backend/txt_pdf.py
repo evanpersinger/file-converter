@@ -103,11 +103,14 @@ def convert_txt_to_pdf(txt_path: str, output_path: str | None = None) -> bool:
                 story.append(Spacer(1, 6))  # Empty line spacing
 
         # Build PDF
-        print(f"Converting '{full_input_path}' to '{full_output_path}'...")
+        existed_before = full_output_path.exists()
+        print(f"Converting {full_input_path.name} to pdf")
         doc.build(story)
-        
+
         if full_output_path.exists():
-            print(f"Successfully converted to '{full_output_path}'")
+            print(f"Converted {full_input_path.name} to {full_output_path.name}")
+            if existed_before:
+                print(f"Overwrote existing file: {full_output_path.name}")
             return True
         else:
             print("PDF creation failed")

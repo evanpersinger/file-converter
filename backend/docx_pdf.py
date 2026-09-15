@@ -15,6 +15,7 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 from docx import Document
 from docx.oxml.ns import qn
+from docx.text.hyperlink import Hyperlink
 import io
 
 # Default folders live next to this script, so `python backend/docx_pdf.py` finds
@@ -170,11 +171,21 @@ def convert_docx_to_pdf(docx_path: str, output_path: str | None = None, input_di
             if elem_id in para_map:
                 para = para_map[elem_id]
                 
-                # Process runs in order to maintain text/image order
+                # Process runs in order to maintain text/image order.
+                # para.runs only sees <w:r> elements that are direct children of the
+                # paragraph, so it silently skips runs nested inside a <w:hyperlink>
+                # element, dropping any linked text entirely. iter_inner_content()
+                # walks the paragraph in document order and surfaces both.
                 text_runs = []
                 has_formatting = False
-                
-                for run in para.runs:
+                runs_in_order = []
+                for item in para.iter_inner_content():
+                    if isinstance(item, Hyperlink):
+                        runs_in_order.extend(item.runs)
+                    else:
+                        runs_in_order.append(item)
+
+                for run in runs_in_order:
                     # Check if this run contains an image
                     has_image = False
                     try:
@@ -243,7 +254,7 @@ def convert_docx_to_pdf(docx_path: str, output_path: str | None = None, input_di
                         combined_text = ''.join(run.text for run in text_runs)
                         escaped_text = combined_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                         story.append(Paragraph(escaped_text, normal_style))
-                elif not any(run._element.xpath('.//w:drawing') for run in para.runs):
+                elif not any(run._element.xpath('.//w:drawing') for run in runs_in_order):
                     # Empty paragraph with no images - add spacing
                     story.append(Spacer(1, 6))
             
@@ -253,11 +264,14 @@ def convert_docx_to_pdf(docx_path: str, output_path: str | None = None, input_di
                 add_table_to_story(story, table_map[elem_id], doc.width)
 
         # Build PDF
-        print(f"Converting '{full_input_path}' to '{full_output_path}'...")
+        existed_before = full_output_path.exists()
+        print(f"Converting {full_input_path.name} to pdf")
         doc.build(story)
-        
+
         if full_output_path.exists():
-            print(f"Successfully converted to '{full_output_path}'")
+            print(f"Converted {full_input_path.name} to {full_output_path.name}")
+            if existed_before:
+                print(f"Overwrote existing file: {full_output_path.name}")
             return True
         else:
             print("PDF creation failed")

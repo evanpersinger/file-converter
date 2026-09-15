@@ -224,7 +224,7 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
         pdf_path = input_dir / pdf_name
 
         try:
-            print(f"Processing {pdf_name}...")
+            print(f"Converting {pdf_name} to md")
             full_md = convert_one(pdf_path)
 
             if not full_md:
@@ -233,9 +233,12 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
                 continue
 
             out_md = f"{pdf_path.stem}.md"
+            existed_before = (output_dir / out_md).exists()
             (output_dir / out_md).write_text(full_md, encoding="utf-8")
 
-            print(f"Converted {pdf_name} -> {out_md}")
+            print(f"Converted {pdf_name} to {out_md}")
+            if existed_before:
+                print(f"Overwrote existing file: {out_md}")
             converted.append(out_md)
 
         except Exception as e:
@@ -400,8 +403,11 @@ if __name__ == "__main__":
         provider, chosen_model = _prompt_for_provider()
 
     if provider == "anthropic":
-        print(convert_pdf_to_markdown_anthropic(chosen_model or ANTHROPIC_MODEL))
+        result = convert_pdf_to_markdown_anthropic(chosen_model or ANTHROPIC_MODEL)
     elif provider == "local":
-        print(convert_pdf_to_markdown_local(chosen_model or _prompt_for_local_model()))
+        result = convert_pdf_to_markdown_local(chosen_model or _prompt_for_local_model())
     else:
-        print(convert_pdf_to_markdown_openai(chosen_model or OPENAI_MODEL))
+        result = convert_pdf_to_markdown_openai(chosen_model or OPENAI_MODEL)
+
+    if not result.startswith("Converted"):
+        print(result)

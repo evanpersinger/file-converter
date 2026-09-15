@@ -110,8 +110,6 @@ def convert_heic_to_markdown() -> str:
             return "That file is already in markdown format"
         return "No HEIC files found in input folder"
 
-    print(f"Found {len(heic_files)} HEIC files to convert")
-
     converted = []
     errors = []
 
@@ -119,6 +117,8 @@ def convert_heic_to_markdown() -> str:
         try:
             filename = os.path.splitext(os.path.basename(heic_file))[0]
             md_file = os.path.join(output_folder, f"{filename}.md")
+
+            print(f"Converting {os.path.basename(heic_file)} to md")
 
             with Image.open(heic_file) as img:
                 processed_image = preprocess_image(img)
@@ -132,10 +132,13 @@ def convert_heic_to_markdown() -> str:
 
                 text = clean_text(text)
 
+                existed_before = os.path.exists(md_file)
                 with open(md_file, 'w', encoding='utf-8') as f:
                     f.write(text)
 
-                print(f"Converted: {os.path.basename(heic_file)} -> {filename}.md")
+                print(f"Converted {os.path.basename(heic_file)} to {filename}.md")
+                if existed_before:
+                    print(f"Overwrote existing file: {filename}.md")
                 converted.append(f"{filename}.md")
 
         except Exception as e:
@@ -152,4 +155,6 @@ def convert_heic_to_markdown() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_heic_to_markdown())
+    result = convert_heic_to_markdown()
+    if not result.startswith("Converted"):
+        print(result)

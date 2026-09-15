@@ -38,8 +38,6 @@ def convert_pptx_to_pdf() -> str:
             return "That file is already in pdf format"
         return "No PPTX files found in input folder"
 
-    print(f"Found {len(pptx_files)} PPTX files to convert")
-    
     # Resolve LibreOffice executable across platforms
     libreoffice_executables = [
         'libreoffice',  # common on Linux
@@ -72,6 +70,9 @@ def convert_pptx_to_pdf() -> str:
         try:
             # Get filename without extension
             filename = os.path.splitext(os.path.basename(pptx_file))[0]
+            pdf_output_path = os.path.join(output_folder, f"{filename}.pdf")
+            existed_before = os.path.exists(pdf_output_path)
+            print(f"Converting {os.path.basename(pptx_file)} to pdf")
 
             # Use LibreOffice to convert PPTX to PDF
             # This requires LibreOffice to be installed
@@ -86,7 +87,9 @@ def convert_pptx_to_pdf() -> str:
             result = subprocess.run(cmd, capture_output=True, text=True)
 
             if result.returncode == 0:
-                print(f"Converted: {os.path.basename(pptx_file)} -> {filename}.pdf")
+                print(f"Converted {os.path.basename(pptx_file)} to {filename}.pdf")
+                if existed_before:
+                    print(f"Overwrote existing file: {filename}.pdf")
                 converted.append(f"{filename}.pdf")
             else:
                 print(f"Error converting {pptx_file}: {result.stderr}")
@@ -108,4 +111,6 @@ def convert_pptx_to_pdf() -> str:
     return summary
 
 if __name__ == "__main__":
-    print(convert_pptx_to_pdf())
+    result = convert_pptx_to_pdf()
+    if not result.startswith("Converted"):
+        print(result)

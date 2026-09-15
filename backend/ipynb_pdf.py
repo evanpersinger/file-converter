@@ -64,11 +64,14 @@ def convert_notebook_to_pdf(notebook_path: str, output_path: str | None = None) 
             str(full_input_path)
         ]
         
-        print(f"Converting '{full_input_path}' to '{full_output_path}'...")
+        existed_before = os.path.exists(full_output_path)
+        print(f"Converting {Path(full_input_path).name} to pdf")
         result = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         if result.returncode == 0:
-            print(f"Successfully converted to '{full_output_path}'")
+            print(f"Converted {Path(full_input_path).name} to {full_output_path.name}")
+            if existed_before:
+                print(f"Overwrote existing file: {full_output_path.name}")
             return True
         else:
             print(f"Conversion failed: {result.stderr}")

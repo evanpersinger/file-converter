@@ -43,8 +43,6 @@ def convert_heic_to_png() -> str:
             return "That file is already in png format"
         return "No HEIC files found in input folder"
 
-    print(f"Found {len(heic_files)} HEIC files to convert")
-
     converted = []
     errors = []
 
@@ -53,13 +51,18 @@ def convert_heic_to_png() -> str:
             filename = os.path.splitext(os.path.basename(heic_file))[0]
             png_file = os.path.join(output_folder, f"{filename}.png")
 
+            existed_before = os.path.exists(png_file)
+            print(f"Converting {os.path.basename(heic_file)} to png")
+
             with Image.open(heic_file) as img:
                 # PNG cannot store CMYK or the paletted-with-alpha oddities some
                 # HEIC encoders produce, so anything unusual is normalised first.
                 if img.mode not in ('RGB', 'RGBA', 'L', 'LA'):
                     img = img.convert('RGBA')
                 img.save(png_file, 'PNG')
-                print(f"Converted: {os.path.basename(heic_file)} -> {filename}.png")
+                print(f"Converted {os.path.basename(heic_file)} to {filename}.png")
+                if existed_before:
+                    print(f"Overwrote existing file: {filename}.png")
                 converted.append(f"{filename}.png")
 
         except Exception as e:
@@ -76,4 +79,6 @@ def convert_heic_to_png() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_heic_to_png())
+    result = convert_heic_to_png()
+    if not result.startswith("Converted"):
+        print(result)

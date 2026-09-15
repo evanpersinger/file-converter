@@ -64,8 +64,6 @@ def convert_pptx_to_markdown() -> str:
             return "That file is already in markdown format"
         return "No PPTX files found in input folder"
 
-    print(f"Found {len(pptx_files)} PPTX files to convert")
-
     converted = []
     errors = []
 
@@ -75,14 +73,19 @@ def convert_pptx_to_markdown() -> str:
             filename = os.path.splitext(os.path.basename(pptx_file))[0]
             md_file = os.path.join(output_folder, f"{filename}.md")
 
+            print(f"Converting {os.path.basename(pptx_file)} to md")
+
             # Extract text and format as markdown
             markdown_content = extract_text_from_pptx(pptx_file)
 
             # Write to markdown file
+            existed_before = os.path.exists(md_file)
             with open(md_file, 'w', encoding='utf-8') as f:
                 f.write(markdown_content)
 
-            print(f"Converted: {os.path.basename(pptx_file)} -> {filename}.md")
+            print(f"Converted {os.path.basename(pptx_file)} to {filename}.md")
+            if existed_before:
+                print(f"Overwrote existing file: {filename}.md")
             converted.append(f"{filename}.md")
 
         except Exception as e:
@@ -99,4 +102,6 @@ def convert_pptx_to_markdown() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_pptx_to_markdown())
+    result = convert_pptx_to_markdown()
+    if not result.startswith("Converted"):
+        print(result)

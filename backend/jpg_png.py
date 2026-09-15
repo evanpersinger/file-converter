@@ -43,8 +43,6 @@ def convert_jpg_to_png() -> str:
             return "That file is already in png format"
         return "No JPG files found in input folder"
 
-    print(f"Found {len(jpg_files)} JPG files to convert")
-
     converted = []
     errors = []
 
@@ -53,9 +51,14 @@ def convert_jpg_to_png() -> str:
             filename = os.path.splitext(os.path.basename(jpg_file))[0]
             png_file = os.path.join(output_folder, f"{filename}.png")
 
+            existed_before = os.path.exists(png_file)
+            print(f"Converting {os.path.basename(jpg_file)} to png")
+
             with Image.open(jpg_file) as img:
                 img.save(png_file, 'PNG')
-                print(f"Converted: {os.path.basename(jpg_file)} -> {filename}.png")
+                print(f"Converted {os.path.basename(jpg_file)} to {filename}.png")
+                if existed_before:
+                    print(f"Overwrote existing file: {filename}.png")
                 converted.append(f"{filename}.png")
 
         except Exception as e:
@@ -72,4 +75,6 @@ def convert_jpg_to_png() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_jpg_to_png())
+    result = convert_jpg_to_png()
+    if not result.startswith("Converted"):
+        print(result)

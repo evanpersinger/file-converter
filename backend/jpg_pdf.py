@@ -41,8 +41,6 @@ def convert_jpg_to_pdf() -> str:
             return "That file is already in pdf format"
         return "No JPG files found in input folder"
 
-    print(f"Found {len(jpg_files)} JPG files to convert")
-
     converted = []
     errors = []
 
@@ -52,6 +50,9 @@ def convert_jpg_to_pdf() -> str:
             filename = os.path.splitext(os.path.basename(jpg_file))[0]
             pdf_file = os.path.join(output_folder, f"{filename}.pdf")
 
+            existed_before = os.path.exists(pdf_file)
+            print(f"Converting {os.path.basename(jpg_file)} to pdf")
+
             # Open and convert image to PDF
             with Image.open(jpg_file) as img:
                 # Convert to RGB if necessary (for PNG with transparency, etc.)
@@ -60,7 +61,9 @@ def convert_jpg_to_pdf() -> str:
 
                 # Save as PDF
                 img.save(pdf_file, "PDF", resolution=100.0)
-                print(f"Converted: {os.path.basename(jpg_file)} -> {filename}.pdf")
+                print(f"Converted {os.path.basename(jpg_file)} to {filename}.pdf")
+                if existed_before:
+                    print(f"Overwrote existing file: {filename}.pdf")
                 converted.append(f"{filename}.pdf")
 
         except Exception as e:
@@ -76,5 +79,7 @@ def convert_jpg_to_pdf() -> str:
     return summary
 
 if __name__ == "__main__":
-    print(convert_jpg_to_pdf())
+    result = convert_jpg_to_pdf()
+    if not result.startswith("Converted"):
+        print(result)
 

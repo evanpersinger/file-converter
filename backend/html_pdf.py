@@ -55,6 +55,8 @@ def convert_html_to_pdf(html_path: str, output_path: str | None = None) -> bool:
         pdf_name = Path(output_path).name
     full_output_path = output_dir / pdf_name
 
+    existed_before = full_output_path.exists()
+
     # 1) Try wkhtmltopdf (best quality for HTML rendering)
     if command_exists("wkhtmltopdf"):
         try:
@@ -63,10 +65,12 @@ def convert_html_to_pdf(html_path: str, output_path: str | None = None) -> bool:
                 str(full_input_path),
                 str(full_output_path),
             ]
-            print(f"Converting '{full_input_path}' to '{full_output_path}' using wkhtmltopdf...")
+            print(f"Converting {full_input_path.name} to pdf")
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0 and full_output_path.exists():
-                print(f"Successfully converted to '{full_output_path}'")
+                print(f"Converted {full_input_path.name} to {full_output_path.name}")
+                if existed_before:
+                    print(f"Overwrote existing file: {full_output_path.name}")
                 return True
             else:
                 if result.stderr:
@@ -85,10 +89,12 @@ def convert_html_to_pdf(html_path: str, output_path: str | None = None) -> bool:
                 str(full_output_path),
                 "--pdf-engine=xelatex",
             ]
-            print(f"Converting '{full_input_path}' to '{full_output_path}' using pandoc...")
+            print(f"Converting {full_input_path.name} to pdf")
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0 and full_output_path.exists():
-                print(f"Successfully converted to '{full_output_path}'")
+                print(f"Converted {full_input_path.name} to {full_output_path.name}")
+                if existed_before:
+                    print(f"Overwrote existing file: {full_output_path.name}")
                 return True
             else:
                 print(f"pandoc failed: {result.stderr.strip() if result.stderr else 'unknown error'}")

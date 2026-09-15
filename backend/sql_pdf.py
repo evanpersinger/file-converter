@@ -74,8 +74,12 @@ def convert_sql_files() -> str:
     errors = []
     for sql_file in sql_files:
         output_file = output_dir / f"{sql_file.stem}.pdf"
-        print(f"Converting {sql_file.name}...")
+        existed_before = output_file.exists()
+        print(f"Converting {sql_file.name} to pdf")
         if create_pdf_from_sql(sql_file, output_file):
+            print(f"Converted {sql_file.name} to {output_file.name}")
+            if existed_before:
+                print(f"Overwrote existing file: {output_file.name}")
             converted.append(output_file.name)
         else:
             errors.append(sql_file.name)
@@ -96,7 +100,9 @@ def main():
     args = parser.parse_args()
 
     if not args.sql_file:
-        print(convert_sql_files())
+        result = convert_sql_files()
+        if not result.startswith("Converted"):
+            print(result)
         return
 
     input_dir, output_dir = setup_directories()
@@ -108,8 +114,13 @@ def main():
         return
 
     output_path = output_dir / (args.output_file or f"{sql_path.stem}.pdf")
-    print(f"Converting {sql_path.name} to {output_path.name}...")
-    if not create_pdf_from_sql(sql_path, output_path):
+    existed_before = output_path.exists()
+    print(f"Converting {sql_path.name} to pdf")
+    if create_pdf_from_sql(sql_path, output_path):
+        print(f"Converted {sql_path.name} to {output_path.name}")
+        if existed_before:
+            print(f"Overwrote existing file: {output_path.name}")
+    else:
         print(f"Failed to convert {sql_path.name}")
 
 

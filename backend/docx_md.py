@@ -40,8 +40,6 @@ def convert_docx_to_markdown() -> str:
             return "That file is already in markdown format"
         return "No DOCX files found in input folder"
 
-    print(f"Found {len(docx_files)} DOCX files to convert")
-
     converted = []
     errors = []
 
@@ -49,6 +47,9 @@ def convert_docx_to_markdown() -> str:
         filename = os.path.splitext(os.path.basename(docx_file))[0]
 
         try:
+            existed_before = os.path.exists(os.path.join(output_folder, f"{filename}.md"))
+            print(f"Converting {os.path.basename(docx_file)} to md")
+
             # Runs from inside output_folder with a relative --extract-media path, because
             # pandoc writes image links exactly as given. An absolute path would break the
             # links as soon as the output is moved or zipped.
@@ -71,7 +72,9 @@ def convert_docx_to_markdown() -> str:
                 errors.append(f"{os.path.basename(docx_file)}: {message}")
                 continue
 
-            print(f"Converted: {os.path.basename(docx_file)} -> {filename}.md")
+            print(f"Converted {os.path.basename(docx_file)} to {filename}.md")
+            if existed_before:
+                print(f"Overwrote existing file: {filename}.md")
             converted.append(f"{filename}.md")
 
         except Exception as e:
@@ -88,4 +91,6 @@ def convert_docx_to_markdown() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_docx_to_markdown())
+    result = convert_docx_to_markdown()
+    if not result.startswith("Converted"):
+        print(result)

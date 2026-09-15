@@ -40,14 +40,13 @@ def convert_pdf_to_png() -> str:
             return "That file is already in png format"
         return "No PDF files found in input folder"
 
-    print(f"Found {len(pdf_files)} PDF files to convert")
-
     converted = []
     errors = []
 
     for pdf_file in pdf_files:
         try:
             filename = os.path.splitext(os.path.basename(pdf_file))[0]
+            print(f"Converting {os.path.basename(pdf_file)} to png")
 
             with fitz.open(pdf_file) as document:
                 if document.page_count == 0:
@@ -59,10 +58,13 @@ def convert_pdf_to_png() -> str:
                     # not end up with a pointless "_page1" suffix.
                     suffix = "" if document.page_count == 1 else f"_page{index}"
                     png_file = os.path.join(output_folder, f"{filename}{suffix}.png")
+                    existed_before = os.path.exists(png_file)
 
                     page.get_pixmap(dpi=RENDER_DPI).save(png_file)
-                    print(f"Converted: {os.path.basename(pdf_file)} page {index} "
-                          f"-> {filename}{suffix}.png")
+                    print(f"Converted {os.path.basename(pdf_file)} page {index} "
+                          f"to {filename}{suffix}.png")
+                    if existed_before:
+                        print(f"Overwrote existing file: {filename}{suffix}.png")
                     converted.append(f"{filename}{suffix}.png")
 
         except Exception as e:
@@ -79,4 +81,6 @@ def convert_pdf_to_png() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_pdf_to_png())
+    result = convert_pdf_to_png()
+    if not result.startswith("Converted"):
+        print(result)

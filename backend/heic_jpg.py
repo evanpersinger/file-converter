@@ -43,8 +43,6 @@ def convert_heic_to_jpg() -> str:
             return "That file is already in jpg format"
         return "No HEIC files found in input folder"
 
-    print(f"Found {len(heic_files)} HEIC files to convert")
-
     converted = []
     errors = []
 
@@ -53,11 +51,16 @@ def convert_heic_to_jpg() -> str:
             filename = os.path.splitext(os.path.basename(heic_file))[0]
             jpg_file = os.path.join(output_folder, f"{filename}.jpg")
 
+            existed_before = os.path.exists(jpg_file)
+            print(f"Converting {os.path.basename(heic_file)} to jpg")
+
             with Image.open(heic_file) as img:
                 if img.mode != 'RGB':
                     img = img.convert('RGB')
                 img.save(jpg_file, 'JPEG', quality=95)
-                print(f"Converted: {os.path.basename(heic_file)} -> {filename}.jpg")
+                print(f"Converted {os.path.basename(heic_file)} to {filename}.jpg")
+                if existed_before:
+                    print(f"Overwrote existing file: {filename}.jpg")
                 converted.append(f"{filename}.jpg")
 
         except Exception as e:
@@ -74,4 +77,6 @@ def convert_heic_to_jpg() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_heic_to_jpg())
+    result = convert_heic_to_jpg()
+    if not result.startswith("Converted"):
+        print(result)

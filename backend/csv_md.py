@@ -60,8 +60,6 @@ def convert_csv_to_markdown() -> str:
             return "File is already in markdown format"
         return "No CSV files found in input folder"
 
-    print(f"Found {len(csv_files)} CSV file(s) to convert")
-
     converted = []
     errors = []
 
@@ -71,12 +69,17 @@ def convert_csv_to_markdown() -> str:
             filename = os.path.splitext(os.path.basename(csv_file))[0] # builds new filename
             md_file = os.path.join(output_folder, f"{filename}.md")
 
+            print(f"Converting {os.path.basename(csv_file)} to md")
+
             markdown_content = csv_to_markdown(csv_file)
 
+            existed_before = os.path.exists(md_file)
             with open(md_file, 'w', encoding='utf-8') as f:
                 f.write(markdown_content)
 
-            print(f"Converted: {os.path.basename(csv_file)} -> {filename}.md")
+            print(f"Converted {os.path.basename(csv_file)} to {filename}.md")
+            if existed_before:
+                print(f"Overwrote existing file: {filename}.md")
             converted.append(f"{filename}.md")
 
         except Exception as e:
@@ -93,4 +96,6 @@ def convert_csv_to_markdown() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_csv_to_markdown())
+    result = convert_csv_to_markdown()
+    if not result.startswith("Converted"):
+        print(result)

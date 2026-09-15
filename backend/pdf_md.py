@@ -263,14 +263,10 @@ def convert_pdf_to_markdown() -> str:
     entries = os.listdir(input_folder) if os.path.isdir(input_folder) else []
     pdf_files = sorted(f for f in entries if f.lower().endswith(".pdf"))
 
-    print(f"Looking for PDF files in: {input_folder}")
-
     if not pdf_files:
         if any(f.lower().endswith(".md") for f in entries):
             return "That file is already in md format"
         return "No PDF files found in input folder"
-
-    print(f"Found {len(pdf_files)} PDF file(s)")
 
     converted = []
     errors = []
@@ -279,12 +275,15 @@ def convert_pdf_to_markdown() -> str:
         pdf_path = os.path.join(input_folder, filename)
         md_filename = os.path.splitext(filename)[0] + ".md"
         md_path = os.path.join(output_folder, md_filename)
-        print(f"Processing {filename}...")
+        print(f"Converting {filename} to md")
         try:
             markdown = pdf_to_markdown(pdf_path)
+            existed_before = os.path.exists(md_path)
             with open(md_path, "w", encoding="utf-8") as f:
                 f.write(markdown)
-            print(f"  Converted {filename} -> {md_filename}")
+            print(f"  Converted {filename} to {md_filename}")
+            if existed_before:
+                print(f"  Overwrote existing file: {md_filename}")
             converted.append(md_filename)
         except Exception as e:
             print(f"  Error converting {filename}: {e}")
@@ -300,7 +299,9 @@ def convert_pdf_to_markdown() -> str:
 
 
 def main():
-    print(convert_pdf_to_markdown())
+    result = convert_pdf_to_markdown()
+    if not result.startswith("Converted"):
+        print(result)
 
 
 if __name__ == "__main__":

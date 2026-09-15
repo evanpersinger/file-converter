@@ -710,7 +710,7 @@ def convert_screenshots_to_text(structured: bool = False) -> str:
     failed = []
     for image_filename in image_files:
         image_path = os.path.join(input_folder, image_filename)
-        print(f"\nConverting: {image_filename}")
+        print(f"\nConverting {image_filename} to txt")
         text = convert(image_path)
         if text:
             all_text_parts.append(text)
@@ -723,9 +723,12 @@ def convert_screenshots_to_text(structured: bool = False) -> str:
         print("\nNo text extracted from any images")
         return f"No text extracted from any of the {len(image_files)} image(s)"
 
+    existed_before = os.path.exists(combined_path)
     with open(combined_path, 'w', encoding='utf-8') as f:
         f.write('\n\n'.join(all_text_parts))
     print(f"\nAll text saved to: {combined_filename}")
+    if existed_before:
+        print(f"Overwrote existing file: {combined_filename}")
 
     summary = (f"Extracted text from {len(all_text_parts)} image(s) ({mode} mode) "
                f"into output/{combined_filename}")

@@ -589,7 +589,7 @@ def _pandoc_once(md_text, output_path, from_fmt, header_path, mermaid_filter):
     return False, error_msg
 
 
-def run_pandoc(rich_md, safe_md, output_path):
+def run_pandoc(rich_md, safe_md, output_path, input_name):
     """Render with full fidelity, falling back to a safe render if xelatex fails."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".tex", delete=False,
                                      encoding="utf-8") as header_file:
@@ -601,7 +601,7 @@ def run_pandoc(rich_md, safe_md, output_path):
     try:
         ok, err = _pandoc_once(rich_md, output_path, PANDOC_FROM, header_path, mermaid_filter)
         if ok:
-            print(f"Successfully converted to '{output_path}'")
+            print(f"Converted {input_name} to {output_path.name}")
             return True
 
         # Full render failed: report the likely culprit and try the safe render.
@@ -614,7 +614,7 @@ def run_pandoc(rich_md, safe_md, output_path):
 
         ok, err2 = _pandoc_once(safe_md, output_path, PANDOC_FROM_SAFE, header_path, mermaid_filter)
         if ok:
-            print(f"  produced a PDF in safe mode (math shown as text) -> '{output_path}'")
+            print(f"  produced a PDF in safe mode (math shown as text): {input_name} to {output_path.name}")
             return True
 
         print(f"pandoc failed: {err2}")
@@ -677,8 +677,12 @@ def convert_md_to_pdf(md_path: str, output_path: str | None = None) -> bool:
         rich_md = normalize_tables(rich_md)
         rich_md = convert_symbols(rich_md)
 
-        print(f"Converting '{full_input_path}' to '{full_output_path}' .")
-        return run_pandoc(rich_md, safe_md, full_output_path)
+        existed_before = full_output_path.exists()
+        print(f"Converting {full_input_path.name} to pdf")
+        ok = run_pandoc(rich_md, safe_md, full_output_path, full_input_path.name)
+        if ok and existed_before:
+            print(f"Overwrote existing file: {full_output_path.name}")
+        return ok
     except Exception as e:
         print(f"Unexpected error running pandoc: {e}")
         traceback.print_exc()

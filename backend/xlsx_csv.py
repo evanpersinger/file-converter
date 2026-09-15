@@ -45,8 +45,6 @@ def convert_xlsx_to_csv() -> str:
             return "That file is already in csv format"
         return "No Excel files found in input folder"
 
-    print(f"Found {len(excel_files)} Excel file(s)")
-
     converted = []
     errors = []
 
@@ -56,6 +54,7 @@ def convert_xlsx_to_csv() -> str:
 
         try:
             stem = os.path.splitext(filename)[0]
+            print(f"Converting {filename} to csv")
 
             # sheet_name=None reads every sheet, not just the first. A workbook is a
             # stack of separate grids and a CSV is one grid, so a multi-sheet workbook
@@ -79,8 +78,11 @@ def convert_xlsx_to_csv() -> str:
                     csv_filename = f"{stem}_{_safe_name(sheet_name)}.csv"
 
                 csv_path = os.path.join(output_folder, csv_filename)
+                existed_before = os.path.exists(csv_path)
                 df.to_csv(csv_path, index=False)
                 print(f"Converted {filename} [{sheet_name}] to {csv_filename}")
+                if existed_before:
+                    print(f"Overwrote existing file: {csv_filename}")
                 converted.append(csv_filename)
 
         except Exception as e:
@@ -97,4 +99,6 @@ def convert_xlsx_to_csv() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_xlsx_to_csv())
+    result = convert_xlsx_to_csv()
+    if not result.startswith("Converted"):
+        print(result)

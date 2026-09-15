@@ -46,8 +46,6 @@ def convert_jpg_to_ocr() -> str:
             return "That file is already in text format"
         return "No JPG/JPEG files found in input folder"
 
-    print(f"Found {len(jpg_files)} JPG/JPEG files to convert")
-
     converted = []
     errors = []
 
@@ -56,7 +54,9 @@ def convert_jpg_to_ocr() -> str:
             # Get filename without extension
             filename = os.path.splitext(os.path.basename(jpg_file))[0]
             txt_file = os.path.join(output_folder, f"{filename}.txt")
-            
+
+            print(f"Converting {os.path.basename(jpg_file)} to txt")
+
             # Open image and perform OCR
             with Image.open(jpg_file) as img:
                 # Convert to RGB if needed
@@ -76,12 +76,15 @@ def convert_jpg_to_ocr() -> str:
                 
                 # Clean up extra whitespace
                 text = text.strip()
-                
+
                 # Save as text file
+                existed_before = os.path.exists(txt_file)
                 with open(txt_file, 'w', encoding='utf-8') as f:
                     f.write(text)
-                
-                print(f"Converted: {os.path.basename(jpg_file)} -> {filename}.txt")
+
+                print(f"Converted {os.path.basename(jpg_file)} to {filename}.txt")
+                if existed_before:
+                    print(f"Overwrote existing file: {filename}.txt")
                 converted.append(f"{filename}.txt")
 
         except Exception as e:
@@ -98,4 +101,6 @@ def convert_jpg_to_ocr() -> str:
 
 
 if __name__ == "__main__":
-    print(convert_jpg_to_ocr())
+    result = convert_jpg_to_ocr()
+    if not result.startswith("Converted"):
+        print(result)

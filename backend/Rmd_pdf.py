@@ -87,6 +87,7 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
     else:
         pdf_name = Path(output_path).name
     full_output_path = output_dir / pdf_name
+    existed_before = full_output_path.exists()
 
     # Try via R + rmarkdown (best for .Rmd with code chunks)
     if command_exists("Rscript"):
@@ -131,10 +132,12 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
                 "-e",
                 r_expr,
             ]
-            print(f"Converting '{full_input_path}' to '{full_output_path}' using rmarkdown...")
+            print(f"Converting {full_input_path.name} to pdf")
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0 and full_output_path.exists():
-                print(f"Successfully converted to '{full_output_path}'")
+                print(f"Converted {full_input_path.name} to {full_output_path.name}")
+                if existed_before:
+                    print(f"Overwrote existing file: {full_output_path.name}")
                 # Clean up temp file
                 if temp_path and os.path.exists(temp_path):
                     os.unlink(temp_path)
@@ -257,7 +260,7 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
                 "-V", "fontsize=11pt",  # Set readable font size
                 "-H", header_path,  # Include LaTeX header for text wrapping
             ]
-            print(f"Converting '{full_input_path}' to '{full_output_path}' using pandoc...")
+            print(f"Converting {full_input_path.name} to pdf")
             result = subprocess.run(cmd, capture_output=True, text=True)
             
             # Clean up temp files
@@ -267,7 +270,9 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
                 os.unlink(modified_input_path)
             
             if result.returncode == 0 and full_output_path.exists():
-                print(f"Successfully converted to '{full_output_path}'")
+                print(f"Converted {full_input_path.name} to {full_output_path.name}")
+                if existed_before:
+                    print(f"Overwrote existing file: {full_output_path.name}")
                 return True
             else:
                 print(f"pandoc failed: {result.stderr.strip() if result.stderr else 'unknown error'}")
