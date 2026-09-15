@@ -27,6 +27,7 @@ OPENAI_MODEL = "gpt-4o-mini"
 ANTHROPIC_MODEL = "claude-sonnet-5"
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = "qwen3.5:9b"
+OLLAMA_KEEP_ALIVE = "30s"  # unload the model this long after the last page, instead of Ollama's 5m default
 LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
 
 _MARKDOWN_PROMPT = (
@@ -154,6 +155,7 @@ def _convert_page_ollama(image_b64: str, model: str) -> str:
             # Faithful transcription, not conversation. The model's default (1) leaves room
             # to paraphrase; 0 keeps it deterministic, same reasoning as the OpenAI/Claude paths.
             "options": {"temperature": 0},
+            "keep_alive": OLLAMA_KEEP_ALIVE,
         },
         # Local vision models are slow, especially on CPU. A single page can take a while.
         timeout=300,

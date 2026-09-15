@@ -175,29 +175,46 @@ python backend/pdf_md.py
 - Tesseract OCR (macOS: `brew install tesseract`)
 
 ### llm_pdf_md.py
-Converts PDF files to Markdown using an LLM (OpenAI's Vision API or Anthropic's Claude) for high-quality conversion.
+Converts PDF files to Markdown using an LLM (OpenAI's Vision API, Anthropic's Claude, or a
+local Ollama vision model) for high-quality conversion.
 
 **Usage:**
 ```bash
 python backend/llm_pdf_md.py            # OpenAI (default)
 python backend/llm_pdf_md.py anthropic  # Claude
+python backend/llm_pdf_md.py local              # local Ollama, prompts you to pick a model
+python backend/llm_pdf_md.py local qwen3.5:9b   # local Ollama, model given directly
 ```
 
 **Python packages:**
 - vision-parse>=0.1.13 (OpenAI path)
 - anthropic>=1.0 (Claude path)
+- requests>=2.32.3 (local path, already a dependency)
 - python-dotenv>=1.1.1
 - openai>=2.7.1 (installed as dependency)
 
 **Configuration:**
 1. Create a `.env` file in the project root
-2. Add the key for whichever provider you want to use, or both:
+2. Add the key for whichever cloud provider you want to use, or both:
    - OpenAI: `OPENAI_API_KEY=your_api_key_here`
    - Anthropic: `ANTHROPIC_API_KEY=your_api_key_here`
 
 The OpenAI path renders each page to an image and sends it to `gpt-4o-mini`. The Claude
 path sends the PDF itself to `claude-sonnet-5`, which reads PDFs natively (limit 32 MB
 per file). Both cost money and bill the key they use.
+
+**Local (Ollama) path:**
+- Requires [Ollama](https://ollama.com) installed and running locally (`ollama serve`, or
+  just open the Ollama app)
+- **The model must be pulled before running the script** — Ollama does not auto-download
+  on first use here. Pull one with `ollama pull qwen3.5:9b` (or any other vision-capable
+  model, e.g. `ollama pull gemma4:12b`). Check what you already have with `ollama list`.
+- Free, no API key, nothing sent over the network. Slower than the cloud paths, and
+  quality depends entirely on the model you pick.
+- Renders each page to an image, same idea as the OpenAI path, and sends it to the model
+  you choose (`OLLAMA_MODEL` in the script, default `qwen3.5:9b`). The model unloads from
+  memory 30 seconds after the last page (`OLLAMA_KEEP_ALIVE`), instead of Ollama's normal
+  5-minute idle default.
 
 **Page limit (Claude path):** roughly 100 pages per PDF, fewer for dense text or
 table-heavy PDFs. The whole PDF is converted in one request with output capped at 64K
@@ -956,11 +973,16 @@ they work the same no matter which directory you run from.
    - LaTeX: `brew install --cask mactex` (for PDF generation)
    - LibreOffice: `brew install --cask libreoffice` (for PowerPoint conversion)
    - mermaid-filter (for Mermaid diagrams in `md_pdf.py`): `pnpm add -g mermaid-filter`
+   - Ollama (for the local, free path in `llm_pdf_md.py`): `brew install ollama`, then
+     start it (`ollama serve`, or open the Ollama app) and **pull a vision-capable model
+     before running the script**, e.g. `ollama pull qwen3.5:9b`. Nothing downloads
+     automatically on first use, so this step has to happen first.
 
 4. **Optional: Set up API keys** (for `llm_pdf_md.py` and `agent.py`):
    ```bash
    # Create .env file. OPENAI_API_KEY powers the agent and the OpenAI PDF converter,
    # ANTHROPIC_API_KEY powers the Claude PDF converter. Add whichever you use.
+   # Not needed for the local Ollama path, that one uses no API key at all.
    echo "OPENAI_API_KEY=your_api_key_here" > .env
    echo "ANTHROPIC_API_KEY=your_api_key_here" >> .env
    ```
