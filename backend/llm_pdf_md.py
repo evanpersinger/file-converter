@@ -20,26 +20,26 @@ load_dotenv()
 
 # Define input and output directories relative to this script
 script_dir = Path(__file__).resolve().parent
-input_dir = script_dir / "input"   # Folder containing PDF files to convert
-output_dir = script_dir / "output"  # Folder where converted markdown files will be saved
+input_dir = script_dir / "input"   # Folder containing files to convert
+output_dir = script_dir / "output"  # Folder where converted files will be saved
 
-OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]
+OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"]  # vision_parse only supports these two for OpenAI
 ANTHROPIC_MODELS = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
 OPENAI_MODEL = OPENAI_MODELS[0]
 ANTHROPIC_MODEL = ANTHROPIC_MODELS[0]
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = "qwen3.5:9b"
-OLLAMA_KEEP_ALIVE = "30s"  # unload the model this long after the last page, instead of Ollama's 5m default
+OLLAMA_KEEP_ALIVE = "30s"  # stop running the model 30 seconds after script completes conversion, overrides Ollama's 5 min default
 LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
 
-_MARKDOWN_PROMPT = (
+_DOCUMENT_PROMPT = (
     "Convert this PDF to Markdown. Reproduce the text faithfully and completely, do not "
     "summarize or paraphrase. Keep headings, lists, and emphasis. Render tables as "
     "Markdown tables and equations as LaTeX. Separate pages with a blank line. Output "
     "only the Markdown, with no preamble or commentary."
 )
 
-_LOCAL_PAGE_PROMPT = (
+_PAGE_PROMPT = (
     "Convert this page image to Markdown. Reproduce the text faithfully and completely, do "
     "not summarize or paraphrase. Keep headings, lists, and emphasis. Render tables as "
     "Markdown tables and equations as LaTeX. Output only the Markdown for this page, with no "
@@ -90,6 +90,7 @@ def _build_parser(api_key: str, model: str):
             image_mode="base64",                # Process images as base64 (more reliable than URL)
             detailed_extraction=True,           # Capture tables, equations, and complex layouts
             enable_concurrency=False,           # Disable concurrency to avoid connection issues
+            custom_prompt=_PAGE_PROMPT, # vision_parse calls per page, same shape as the local path
         )
     except Exception as e:
         # Fallback to URL mode if base64 doesn't work
@@ -101,6 +102,7 @@ def _build_parser(api_key: str, model: str):
             image_mode="url",
             detailed_extraction=True,
             enable_concurrency=False,
+            custom_prompt=_PAGE_PROMPT,
         )
 
 
@@ -131,7 +133,7 @@ def _convert_pdf_anthropic(client: anthropic.Anthropic, pdf_path: Path, model: s
                         "data": pdf_b64,
                     },
                 },
-                {"type": "text", "text": _MARKDOWN_PROMPT},
+                {"type": "text", "text": _DOCUMENT_PROMPT},
             ],
         }],
     ) as stream:
@@ -152,7 +154,7 @@ def _convert_page_ollama(image_b64: str, model: str) -> str:
         f"{OLLAMA_HOST}/api/chat",
         json={
             "model": model,
-            "messages": [{"role": "user", "content": _LOCAL_PAGE_PROMPT, "images": [image_b64]}],
+            "messages": [{"role": "user", "content": _PAGE_PROMPT, "images": [image_b64]}],
             "stream": False,
             # Faithful transcription, not conversation. The model's default (1) leaves room
             # to paraphrase; 0 keeps it deterministic, same reasoning as the OpenAI/Claude paths.

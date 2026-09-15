@@ -332,7 +332,7 @@ def test_anthropic_raises_when_claude_refuses(tmp_path: Path) -> None:
     client = _FakeAnthropicClient(SimpleNamespace(stop_reason="refusal", content=[]))
 
     with pytest.raises(RuntimeError, match="declined"):
-        llm_pdf_md._convert_pdf_anthropic(client, pdf_path)
+        llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODEL)
 
 
 def test_anthropic_raises_when_output_is_cut_off(tmp_path: Path) -> None:
@@ -341,7 +341,7 @@ def test_anthropic_raises_when_output_is_cut_off(tmp_path: Path) -> None:
     client = _FakeAnthropicClient(SimpleNamespace(stop_reason="max_tokens", content=[]))
 
     with pytest.raises(RuntimeError, match="too long"):
-        llm_pdf_md._convert_pdf_anthropic(client, pdf_path)
+        llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODEL)
 
 
 def test_anthropic_returns_empty_string_when_there_are_no_text_blocks(tmp_path: Path) -> None:
@@ -355,4 +355,4 @@ def test_anthropic_returns_empty_string_when_there_are_no_text_blocks(tmp_path: 
     )
     client = _FakeAnthropicClient(message)
 
-    assert llm_pdf_md._convert_pdf_anthropic(client, pdf_path) == ""
+    assert llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODEL) == ""
