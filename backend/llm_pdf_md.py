@@ -23,8 +23,10 @@ script_dir = Path(__file__).resolve().parent
 input_dir = script_dir / "input"   # Folder containing PDF files to convert
 output_dir = script_dir / "output"  # Folder where converted markdown files will be saved
 
-OPENAI_MODEL = "gpt-4o-mini"
-ANTHROPIC_MODEL = "claude-sonnet-5"
+OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]
+ANTHROPIC_MODELS = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
+OPENAI_MODEL = OPENAI_MODELS[0]
+ANTHROPIC_MODEL = ANTHROPIC_MODELS[0]
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = "qwen3.5:9b"
 OLLAMA_KEEP_ALIVE = "30s"  # unload the model this long after the last page, instead of Ollama's 5m default
@@ -70,7 +72,7 @@ def convert_with_retry(parser, pdf_path, max_retries=3, retry_delay=5):
     return None
 
 
-def _build_parser(api_key: str):
+def _build_parser(api_key: str, model: str):
     """Build the VisionParser, falling back to URL mode if base64 is unavailable.
 
     vision_parse is imported here, not at module scope, because it calls
@@ -82,7 +84,7 @@ def _build_parser(api_key: str):
     # Try "base64" mode first as it's more reliable than "url" for local files
     try:
         return VisionParser(
-            model_name=OPENAI_MODEL,            # OpenAI model for processing
+            model_name=model,                   # OpenAI model for processing
             api_key=api_key,                    # API key from environment
             temperature=0,                      # Deterministic, faithful extraction (no paraphrasing)
             image_mode="base64",                # Process images as base64 (more reliable than URL)
@@ -93,7 +95,7 @@ def _build_parser(api_key: str):
         # Fallback to URL mode if base64 doesn't work
         print(f"Warning: Could not initialize with base64 mode, trying URL mode: {e}")
         return VisionParser(
-            model_name=OPENAI_MODEL,
+            model_name=model,
             api_key=api_key,
             temperature=0,
             image_mode="url",
@@ -103,7 +105,7 @@ def _build_parser(api_key: str):
 
 
 # Anthropic (Claude reads the PDF directly)
-def _convert_pdf_anthropic(client: anthropic.Anthropic, pdf_path: Path) -> str:
+def _convert_pdf_anthropic(client: anthropic.Anthropic, pdf_path: Path, model: str) -> str:
     """Send one PDF to Claude as a document block and return the Markdown it writes back.
 
     Streams the response so long documents do not hit the HTTP timeout. The SDK already
@@ -113,7 +115,7 @@ def _convert_pdf_anthropic(client: anthropic.Anthropic, pdf_path: Path) -> str:
     pdf_b64 = base64.standard_b64encode(pdf_path.read_bytes()).decode("ascii")
 
     with client.messages.stream(
-        model=ANTHROPIC_MODEL,
+        model=model,
         max_tokens=64000,
         # Transcribing a PDF needs little reasoning. Low effort keeps thinking short, which
         # is billed as output and counts against max_tokens.
@@ -250,11 +252,14 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
 
 
 # Public entry points
-def convert_pdf_to_markdown_openai() -> str:
+def convert_pdf_to_markdown_openai(model: str = OPENAI_MODEL) -> str:
     """Convert all PDF files in the input folder to Markdown using OpenAI's Vision API.
 
     Higher quality than the local pdf_md.py converter, but slower and it costs money.
     Requires OPENAI_API_KEY to be set in the environment or a .env file.
+
+    Args:
+        model: OpenAI model to use. Defaults to OPENAI_MODEL.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -265,17 +270,20 @@ def convert_pdf_to_markdown_openai() -> str:
     if not api_key:
         return "Error: OPENAI_API_KEY not found. Please add OPENAI_API_KEY to your .env file"
 
-    parser = _build_parser(api_key)
+    parser = _build_parser(api_key, model)
     return _convert_all(lambda pdf_path: "\n\n".join(convert_with_retry(parser, pdf_path) or []))
 
 
-def convert_pdf_to_markdown_anthropic() -> str:
+def convert_pdf_to_markdown_anthropic(model: str = ANTHROPIC_MODEL) -> str:
     """Convert all PDF files in the input folder to Markdown using Anthropic's Claude.
 
     Higher quality than the local pdf_md.py converter, but slower and it costs money.
     Requires ANTHROPIC_API_KEY to be set in the environment or a .env file.
     Handles roughly 100 pages per PDF, fewer for dense text or tables. Longer PDFs
     hit the 64K output cap and fail.
+
+    Args:
+        model: Anthropic model to use. Defaults to ANTHROPIC_MODEL.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -284,7 +292,7 @@ def convert_pdf_to_markdown_anthropic() -> str:
         return "Error: ANTHROPIC_API_KEY not found. Please add ANTHROPIC_API_KEY to your .env file"
 
     client = anthropic.Anthropic()
-    return _convert_all(lambda pdf_path: _convert_pdf_anthropic(client, pdf_path))
+    return _convert_all(lambda pdf_path: _convert_pdf_anthropic(client, pdf_path, model))
 
 
 def convert_pdf_to_markdown_local(model: str = OLLAMA_MODEL) -> str:
@@ -337,41 +345,46 @@ def _prompt_for_local_model() -> str:
     return models[0]
 
 
-def _prompt_for_provider() -> tuple[str, str | None]:
+def _prompt_for_provider() -> tuple[str, str]:
     """Ask the user to pick a model across all three provider sections. CLI entry point
-    only, callers going through the web UI or the agent must pass a provider instead of
-    hitting this.
+    only, callers going through the web UI or the agent must pass a provider and model
+    instead of hitting this.
 
-    Returns (provider, model). model is only meaningful for "local", the OpenAI and
-    Claude paths each use one hardcoded model (OPENAI_MODEL / ANTHROPIC_MODEL).
+    Returns (provider, model).
     """
     try:
         local_models = list_ollama_models()
     except requests.exceptions.RequestException:
         local_models = []
 
-    entries: list[tuple[str, str | None]] = [("openai", None), ("anthropic", None)]
-    entries += [("local", name) for name in local_models]
+    entries: list[tuple[str, str]] = (
+        [("openai", name) for name in OPENAI_MODELS]
+        + [("anthropic", name) for name in ANTHROPIC_MODELS]
+        + [("local", name) for name in local_models]
+    )
 
+    i = 1
     print("ChatGPT models:")
-    print(f"  1) {OPENAI_MODEL}")
+    for name in OPENAI_MODELS:
+        print(f"  {i}) {name}")
+        i += 1
     print("Anthropic models:")
-    print(f"  2) {ANTHROPIC_MODEL}")
+    for name in ANTHROPIC_MODELS:
+        print(f"  {i}) {name}")
+        i += 1
     print("OS models:")
     if local_models:
-        for i, name in enumerate(local_models, start=3):
+        for name in local_models:
             print(f"  {i}) {name}")
+            i += 1
     else:
         print("  (none installed)")
 
-    choice = input("Select a model: ").strip()
-    if not choice:
-        return entries[0]
-    if choice.isdigit() and 1 <= int(choice) <= len(entries):
-        return entries[int(choice) - 1]
-
-    print(f"Invalid choice, using {OPENAI_MODEL}")
-    return entries[0]
+    while True:
+        choice = input("Select a model: ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(entries):
+            return entries[int(choice) - 1]
+        print("Enter a number from the list above.")
 
 
 if __name__ == "__main__":
@@ -385,8 +398,8 @@ if __name__ == "__main__":
         provider, chosen_model = _prompt_for_provider()
 
     if provider == "anthropic":
-        print(convert_pdf_to_markdown_anthropic())
+        print(convert_pdf_to_markdown_anthropic(chosen_model or ANTHROPIC_MODEL))
     elif provider == "local":
         print(convert_pdf_to_markdown_local(chosen_model or _prompt_for_local_model()))
     else:
-        print(convert_pdf_to_markdown_openai())
+        print(convert_pdf_to_markdown_openai(chosen_model or OPENAI_MODEL))

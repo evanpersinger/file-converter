@@ -213,6 +213,10 @@ per file). Both cost money and bill the key they use.
 - **The model must be pulled before running the script** — Ollama does not auto-download
   on first use here. Pull one with `ollama pull qwen3.5:9b` (or any other vision-capable
   model, e.g. `ollama pull gemma4:12b`). Check what you already have with `ollama list`.
+- `qwen3.5` and `gemma4` are reasoning models — the script sends `think: false` so they
+  skip the reasoning step, since straight transcription doesn't need it. A plain
+  vision model avoids that entirely: `ollama pull llama3.2-vision` or
+  `ollama pull minicpm-v`.
 - Free, no API key, nothing sent over the network. Slower than the cloud paths, and
   quality depends entirely on the model you pick.
 - Renders each page to an image, same idea as the OpenAI path, and sends it to the model
