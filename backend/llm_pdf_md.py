@@ -155,6 +155,9 @@ def _convert_page_ollama(image_b64: str, model: str) -> str:
             # Faithful transcription, not conversation. The model's default (1) leaves room
             # to paraphrase; 0 keeps it deterministic, same reasoning as the OpenAI/Claude paths.
             "options": {"temperature": 0},
+            # Transcription needs no reasoning. On models that support it (qwen3.5, etc.)
+            # this skips the hidden chain-of-thought that otherwise runs before every page.
+            "think": False,
             "keep_alive": OLLAMA_KEEP_ALIVE,
         },
         # Local vision models are slow, especially on CPU. A single page can take a while.
