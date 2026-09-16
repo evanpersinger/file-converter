@@ -230,7 +230,7 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
             print(f"Converting {pdf_name} to md")
             full_md = convert_one(pdf_path)
 
-            if not full_md:
+            if not full_md or not full_md.strip():
                 print(f"Failed to convert {pdf_name}")
                 errors.append(f"{pdf_name}: conversion returned no content")
                 continue

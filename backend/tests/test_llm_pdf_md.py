@@ -221,6 +221,23 @@ def test_local_reports_empty_page_content_as_no_content(
     assert "conversion returned no content" in summary
 
 
+def test_local_reports_all_empty_pages_as_no_content(
+    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Joining several empty pages with "\\n\\n" produces a non-empty, whitespace-only
+    string. That must still be reported as no content, not written out as a fake success."""
+    input_dir, output_dir = local_sandbox
+    _make_pdf(input_dir / "blank.pdf", pages=2)
+    monkeypatch.setattr(
+        llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": ""}})
+    )
+
+    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+
+    assert "conversion returned no content" in summary
+    assert not (output_dir / "blank.md").exists()
+
+
 def test_local_continues_after_one_pdf_fails_mid_batch(
     local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
