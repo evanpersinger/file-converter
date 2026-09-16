@@ -182,11 +182,14 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> str:
         doc.close()
         raise ValueError("PDF is password protected")
 
+    page_count = doc.page_count
     pages = []
-    for page in doc:
+    for i, page in enumerate(doc, start=1):
+        print(f"\rConverting page {i}/{page_count} ({i * 100 // page_count}%)", end="", flush=True)
         png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
         image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
         pages.append(_convert_page_ollama(image_b64, model))
+    print()  # move off the in-place progress line
     doc.close()
 
     return "\n\n".join(pages)

@@ -53,19 +53,34 @@ def convert_pdf_to_png() -> str:
                     errors.append(f"{os.path.basename(pdf_file)}: no pages")
                     continue
 
+                page_count = document.page_count
+                output_names = []
+                overwritten = []
                 for index, page in enumerate(document, start=1):
                     # Single-page PDFs keep the plain name, so the common case does
                     # not end up with a pointless "_page1" suffix.
-                    suffix = "" if document.page_count == 1 else f"_page{index}"
-                    png_file = os.path.join(output_folder, f"{filename}{suffix}.png")
-                    existed_before = os.path.exists(png_file)
+                    suffix = "" if page_count == 1 else f"_page{index}"
+                    png_name = f"{filename}{suffix}.png"
+                    png_file = os.path.join(output_folder, png_name)
+                    if os.path.exists(png_file):
+                        overwritten.append(png_name)
 
                     page.get_pixmap(dpi=RENDER_DPI).save(png_file)
-                    print(f"Converted {os.path.basename(pdf_file)} page {index} "
-                          f"to {filename}{suffix}.png")
-                    if existed_before:
-                        print(f"Overwrote existing file: {filename}{suffix}.png")
-                    converted.append(f"{filename}{suffix}.png")
+                    output_names.append(png_name)
+                    converted.append(png_name)
+
+                    if page_count > 1:
+                        print(f"\rConverting {os.path.basename(pdf_file)}: {index * 100 // page_count}%",
+                              end="", flush=True)
+
+                if page_count > 1:
+                    print()  # move off the in-place progress line
+                    print(f"Converted {os.path.basename(pdf_file)} to output/: {', '.join(output_names)}")
+                else:
+                    print(f"Converted {os.path.basename(pdf_file)} to {output_names[0]}")
+
+                for name in overwritten:
+                    print(f"Overwrote existing file: {name}")
 
         except Exception as e:
             print(f"Error converting {pdf_file}: {str(e)}")

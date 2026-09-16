@@ -241,7 +241,7 @@ def pdf_to_markdown(pdf_path):
     doc.close()
 
     kind = "searchable" if not ocr_pages else ("scanned" if not text_pages else "mixed")
-    print(f"  {n_pages} page(s): {len(text_pages)} searchable, {len(ocr_pages)} OCR ({kind})")
+    print(f"{n_pages} page(s): {len(text_pages)} searchable, {len(ocr_pages)} OCR ({kind})")
 
     parts = [md_by_page.get(i, "") for i in range(n_pages)]
     return "\n\n".join(p for p in parts if p).strip() + "\n"
@@ -281,12 +281,12 @@ def convert_pdf_to_markdown() -> str:
             existed_before = os.path.exists(md_path)
             with open(md_path, "w", encoding="utf-8") as f:
                 f.write(markdown)
-            print(f"  Converted {filename} to {md_filename}")
+            print(f"Converted {filename} to {md_filename}")
             if existed_before:
-                print(f"  Overwrote existing file: {md_filename}")
+                print(f"Overwrote existing file: {md_filename}")
             converted.append(md_filename)
         except Exception as e:
-            print(f"  Error converting {filename}: {e}")
+            print(f"Error converting {filename}: {e}")
             errors.append(f"{filename}: {e}")
 
     if not converted:

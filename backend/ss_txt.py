@@ -708,16 +708,19 @@ def convert_screenshots_to_text(structured: bool = False) -> str:
 
     all_text_parts = []
     failed = []
-    for image_filename in image_files:
+    total_images = len(image_files)
+    for i, image_filename in enumerate(image_files, start=1):
         image_path = os.path.join(input_folder, image_filename)
-        print(f"\nConverting {image_filename} to txt")
+        print(f"\rConverting to txt: {i}/{total_images} ({i * 100 // total_images}%)", end="", flush=True)
         text = convert(image_path)
         if text:
             all_text_parts.append(text)
-            print("Success")
         else:
-            print(f"Failed: {image_filename}")
             failed.append(image_filename)
+
+    print()  # move off the in-place progress line
+    for name in failed:
+        print(f"Failed: {name}")
 
     if not all_text_parts:
         print("\nNo text extracted from any images")
