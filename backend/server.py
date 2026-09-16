@@ -37,6 +37,7 @@ import docx_md
 import docx_pdf
 import heic_jpg
 import heic_md
+import heic_pdf
 import heic_png
 import html_pdf
 import ipynb_pdf
@@ -319,6 +320,8 @@ REGISTRY: list[Conversion] = [
     Conversion((".heic",), "heic->md", "Markdown", ".md",
                via_globals(heic_md, lambda s: heic_md.convert_heic_to_markdown()),
                requires=("tesseract",)),
+    Conversion((".heic",), "heic->pdf", "PDF", ".pdf",
+               via_globals(heic_pdf, lambda s: heic_pdf.convert_heic_to_pdf())),
     Conversion((".jpg", ".jpeg"), "jpg->md", "Markdown", ".md",
                via_globals(jpg_md, lambda s: jpg_md.convert_jpg_to_markdown()),
                requires=("tesseract",)),

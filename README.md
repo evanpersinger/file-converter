@@ -93,7 +93,7 @@ returns a summary of what it did:
 `convert_pdf_to_markdown`, `convert_pdf_to_markdown_openai`,
 `convert_pdf_to_markdown_anthropic`, `convert_docx_to_markdown`, `convert_pptx_to_markdown`,
 `convert_pptx_to_pdf`, `convert_heic_to_jpg`, `convert_heic_to_png`,
-`convert_heic_to_markdown`, `convert_jpg_to_png`, `convert_jpg_to_svg`,
+`convert_heic_to_markdown`, `convert_heic_to_pdf`, `convert_jpg_to_png`, `convert_jpg_to_svg`,
 `convert_pdf_to_png`, `convert_jpg_to_markdown`, `convert_jpg_to_pdf`,
 `convert_jpg_to_ocr`, `convert_png_to_pdf`, `convert_png_to_svg`, `convert_sql_files`,
 `convert_screenshots_to_text`
@@ -927,6 +927,8 @@ converter/
 ├── backend/                # All Python code
 │   ├── input/              # Put your source files here
 │   ├── output/             # Converted files will appear here
+│   ├── tests/              # Pytest suite
+│   ├── test_files/         # Manual test fixtures (gitignored, not part of the pytest suite)
 │   ├── server.py           # FastAPI server behind the web UI
 │   ├── agent.py            # AI agent for interactive file conversion
 │   ├── xlsx_csv.py         # Excel to CSV converter
@@ -940,6 +942,7 @@ converter/
 │   ├── html_pdf.py         # HTML to PDF converter (wkhtmltopdf/Pandoc)
 │   ├── heic_jpg.py         # HEIC to JPG converter
 │   ├── heic_md.py          # HEIC to Markdown converter (OCR)
+│   ├── heic_pdf.py         # HEIC to PDF converter
 │   ├── jpg_pdf.py          # JPG/JPEG to PDF converter
 │   ├── jpg_md.py           # JPG/JPEG to Markdown converter (OCR)
 │   ├── jpg_ocr.py          # JPG/JPEG to plain text converter (OCR)
@@ -1043,7 +1046,7 @@ uv sync --upgrade
 - First conversion: `mock2.md` → `output/mock2.pdf` (creates new file)
 - Second conversion: `mock2.md` → `output/mock2.pdf` (overwrites the existing PDF)
 
-This means you can update your source file and convert it again to get an updated PDF without needing to delete the old one first.
+This means you can update your source file and convert it again to get an updated PDF without needing to delete the old one first. Every script prints `Overwrote existing file: <name>` to the terminal when this happens, so it's never silent.
 
 ## How the Web UI Works
 
@@ -1088,6 +1091,7 @@ exactly one file; Combine needs two or more.
 |------|-----|--------|
 | Markdown (.md) | PDF | `md_pdf.py` |
 | PDF | Markdown (.md) | `pdf_md.py` |
+| PDF | Markdown (.md), via LLM (OpenAI/Claude/local Ollama) | `llm_pdf_md.py` |
 | Word (.docx) | Markdown (.md) | `docx_md.py` |
 | Word (.docx) | PDF | `docx_pdf.py` |
 | PowerPoint (.pptx) | PDF | `pptx_pdf.py` |
@@ -1102,6 +1106,7 @@ exactly one file; Combine needs two or more.
 | HEIC images | JPG | `heic_jpg.py` |
 | HEIC images | PNG | `heic_png.py` |
 | HEIC images | Markdown (.md) | `heic_md.py` |
+| HEIC images | PDF | `heic_pdf.py` |
 | JPG/JPEG images | PDF | `jpg_pdf.py` |
 | JPG/JPEG images | PNG | `jpg_png.py` |
 | JPG/JPEG images | SVG (traced) | `jpg_svg.py` |
