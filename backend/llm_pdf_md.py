@@ -27,9 +27,11 @@ OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"]  # vision_parse only supports these tw
 ANTHROPIC_MODELS = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
 OPENAI_MODEL = OPENAI_MODELS[0]
 ANTHROPIC_MODEL = ANTHROPIC_MODELS[0]
+OLLAMA_MODELS = ["qwen3.5:9b", "qwen3.5:4b"]  # vision-capable local models, must be pulled via `ollama pull <model>`
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_MODEL = "qwen3.5:9b"
+OLLAMA_MODEL = OLLAMA_MODELS[0]
 OLLAMA_KEEP_ALIVE = "30s"  # stop running the model 30 seconds after script completes conversion, overrides Ollama's 5 min default
+_MODEL_DISPLAY_NAMES = {"claude-haiku-4-5-20251001": "claude-haiku-4.5"}  # friendlier label for the CLI menu, actual model id is unchanged
 LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
 
 _DOCUMENT_PROMPT = (
@@ -378,7 +380,7 @@ def _prompt_for_provider() -> tuple[str, str]:
         i += 1
     print("Anthropic models:")
     for name in ANTHROPIC_MODELS:
-        print(f"  {i}) {name}")
+        print(f"  {i}) {_MODEL_DISPLAY_NAMES.get(name, name)}")
         i += 1
     print("OS models:")
     if local_models:
