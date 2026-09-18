@@ -30,7 +30,7 @@ ANTHROPIC_MODEL = ANTHROPIC_MODELS[0]
 OLLAMA_MODELS = ["qwen3.5:9b", "qwen3.5:4b"]  # vision-capable local models, must be pulled via `ollama pull <model>`
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = OLLAMA_MODELS[0]
-OLLAMA_KEEP_ALIVE = "30s"  # stop running the model 30 seconds after script completes conversion, overrides Ollama's 5 min default
+OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script completes conversion, overrides Ollama's 5 min default
 _MODEL_DISPLAY_NAMES = {"claude-haiku-4-5-20251001": "claude-haiku-4.5"}  # friendlier label for the CLI menu, actual model id is unchanged
 LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
 
@@ -187,11 +187,11 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> str:
     page_count = doc.page_count
     pages = []
     for i, page in enumerate(doc, start=1):
-        print(f"\rConverting page {i}/{page_count} ({i * 100 // page_count}%)", end="", flush=True)
+        print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
         png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
         image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
         pages.append(_convert_page_ollama(image_b64, model))
-    print()  # move off the in-place progress line
+    print(f"\rConverting page {page_count}/{page_count} (100%)")  # only true once every page is actually done
     doc.close()
 
     return "\n\n".join(pages)
