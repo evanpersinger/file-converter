@@ -69,10 +69,44 @@ def test_superscripts_and_subscripts_are_mapped(source: str, expected: str) -> N
     assert normalize_math(source) == expected
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (r"\sigma^2", "σ²"),
+        (r"\alpha_i", "αᵢ"),
+        (r"\beta_i", "βᵢ"),
+        (r"\mu^2", "μ²"),
+        (r"\pi^2", "π²"),
+        (r"\sum_{i=1}^n", "∑ᵢ₌₁ⁿ"),
+        (r"\int_0^1", "∫₀¹"),
+    ],
+)
+def test_superscript_subscript_after_latex_symbol_is_mapped(
+    source: str, expected: str
+) -> None:
+    """The base-character check runs after \\sigma etc. are already substituted to
+    unicode, so it must accept those unicode symbols too, not just ASCII."""
+    assert normalize_math(source) == expected
+
+
 def test_unmappable_script_falls_back_to_plain_form() -> None:
     """No unicode superscript exists for 'a' or 'b', so the whole run is left readable
     rather than half-converted."""
     assert normalize_math("x^{ab}") == "x^ab"
+
+
+def test_bare_exponent_followed_by_another_word_is_left_alone() -> None:
+    """x^ab is ambiguous without braces (exponent 'a' then word 'b', or exponent
+    'ab'?), so it's left as typed rather than guessed at."""
+    assert normalize_math("x^ab") == "x^ab"
+
+
+def test_operator_bound_converts_even_glued_to_the_next_term() -> None:
+    """\\sum_{i=1}^nw_i (issue #1): a PDF's raw text layer often has no space between
+    an operator's upper bound and the term that follows it. Unlike the bare x^ab case
+    above, a superscript chained right after a closing brace is unambiguously an
+    operator bound, so it must still convert."""
+    assert normalize_math(r"\sum_{i=1}^nw_i") == "∑ᵢ₌₁ⁿwᵢ"
 
 
 def test_snake_case_identifier_is_left_alone() -> None:

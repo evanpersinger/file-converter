@@ -98,6 +98,14 @@ def _to_subscript(s):
     return _map_chars(s, SUBSCRIPT_MAP, "_")
 
 
+# Characters allowed immediately before ^ or _ for it to count as an explicit
+# superscript/subscript: ASCII identifiers/brackets, a closing brace (so a
+# chained x_{i}^{j} keeps converting), and the unicode symbols LATEX_SYMBOLS
+# itself just substituted in, since \sigma^2 and \sum_{i=1}^n replace their
+# symbol before this check ever runs.
+_SCRIPT_BASE_CHARS = "A-Za-z0-9\\)\\]\\}" + re.escape("".join(dict.fromkeys(LATEX_SYMBOLS.values())))
+
+
 def _apply_math(text, ocr):
     # LaTeX commands (longest first so \varepsilon wins over \epsilon-ish prefixes)
     for cmd in sorted(LATEX_SYMBOLS, key=len, reverse=True):
@@ -116,13 +124,21 @@ def _apply_math(text, ocr):
 
     # explicit superscript: x^2, x^{10}, x^n, x^{-1}
     text = re.sub(
-        r"([A-Za-z0-9\)\]])\^(\{[^}]+\}|-?\d+|[A-Za-z](?![A-Za-z]))",
+        r"([" + _SCRIPT_BASE_CHARS + r"])\^(\{[^}]+\}|-?\d+|[A-Za-z](?![A-Za-z]))",
         lambda m: m.group(1) + _to_superscript(m.group(2).strip("{}")),
+        text,
+    )
+    # a bare-letter superscript chained right after a closing brace (e.g. the "n" in
+    # \sum_{i=1}^nw_i) is an operator bound, not a run-on word, so unlike the general
+    # case above, it still converts even when the next character is also a letter.
+    text = re.sub(
+        r"(?<=\})\^([A-Za-z])",
+        lambda m: _to_superscript(m.group(1)),
         text,
     )
     # explicit subscript: x_1, x_i, x_{ij}  (multi-letter only via braces, so snake_case is safe)
     text = re.sub(
-        r"([A-Za-z0-9\)\]])_(\{[^}]+\}|-?\d+|[A-Za-z](?![A-Za-z]))",
+        r"([" + _SCRIPT_BASE_CHARS + r"])_(\{[^}]+\}|-?\d+|[A-Za-z](?![A-Za-z]))",
         lambda m: m.group(1) + _to_subscript(m.group(2).strip("{}")),
         text,
     )
