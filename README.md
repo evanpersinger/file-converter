@@ -19,11 +19,13 @@ uv run uvicorn server:app --app-dir backend --reload --port 8019 --loop asyncio
 
 Open **http://localhost:3004**. Both have to be running.
 
-The **LLM powered scripts** column, next to "Convert to", is for the PDF to Markdown
-conversion that runs on a local model. Pick a PDF, click **MD**, then pick one of your
-Ollama models. A model has to be downloaded first (`ollama pull <model>`), and models
-that aren't are greyed out with the pull command on hover. Ollama itself has to be
-running (open the Ollama app or run `ollama serve`).
+The second **Convert to** column ("Scripts use LLMs for conversion.") is for the PDF to
+Markdown conversion that runs on a local model. Pick a PDF, click **MD**, then pick one
+of your Ollama models, listed weakest to strongest. Convert stays disabled until you
+pick one. A model has to be downloaded first (`ollama pull <model>`), and models that
+aren't are greyed out with the pull command on hover. Ollama itself has to be running
+(open the Ollama app or run `ollama serve`). The OpenAI and Claude versions of this
+conversion are CLI only for now, see `llm_pdf_md.py` below.
 
 `--app-dir backend` and `--loop asyncio` are both required, the backend won't start
 without them.
@@ -898,7 +900,9 @@ converter/
 ├── frontend/               # All TypeScript code (Vite + React)
 │   ├── index.html
 │   └── src/
-│       ├── App.tsx         # The entire UI
+│       ├── App.tsx         # The page: both Convert to columns, file picker, convert and combine
+│       ├── ProgressBar.tsx # Progress bar shown while converting
+│       ├── useProgress.ts  # Polls the backend for progress and counts elapsed time
 │       ├── api.ts          # Backend calls
 │       └── types.ts        # Shared types
 ├── pyproject.toml          # Python package dependencies
@@ -975,43 +979,6 @@ uv sync --upgrade
 - Second conversion: `mock2.md` → `output/mock2.pdf` (overwrites the existing PDF)
 
 This means you can update your source file and convert it again to get an updated PDF without needing to delete the old one first. Every script prints `Overwrote existing file: <name>` to the terminal when this happens, so it's never silent.
-
-## How the Web UI Works
-
-Drop a file on the picker or click to browse, choose an output format from the list on
-the left, and hit Convert. Files can also be combined, see below.
-
-**Adding a conversion** means adding one row to the `REGISTRY` list in
-`backend/server.py`. The frontend hardcodes no formats and no extensions; it asks
-`/api/formats`, and the format buttons are derived from the distinct target extensions
-in the registry. A new converter with a new target extension gets its own button with
-no frontend change at all.
-
-**Isolation.** Each request runs in a scratch workspace under `.webui_jobs/<uuid>/`, so
-the web UI never touches your real `backend/input/` and `backend/output/`.
-
-**Unavailable options** are greyed out with the reason on hover rather than being
-offered and then failing. That covers both a missing system dependency (Tesseract,
-Pandoc, LaTeX, LibreOffice, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) and a format your file simply cannot
-become.
-
-**Extension checking.** When you pick a file it is sent to `/api/detect`, which uses
-libmagic to check whether the contents match the extension on the name. If they
-definitively disagree (a PNG named `.jpg`, a PDF named `.txt`) you get a warning.
-Nothing is blocked and the offered conversions do not change, it is purely advisory.
-
-Only formats libmagic can identify with certainty are checked: PDF, PNG, JPEG, GIF,
-TIFF, BMP, WebP, HEIC, DOCX, XLSX, PPTX. Text formats (`.md`, `.txt`, `.sql`, `.R`,
-`.Rmd`) all look like `text/plain` and cannot be told apart, so they are never
-checked and never produce a false alarm.
-
-**Combining.** Select or drop more than one file and the Combine button activates. All
-files must share one extension, and they are merged in the order you added them, shown
-as a numbered list under the picker with a × to remove any entry. Convert works on
-exactly one file; Combine needs two or more.
-
-**Multi-file output.** Conversions that produce several files (a multi-page
-`pdf_png.py` run, or a Word document with images through `docx_md.py`) come back as a zip.
 
 ## Supported Conversions
 
