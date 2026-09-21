@@ -30,6 +30,10 @@ const EXT_ALIASES: Record<string, string> = {
 
 const canonical = (ext: string) => EXT_ALIASES[ext] ?? ext
 
+// Gap between the downloads Download All starts. Browsers can drop downloads that fire
+// back to back, so each one waits its turn.
+const DOWNLOAD_GAP_MS = 300
+
 const blockedReason = (dep: Unavailable) =>
   dep.hint ? `${dep.reason}. ${dep.hint}` : dep.reason
 
@@ -157,6 +161,17 @@ export default function App() {
     setTarget(null)
     setMismatch(null)
     latestPick.current = null
+  }
+
+  function downloadAll() {
+    result?.downloads.forEach((d, index) => {
+      setTimeout(() => {
+        const link = document.createElement('a')
+        link.href = d.url
+        link.download = d.filename
+        link.click()
+      }, index * DOWNLOAD_GAP_MS)
+    })
   }
 
   function removeAt(index: number) {
@@ -501,15 +516,20 @@ export default function App() {
           </span>
         </div>
 
-        <button
-          type="button"
-          className="clear-converted"
-          onDoubleClick={() => setResult(null)}
-          disabled={!result}
-        >
-          Clear
-          <span className="clear-hint">Click twice to clear</span>
-        </button>
+        <div className="result-actions">
+          <button
+            type="button"
+            onDoubleClick={() => setResult(null)}
+            disabled={!result}
+          >
+            Clear
+            <span className="clear-hint">Click twice to clear</span>
+          </button>
+
+          <button type="button" onClick={downloadAll} disabled={!result}>
+            Download All
+          </button>
+        </div>
 
         {status.kind === 'converting' && (
           <div className="progress-block">

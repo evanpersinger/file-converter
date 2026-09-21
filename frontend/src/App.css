@@ -251,12 +251,17 @@ h2 {
   margin-top: 3rem;
 }
 
-/* Under Convert and Combine, sized to its text rather than the full row. Clears the
-   download links. */
-.clear-converted {
-  display: block;
-  box-sizing: border-box;
+/* Under Convert and Combine: Clear and Download All, both acting on the converted
+   files. Sized to their text rather than the full row, and stretched to the same
+   height, since Clear carries a second line. */
+.result-actions {
+  display: flex;
+  gap: 1rem;
   margin-top: 1rem;
+}
+
+.result-actions button {
+  box-sizing: border-box;
   padding: 0.4rem 1.25rem;
   font-size: 1rem;
 }
