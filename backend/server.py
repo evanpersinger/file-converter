@@ -308,7 +308,9 @@ class Conversion:
     note: str | None = None
     # True when the user picks a model to run this with. `invoke` then also takes it.
     takes_model: bool = False
-    # Which part of the UI owns this conversion. None means the regular "Convert to" list.
+    # Which part of the UI owns this conversion. None means the regular "Convert to" list,
+    # "llm" the LLM column. "llm-cloud" belongs there too, but that column has no cloud
+    # models yet, so the UI shows those conversions nowhere.
     group: str | None = None
 
 
@@ -333,11 +335,11 @@ REGISTRY: list[Conversion] = [
                note="One PNG per page. Multi-page PDFs come back as a zip."),
     Conversion((".pdf",), "pdf->md-ai", "Markdown (LLM: GPT-4o mini, costs money)", ".md",
                via_dir_globals(llm_pdf_md, lambda s: llm_pdf_md.convert_pdf_to_markdown_openai()),
-               requires=("openai_key",),
+               requires=("openai_key",), group="llm-cloud",
                note="Sends the PDF to OpenAI's Vision API. Slower, and it bills your key."),
     Conversion((".pdf",), "pdf->md-claude", "Markdown (LLM: Claude Sonnet 5, costs money)", ".md",
                via_dir_globals(llm_pdf_md, lambda s: llm_pdf_md.convert_pdf_to_markdown_anthropic()),
-               requires=("anthropic_key",),
+               requires=("anthropic_key",), group="llm-cloud",
                note="Sends the PDF to Anthropic's Claude. Slower, and it bills your key."),
     Conversion((".pdf",), "pdf->md-local", "Markdown (OS model, free)", ".md",
                via_dir_globals_model(

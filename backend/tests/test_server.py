@@ -188,6 +188,11 @@ def test_local_models_flags_which_curated_models_are_downloaded(
     ]
 
 
+@pytest.mark.parametrize("target_id", ["pdf->md-ai", "pdf->md-claude", "pdf->md-local"])
+def test_llm_conversions_are_grouped_so_convert_to_does_not_list_them(target_id: str) -> None:
+    assert server.BY_TARGET_ID[target_id].group
+
+
 def test_local_models_are_sorted_weakest_to_strongest(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

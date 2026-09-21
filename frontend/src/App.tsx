@@ -45,8 +45,7 @@ export default function App() {
   // null while loading. An empty list is the answer when Ollama is off, and the reason
   // for that comes from the formats map.
   const [localModels, setLocalModels] = useState<LocalModel[] | null>(null)
-  // Extension of the LLM script whose model list is open, and the model picked from it.
-  const [openLlm, setOpenLlm] = useState<string | null>(null)
+  // The model picked from the LLM script's list.
   const [model, setModel] = useState<string | null>(null)
   // Set while a conversion is running, so the backend can be asked how far along it is.
   const [jobId, setJobId] = useState<string | null>(null)
@@ -104,7 +103,6 @@ export default function App() {
   const selected = targets.find((t) => t.id === target) ?? null
   const selectedLlm = llmTargets.find((t) => t.id === target) ?? null
   const variants = selected ? routesFor(selected.ext).slice(1) : []
-  const openRoute = llmTargets.find((t) => t.ext === openLlm) ?? null
 
   // One button per output format an LLM script makes. Read off the map rather than
   // hardcoded, so it shows before a file is chosen and a new script adds its own.
@@ -168,17 +166,12 @@ export default function App() {
     }
   }
 
-  function toggleLlm(formatExt: string) {
-    const closing = openLlm === formatExt
-    setOpenLlm(closing ? null : formatExt)
-    // Closing the list takes its model selection with it.
-    if (closing && selectedLlm) setTarget(null)
-  }
-
-  // Picking a model selects the LLM route too, which is what clears "Convert to".
-  function pickModel(route: Target, name: string) {
-    setTarget(route.id)
-    setModel(name)
+  // Clicking an LLM script selects it, which puts its format in the To box, clears any
+  // "Convert to" selection, and opens its model list. Clicking it again deselects it.
+  // Either way the model starts over, so a script is never run with an old pick.
+  function toggleLlm(route: Target) {
+    setTarget(selectedLlm?.id === route.id ? null : route.id)
+    setModel(null)
   }
 
   async function run(action: (jobId: string) => Promise<{ blob: Blob; filename: string }>,
@@ -232,7 +225,7 @@ export default function App() {
                   type="button"
                   className={selected?.ext === f.ext ? 'format selected' : 'format'}
                   disabled={!route}
-                  onClick={() => route && setTarget(route.id)}
+                  onClick={() => route && setTarget(selected?.ext === f.ext ? null : route.id)}
                 >
                   {f.name}
                 </button>
@@ -252,14 +245,9 @@ export default function App() {
               checked={target === v.id}
               onChange={(e) => setTarget(e.target.checked ? v.id : routesFor(v.ext)[0].id)}
             />
-            <span>
-              {v.label}
-              {v.note && <em className="note">{v.note}</em>}
-            </span>
+            <span>{v.label}</span>
           </label>
         ))}
-
-        {selected?.note && <p className="muted note">{selected.note}</p>}
       </aside>
 
       <aside className="sidebar llm-panel">
@@ -282,9 +270,9 @@ export default function App() {
               <span key={f.ext} className="tip" data-tip={why}>
                 <button
                   type="button"
-                  className={route && openLlm === f.ext ? 'format selected' : 'format'}
+                  className={selectedLlm?.ext === f.ext ? 'format selected' : 'format'}
                   disabled={!route}
-                  onClick={() => toggleLlm(f.ext)}
+                  onClick={() => route && toggleLlm(route)}
                 >
                   {f.name}
                 </button>
@@ -293,7 +281,7 @@ export default function App() {
           })}
         </div>
 
-        {openRoute && (
+        {selectedLlm && (
           <div className="model-list">
             <p className="muted">OS models</p>
 
@@ -315,17 +303,17 @@ export default function App() {
               >
                 <button
                   type="button"
-                  className={selectedLlm && model === m.name ? 'format selected' : 'format'}
+                  className={model === m.name ? 'format selected' : 'format'}
                   disabled={!m.installed}
                   title={m.name}
-                  onClick={() => pickModel(openRoute, m.name)}
+                  onClick={() => setModel(model === m.name ? null : m.name)}
                 >
                   {m.name}
                 </button>
               </span>
             ))}
 
-            {selectedLlm?.note && <p className="muted note">{selectedLlm.note}</p>}
+            {selectedLlm.note && <p className="muted note">{selectedLlm.note}</p>}
           </div>
         )}
       </aside>
@@ -422,8 +410,10 @@ export default function App() {
                 : files.length > 1
                   ? 'Converting takes one file at a time'
                   : !target
-                    ? 'Pick a format, or an LLM model, to convert with'
-                    : undefined
+                    ? 'Pick a format, or an LLM script, to convert with'
+                    : selectedLlm && !model
+                      ? 'Pick a model to convert with'
+                      : undefined
             }
           >
             <button
@@ -434,7 +424,7 @@ export default function App() {
                   { kind: 'converting', fileName: primary.name },
                 )
               }
-              disabled={files.length !== 1 || !target || busy}
+              disabled={files.length !== 1 || !target || (selectedLlm !== null && !model) || busy}
             >
               {status.kind === 'converting' ? 'Converting...' : 'Convert Files'}
             </button>
