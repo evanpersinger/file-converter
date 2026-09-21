@@ -205,7 +205,7 @@ h2 {
 /* 0.55 was fine on black. On this red it drops small text under AA, so the label
    leans on letter-spacing for hierarchy rather than fading out. */
 .box-label {
-  font-size: 0.7rem;
+  font-size: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   opacity: 0.8;
@@ -213,7 +213,7 @@ h2 {
 
 .box-value {
   font-family: var(--mono);
-  font-size: 1.6rem;
+  font-size: 2.4rem;
   font-weight: 500;
 }
 
@@ -223,11 +223,18 @@ h2 {
   margin-top: 3rem;
 }
 
+/* A fixed height, so making the text bigger doesn't make the button bigger. The text is
+   1.5rem, shrinking on a narrow button so "Combine Files" (about 7em wide) stays on one
+   line instead of wrapping into the fixed height and getting cut off. `cqw` is a
+   percent of the button's wrapper, see `.actions .tip`. */
 .action {
   flex: 1;
   min-width: 0;
-  padding: 1rem 0.75rem;
-  font-size: 1.15rem;
+  box-sizing: border-box;
+  height: 3.9rem;
+  padding: 0 0.4rem;
+  font-size: min(1.5rem, calc((100cqw - 1rem) / 7));
+  white-space: nowrap;
 }
 
 /* Selected files, numbered so the merge order is visible rather than implied. The
@@ -304,6 +311,7 @@ button:disabled {
 
 .actions .tip {
   flex: 1;
+  container-type: inline-size;
 }
 
 .tip > button {
