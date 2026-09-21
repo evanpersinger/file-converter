@@ -7,13 +7,17 @@ import './App.css'
 
 type Status =
   | { kind: 'idle' }
-  | { kind: 'converting'; fileName: string }
+  | { kind: 'converting'; fileName: string; position: number; total: number }
   | { kind: 'combining' }
   | { kind: 'error'; message: string }
 
-interface Result {
+interface Download {
   url: string
   filename: string
+}
+
+interface Result {
+  downloads: Download[]
   seconds: number
 }
 
@@ -63,7 +67,7 @@ export default function App() {
   // every conversion would leak its result until a full page reload.
   useEffect(() => {
     if (!result) return
-    return () => URL.revokeObjectURL(result.url)
+    return () => result.downloads.forEach((d) => URL.revokeObjectURL(d.url))
   }, [result])
 
   // A file dropped anywhere but the picker makes the browser navigate to it, which
@@ -186,13 +190,41 @@ export default function App() {
       // Hold the result and let the user click Download, rather than firing the
       // download automatically.
       const seconds = Math.round((Date.now() - startedAt) / 1000)
-      setResult({ url: URL.createObjectURL(blob), filename, seconds })
+      setResult({ downloads: [{ url: URL.createObjectURL(blob), filename }], seconds })
       setStatus({ kind: 'idle' })
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message })
     } finally {
       setJobId(null)
     }
+  }
+
+  // Converts the files one after another, since the server runs one conversion at a
+  // time anyway. A failed file doesn't stop the rest, and the ones that worked stay
+  // downloadable next to the error naming the ones that didn't.
+  async function convertAll(targetId: string) {
+    const startedAt = Date.now()
+    const downloads: Download[] = []
+    const failures: string[] = []
+    setResult(null)
+
+    for (const [index, file] of files.entries()) {
+      const id = crypto.randomUUID()
+      setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: files.length })
+      setJobId(id)
+      try {
+        const { blob, filename } = await convert(file, targetId, selectedLlm ? model : null, id)
+        downloads.push({ url: URL.createObjectURL(blob), filename })
+      } catch (e) {
+        failures.push(`${file.name}: ${(e as Error).message}`)
+      }
+    }
+
+    setJobId(null)
+    if (downloads.length > 0) {
+      setResult({ downloads, seconds: Math.round((Date.now() - startedAt) / 1000) })
+    }
+    setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
   }
 
   const pickerLabel =
@@ -380,9 +412,8 @@ export default function App() {
 
         {mixedExtensions && (
           <p className="warning">
-            Combining needs every file to be the same format, and these are{' '}
-            {distinctExts.join(', ')}. Convert them to a common format first, or
-            remove the odd ones out.
+            Converting and combining both need every file to be the same format,
+            and these are {distinctExts.join(', ')}. Remove the odd ones out.
           </p>
         )}
 
@@ -407,8 +438,8 @@ export default function App() {
             data-tip={
               files.length === 0
                 ? 'Add files to convert'
-                : files.length > 1
-                  ? 'Converting takes one file at a time'
+                : mixedExtensions
+                  ? 'Every file has to be the same format'
                   : !target
                     ? 'Pick a format, or an LLM script, to convert with'
                     : selectedLlm && !model
@@ -418,13 +449,11 @@ export default function App() {
           >
             <button
               className="action"
-              onClick={() =>
-                primary && target && run(
-                  (id) => convert(primary, target, selectedLlm ? model : null, id),
-                  { kind: 'converting', fileName: primary.name },
-                )
+              onClick={() => target && convertAll(target)}
+              disabled={
+                files.length === 0 || mixedExtensions || !target
+                || (selectedLlm !== null && !model) || busy
               }
-              disabled={files.length !== 1 || !target || (selectedLlm !== null && !model) || busy}
             >
               {status.kind === 'converting' ? 'Converting...' : 'Convert Files'}
             </button>
@@ -455,7 +484,8 @@ export default function App() {
         {status.kind === 'converting' && (
           <div className="progress-block">
             <p className="progress-title" title={status.fileName}>
-              Converting {status.fileName}.
+              Converting {status.total > 1 && `${status.position} of ${status.total}: `}
+              {status.fileName}.
             </p>
             <ProgressBar percent={percent} />
             <p className="muted progress-time">{formatDuration(elapsed)}</p>
@@ -464,9 +494,11 @@ export default function App() {
 
         {result && (
           <>
-            <a className="download" href={result.url} download={result.filename}>
-              Download {result.filename}
-            </a>
+            {result.downloads.map((d) => (
+              <a key={d.url} className="download" href={d.url} download={d.filename}>
+                Download {d.filename}
+              </a>
+            ))}
             <p className="muted progress-time">Took {formatDuration(result.seconds)}.</p>
           </>
         )}
