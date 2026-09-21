@@ -352,7 +352,7 @@ export default function App() {
         </label>
 
         {files.length > 0 && (
-          <ol className="filelist">
+          <ol className={files.length > 1 ? 'filelist numbered' : 'filelist'}>
             {files.map((f, i) => (
               <li key={`${f.name}-${i}`}>
                 <span title={f.name}>{f.name}</span>

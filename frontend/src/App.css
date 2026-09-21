@@ -249,7 +249,9 @@ h2 {
   padding: 0.15rem 0;
 }
 
-.filelist li::before {
+/* Numbers show the order Combine merges in, so they only appear once there are two or
+   more files. A lone file has no order to show. */
+.filelist.numbered li::before {
   counter-increment: filelist;
   content: counter(filelist) ".";
   flex: none;
