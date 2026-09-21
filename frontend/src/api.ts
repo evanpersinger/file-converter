@@ -42,12 +42,17 @@ export async function convert(
   file: File,
   targetId: string,
   model: string | null = null,
+  jobId: string | null = null,
 ): Promise<Converted> {
   const body = new FormData()
   body.append('file', file)
   body.append('target', targetId)
   if (model) {
     body.append('model', model)
+  }
+  // Lets getProgress ask how far along this particular request is.
+  if (jobId) {
+    body.append('job_id', jobId)
   }
 
   const response = await fetch('/api/convert', { method: 'POST', body })
@@ -60,6 +65,16 @@ export async function convert(
     blob: await response.blob(),
     filename: filenameFrom(response.headers.get('Content-Disposition')),
   }
+}
+
+/** Percent done for a running conversion, or null when the backend has none to report. */
+export async function getProgress(jobId: string): Promise<number | null> {
+  const response = await fetch(`/api/progress/${encodeURIComponent(jobId)}`)
+  if (!response.ok) {
+    throw new Error('Could not read the conversion progress.')
+  }
+  const payload: { percent: number | null } = await response.json()
+  return payload.percent
 }
 
 /**

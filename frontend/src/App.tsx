@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { combine, convert, detect, extensionOf, getFormats, getLocalModels } from './api'
 import type { FormatMap, LocalModel, Mismatch, Target, Unavailable } from './types'
+import ProgressBar from './ProgressBar'
+import { useProgress } from './useProgress'
 import './App.css'
 
 type Status =
   | { kind: 'idle' }
-  | { kind: 'converting' }
+  | { kind: 'converting'; fileName: string }
   | { kind: 'combining' }
   | { kind: 'error'; message: string }
 
 interface Result {
   url: string
   filename: string
+  seconds: number
 }
 
 // Different spellings of one format. Kept in step with SUFFIX_ALIASES in
@@ -26,6 +29,9 @@ const canonical = (ext: string) => EXT_ALIASES[ext] ?? ext
 
 const blockedReason = (dep: Unavailable) =>
   dep.hint ? `${dep.reason}. ${dep.hint}` : dep.reason
+
+const formatDuration = (seconds: number) =>
+  seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 
 export default function App() {
   const [formats, setFormats] = useState<FormatMap | null>(null)
@@ -42,6 +48,9 @@ export default function App() {
   // Extension of the LLM script whose model list is open, and the model picked from it.
   const [openLlm, setOpenLlm] = useState<string | null>(null)
   const [model, setModel] = useState<string | null>(null)
+  // Set while a conversion is running, so the backend can be asked how far along it is.
+  const [jobId, setJobId] = useState<string | null>(null)
+  const { percent, elapsed } = useProgress(jobId)
   // Which file the newest detect() call was for. Adding a second file while the
   // first check is in flight would otherwise let the stale answer win.
   const latestPick = useRef<File | null>(null)
@@ -172,18 +181,24 @@ export default function App() {
     setModel(name)
   }
 
-  async function run(action: () => Promise<{ blob: Blob; filename: string }>,
-                     kind: 'converting' | 'combining') {
-    setStatus({ kind })
+  async function run(action: (jobId: string) => Promise<{ blob: Blob; filename: string }>,
+                     running: Status) {
+    const id = crypto.randomUUID()
+    const startedAt = Date.now()
+    setStatus(running)
     setResult(null)
+    setJobId(id)
     try {
-      const { blob, filename } = await action()
+      const { blob, filename } = await action(id)
       // Hold the result and let the user click Download, rather than firing the
       // download automatically.
-      setResult({ url: URL.createObjectURL(blob), filename })
+      const seconds = Math.round((Date.now() - startedAt) / 1000)
+      setResult({ url: URL.createObjectURL(blob), filename, seconds })
       setStatus({ kind: 'idle' })
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message })
+    } finally {
+      setJobId(null)
     }
   }
 
@@ -414,7 +429,10 @@ export default function App() {
             <button
               className="action"
               onClick={() =>
-                primary && target && run(() => convert(primary, target, selectedLlm ? model : null), 'converting')
+                primary && target && run(
+                  (id) => convert(primary, target, selectedLlm ? model : null, id),
+                  { kind: 'converting', fileName: primary.name },
+                )
               }
               disabled={files.length !== 1 || !target || busy}
             >
@@ -436,7 +454,7 @@ export default function App() {
           >
             <button
               className="action"
-              onClick={() => run(() => combine(files), 'combining')}
+              onClick={() => run(() => combine(files), { kind: 'combining' })}
               disabled={!canCombine || busy}
             >
               {status.kind === 'combining' ? 'Combining...' : 'Combine Files'}
@@ -444,10 +462,23 @@ export default function App() {
           </span>
         </div>
 
+        {status.kind === 'converting' && (
+          <div className="progress-block">
+            <p className="progress-title" title={status.fileName}>
+              Converting {status.fileName}.
+            </p>
+            <ProgressBar percent={percent} />
+            <p className="muted progress-time">{formatDuration(elapsed)}</p>
+          </div>
+        )}
+
         {result && (
-          <a className="download" href={result.url} download={result.filename}>
-            Download {result.filename}
-          </a>
+          <>
+            <a className="download" href={result.url} download={result.filename}>
+              Download {result.filename}
+            </a>
+            <p className="muted progress-time">Took {formatDuration(result.seconds)}.</p>
+          </>
         )}
 
         {status.kind === 'error' && <pre className="error">{status.message}</pre>}

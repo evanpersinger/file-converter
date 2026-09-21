@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import shutil
 import threading
 import traceback
@@ -73,6 +74,10 @@ load_dotenv(REPO / ".env")
 # Serialises the process-global module patching. See the CONCURRENCY note above.
 _LOCK = threading.Lock()
 
+# Output of the conversions currently running, by the job_id the UI sent with the request.
+# /api/progress reads the percentage out of it.
+_JOB_OUTPUT: dict[str, io.StringIO] = {}
+
 
 # Import sanity check
 # This project is also installed as a wheel (with backend/ flattened to top level),
@@ -113,6 +118,18 @@ def job_workspace() -> Iterator[tuple[Path, Path, Path]]:
         yield job_dir, job_in, job_out
     finally:
         shutil.rmtree(job_dir, ignore_errors=True)
+
+
+@contextmanager
+def tracked(job_id: str | None, output: io.StringIO) -> Iterator[None]:
+    """Expose `output` to /api/progress under `job_id` for as long as the job runs."""
+    if job_id:
+        _JOB_OUTPUT[job_id] = output
+    try:
+        yield
+    finally:
+        if job_id:
+            _JOB_OUTPUT.pop(job_id, None)
 
 
 _MISSING = object()
@@ -482,10 +499,21 @@ def formats() -> dict:
     }
 
 
+_MODEL_SIZE = re.compile(r":(\d+(?:\.\d+)?)b\b", re.IGNORECASE)
+
+
+def _model_size(name: str) -> float:
+    """Parameter count in billions read off the tag (`qwen3.5:9b` is 9.0), used as a
+    stand-in for how strong a model is. Infinity when the tag doesn't say."""
+    match = _MODEL_SIZE.search(name)
+    return float(match.group(1)) if match else float("inf")
+
+
 @app.get("/api/local-models")
 def local_models() -> dict:
     """Ollama models the UI can offer: the curated vision models, downloaded or not (so
-    a missing one can say how to get it), plus anything else already installed.
+    a missing one can say how to get it), plus anything else already installed. Sorted
+    weakest to strongest by the size in the tag, models with no size last.
 
     Empty when Ollama isn't reachable, /api/formats already carries the reason.
     """
@@ -495,11 +523,10 @@ def local_models() -> dict:
         return {"models": []}
 
     curated = llm_pdf_md.OLLAMA_MODELS
-    others = sorted(name for name in installed if name not in curated)
-    return {
-        "models": [{"name": name, "installed": name in installed} for name in curated]
-        + [{"name": name, "installed": True} for name in others]
-    }
+    others = [name for name in installed if name not in curated]
+    models = [{"name": name, "installed": name in installed} for name in curated]
+    models += [{"name": name, "installed": True} for name in others]
+    return {"models": sorted(models, key=lambda m: (_model_size(m["name"]), m["name"]))}
 
 
 def _error(message: str, hint: str | None = None, status: int = 400) -> JSONResponse:
@@ -523,6 +550,27 @@ def _model_problem(model: str | None) -> JSONResponse | None:
             f"Run `ollama pull {model}` in a terminal, then try again.",
         )
     return None
+
+
+_PAGE_PROGRESS = re.compile(r"Converting page \d+/\d+ \((\d+)%\)")
+
+
+def _latest_percent(output: str) -> int | None:
+    """The last percentage a converter printed (`Converting page 3/12 (25%)`), or None."""
+    matches = _PAGE_PROGRESS.findall(output)
+    return int(matches[-1]) if matches else None
+
+
+@app.get("/api/progress/{job_id}")
+def progress(job_id: str) -> dict:
+    """How far along a running conversion is.
+
+    The percent is None when the job isn't running (not started yet, still waiting on
+    the lock, or finished) or its converter prints no percentage, which is every
+    converter except the local-model one.
+    """
+    output = _JOB_OUTPUT.get(job_id)
+    return {"percent": None if output is None else _latest_percent(output.getvalue())}
 
 
 @app.post("/api/detect")
@@ -557,6 +605,7 @@ def convert(
     file: UploadFile = File(...),
     target: str = Form(...),
     model: str | None = Form(None),
+    job_id: str | None = Form(None),
 ):
     conv = BY_TARGET_ID.get(target)
     if conv is None:
@@ -603,7 +652,7 @@ def convert(
         staged.write_bytes(data)
 
         try:
-            with redirect_stdout(captured), redirect_stderr(captured):
+            with tracked(job_id, captured), redirect_stdout(captured), redirect_stderr(captured):
                 extra = (model,) if conv.takes_model else ()
                 result = conv.invoke(job_dir, job_in, job_out, staged, *extra)
         except Exception as exc:

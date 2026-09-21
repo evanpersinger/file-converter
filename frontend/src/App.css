@@ -347,6 +347,58 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+/* Progress for a running conversion: which file, a bar with the percent inside it, and
+   the time so far. */
+.progress-block {
+  margin-top: 1.5rem;
+}
+
+.progress-title {
+  margin: 0 0 0.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-time {
+  margin: 0.5rem 0 0;
+}
+
+.progress {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  box-sizing: border-box;
+  border: 3px solid var(--text);
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--mono);
+}
+
+/* Filled part of the bar, drawn over the whole track and clipped to the percent. */
+.progress-fill {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--text);
+  color: var(--bg);
+  transition: clip-path 0.4s ease;
+}
+
+.progress.indeterminate .progress-label {
+  animation: progress-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /* Styled to match the Convert button, but filled, so it reads as the next action. */
 .download {
   display: block;

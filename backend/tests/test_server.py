@@ -11,6 +11,7 @@ import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 
+import fitz
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -185,6 +186,58 @@ def test_local_models_flags_which_curated_models_are_downloaded(
         {"name": "curated:2b", "installed": True},
         {"name": "other:3b", "installed": True},
     ]
+
+
+def test_local_models_are_sorted_weakest_to_strongest(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "OLLAMA_MODELS", ["big:9b", "small:4b"])
+    monkeypatch.setattr(
+        server.llm_pdf_md,
+        "list_ollama_models",
+        lambda: ["big:9b", "huge:12b", "unsized:latest", "tiny:1.8b"],
+    )
+
+    names = [m["name"] for m in client.get("/api/local-models").json()["models"]]
+
+    assert names == ["tiny:1.8b", "small:4b", "big:9b", "huge:12b", "unsized:latest"]
+
+
+def test_the_latest_percent_is_the_last_progress_line_printed() -> None:
+    output = "Converting a.pdf to md\nConverting page 1/4 (0%)\rConverting page 3/4 (50%)"
+
+    assert server._latest_percent(output) == 50
+    assert server._latest_percent("Converting a.pdf to md\n") is None
+
+
+def test_progress_for_a_job_that_is_not_running_is_null(client: TestClient) -> None:
+    assert client.get("/api/progress/no-such-job").json() == {"percent": None}
+
+
+def test_progress_reads_the_output_of_a_running_job(client: TestClient) -> None:
+    output = io.StringIO("Converting page 2/4 (25%)")
+
+    with server.tracked("job-1", output):
+        assert client.get("/api/progress/job-1").json() == {"percent": 25}
+
+    assert client.get("/api/progress/job-1").json() == {"percent": None}
+
+
+def test_the_local_converters_progress_output_is_readable_as_a_percentage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pins the print in llm_pdf_md to the pattern /api/progress parses."""
+    pdf = tmp_path / "two.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+    doc.save(pdf)
+    doc.close()
+    monkeypatch.setattr(server.llm_pdf_md, "_convert_page_ollama", lambda image_b64, model: "text")
+
+    server.llm_pdf_md._convert_pdf_local(pdf, "any:1b")
+
+    assert server._latest_percent(capsys.readouterr().out) == 100
 
 
 def test_an_empty_upload_is_rejected(client: TestClient, jobs_root: Path) -> None:
