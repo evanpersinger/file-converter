@@ -18,7 +18,6 @@ interface Download {
 
 interface Result {
   downloads: Download[]
-  seconds: number
 }
 
 // Different spellings of one format. Kept in step with SUFFIX_ALIASES in
@@ -181,7 +180,6 @@ export default function App() {
   async function run(action: (jobId: string) => Promise<{ blob: Blob; filename: string }>,
                      running: Status) {
     const id = crypto.randomUUID()
-    const startedAt = Date.now()
     setStatus(running)
     setResult(null)
     setJobId(id)
@@ -189,8 +187,7 @@ export default function App() {
       const { blob, filename } = await action(id)
       // Hold the result and let the user click Download, rather than firing the
       // download automatically.
-      const seconds = Math.round((Date.now() - startedAt) / 1000)
-      setResult({ downloads: [{ url: URL.createObjectURL(blob), filename }], seconds })
+      setResult({ downloads: [{ url: URL.createObjectURL(blob), filename }] })
       setStatus({ kind: 'idle' })
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message })
@@ -203,7 +200,6 @@ export default function App() {
   // time anyway. A failed file doesn't stop the rest, and the ones that worked stay
   // downloadable next to the error naming the ones that didn't.
   async function convertAll(targetId: string) {
-    const startedAt = Date.now()
     const downloads: Download[] = []
     const failures: string[] = []
     setResult(null)
@@ -222,7 +218,7 @@ export default function App() {
 
     setJobId(null)
     if (downloads.length > 0) {
-      setResult({ downloads, seconds: Math.round((Date.now() - startedAt) / 1000) })
+      setResult({ downloads })
     }
     setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
   }
@@ -492,16 +488,11 @@ export default function App() {
           </div>
         )}
 
-        {result && (
-          <>
-            {result.downloads.map((d) => (
-              <a key={d.url} className="download" href={d.url} download={d.filename}>
-                Download {d.filename}
-              </a>
-            ))}
-            <p className="muted progress-time">Took {formatDuration(result.seconds)}.</p>
-          </>
-        )}
+        {result?.downloads.map((d) => (
+          <a key={d.url} className="download" href={d.url} download={d.filename}>
+            Download {d.filename}
+          </a>
+        ))}
 
         {status.kind === 'error' && <pre className="error">{status.message}</pre>}
       </main>
