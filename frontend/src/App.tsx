@@ -142,7 +142,6 @@ export default function App() {
     if (added.length === 0) return
 
     setStatus({ kind: 'idle' })
-    setResult(null)
 
     // Appending rather than replacing is what makes the order first-come-first-served
     // across several picks. The backend merges in exactly this order.
@@ -157,7 +156,6 @@ export default function App() {
   function clearFiles() {
     setFiles([])
     setStatus({ kind: 'idle' })
-    setResult(null)
     setTarget(null)
     setMismatch(null)
     latestPick.current = null
@@ -183,7 +181,6 @@ export default function App() {
 
     setFiles(next)
     setStatus({ kind: 'idle' })
-    setResult(null)
 
     if (index === 0) {
       // The first file drives everything, so dropping it invalidates the target and
