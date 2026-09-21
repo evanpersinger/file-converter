@@ -1,4 +1,4 @@
-import type { ApiError, Detection, FormatMap } from './types'
+import type { ApiError, Detection, FormatMap, LocalModel } from './types'
 
 export async function getFormats(): Promise<FormatMap> {
   const response = await fetch('/api/formats')
@@ -6,6 +6,16 @@ export async function getFormats(): Promise<FormatMap> {
     throw new Error('Could not reach the converter backend.')
   }
   return response.json()
+}
+
+/** Ollama models to offer. Empty when Ollama is not running. */
+export async function getLocalModels(): Promise<LocalModel[]> {
+  const response = await fetch('/api/local-models')
+  if (!response.ok) {
+    throw new Error('Could not load the local models.')
+  }
+  const payload: { models: LocalModel[] } = await response.json()
+  return payload.models
 }
 
 /**
@@ -28,10 +38,17 @@ export interface Converted {
   filename: string
 }
 
-export async function convert(file: File, targetId: string): Promise<Converted> {
+export async function convert(
+  file: File,
+  targetId: string,
+  model: string | null = null,
+): Promise<Converted> {
   const body = new FormData()
   body.append('file', file)
   body.append('target', targetId)
+  if (model) {
+    body.append('model', model)
+  }
 
   const response = await fetch('/api/convert', { method: 'POST', body })
 

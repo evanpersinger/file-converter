@@ -19,6 +19,12 @@ uv run uvicorn server:app --app-dir backend --reload --port 8019 --loop asyncio
 
 Open **http://localhost:3004**. Both have to be running.
 
+The **LLM powered scripts** column, next to "Convert to", is for the PDF to Markdown
+conversion that runs on a local model. Pick a PDF, click **MD**, then pick one of your
+Ollama models. A model has to be downloaded first (`ollama pull <model>`), and models
+that aren't are greyed out with the pull command on hover. Ollama itself has to be
+running (open the Ollama app or run `ollama serve`).
+
 `--app-dir backend` and `--loop asyncio` are both required, the backend won't start
 without them.
 
@@ -127,9 +133,12 @@ your hardware. Expect it to take a while, particularly with OS models.
    - OpenAI: `OPENAI_API_KEY=your_api_key_here`
    - Anthropic: `ANTHROPIC_API_KEY=your_api_key_here`
 
-The OpenAI path renders each page to an image and sends it to `gpt-4o-mini`. The Claude
-path sends the PDF itself to `claude-sonnet-5`, which reads PDFs natively (limit 32 MB
-per file). Both cost money and bill the key they use.
+The OpenAI path renders each page to an image and sends it to `gpt-4o-mini` (default) or
+`gpt-4o`. The Claude path sends the PDF itself to `claude-sonnet-5` (default) or
+`claude-haiku-4-5-20251001`, which read PDFs natively (limit 32 MB per file). Pick the
+model from the no-arg menu, or pass it as the second argument, e.g.
+`python backend/llm_pdf_md.py anthropic claude-haiku-4-5-20251001`. Both cost money and
+bill the key they use.
 
 **Local (Ollama) path:**
 - Requires [Ollama](https://ollama.com) installed and running locally (`ollama serve`, or
@@ -144,8 +153,10 @@ per file). Both cost money and bill the key they use.
 - Free, no API key, nothing sent over the network. Slower than the cloud paths, and
   quality depends entirely on the model you pick.
 - Renders each page to an image, same idea as the OpenAI path, and sends it to the model
-  you choose (`OLLAMA_MODEL` in the script, default `qwen3.5:9b`). The model unloads from
-  memory 30 seconds after the last page (`OLLAMA_KEEP_ALIVE`), instead of Ollama's normal
+  you choose. The CLI lists whatever models are installed in Ollama (`ollama list`);
+  `OLLAMA_MODEL` in the script (`qwen3.5:9b`) is only the fallback when `local` is run
+  and Ollama can't be reached or has no models installed. The model unloads from memory
+  15 seconds after the last page (`OLLAMA_KEEP_ALIVE`), instead of Ollama's normal
   5-minute idle default.
 
 **Page limit (Claude path):** roughly 100 pages per PDF, fewer for dense text or
@@ -858,7 +869,7 @@ converter/
 │   ├── csv_xlsx.py         # CSV to Excel converter
 │   ├── csv_md.py           # CSV to Markdown converter
 │   ├── pdf_md.py           # PDF to Markdown converter (pymupdf4llm + OCR)
-│   ├── llm_pdf_md.py       # PDF to Markdown converter (LLM-powered, OpenAI or Claude)
+│   ├── llm_pdf_md.py       # PDF to Markdown converter (LLM-powered: OpenAI, Claude, or local Ollama)
 │   ├── ss_txt.py           # Screenshot to text converter (OCR; --structured for tables)
 │   ├── ipynb_pdf.py        # Jupyter notebook to PDF converter
 │   ├── md_pdf.py           # Markdown to PDF converter (Pandoc, enhanced)
@@ -891,7 +902,7 @@ converter/
 │       ├── api.ts          # Backend calls
 │       └── types.ts        # Shared types
 ├── pyproject.toml          # Python package dependencies
-└── .env                    # Store your OpenAI API key here (optional)
+└── .env                    # Store your OpenAI and/or Anthropic API keys here (optional)
 ```
 
 **Note:** `input/` and `output/` live inside `backend/`, since that's where the

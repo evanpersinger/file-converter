@@ -140,6 +140,53 @@ def test_a_source_extension_the_conversion_does_not_accept_is_rejected(
     assert ".csv" in body["hint"]
 
 
+def test_a_local_conversion_without_a_model_is_rejected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:4b"])
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "pdf->md-local"},
+        files={"file": ("a.pdf", b"%PDF-1.4\n")},
+    )
+    assert response.status_code == 400
+    assert "Pick a model" in response.json()["error"]
+
+
+def test_a_local_model_that_is_not_downloaded_is_rejected_with_the_pull_command(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:4b"])
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "pdf->md-local", "model": "qwen3.5:9b"},
+        files={"file": ("a.pdf", b"%PDF-1.4\n")},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert "not downloaded" in body["error"]
+    assert "ollama pull qwen3.5:9b" in body["hint"]
+
+
+def test_local_models_flags_which_curated_models_are_downloaded(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "OLLAMA_MODELS", ["curated:1b", "curated:2b"])
+    monkeypatch.setattr(
+        server.llm_pdf_md, "list_ollama_models", lambda: ["curated:2b", "other:3b"]
+    )
+
+    models = client.get("/api/local-models").json()["models"]
+
+    assert models == [
+        {"name": "curated:1b", "installed": False},
+        {"name": "curated:2b", "installed": True},
+        {"name": "other:3b", "installed": True},
+    ]
+
+
 def test_an_empty_upload_is_rejected(client: TestClient, jobs_root: Path) -> None:
     response = client.post(
         "/api/convert",

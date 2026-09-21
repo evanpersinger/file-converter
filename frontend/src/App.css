@@ -20,6 +20,33 @@
   border-right: 8px solid var(--text);
 }
 
+/* Tighter under the title, so the subtitle reads as part of it. */
+.llm-panel h2 {
+  margin-bottom: 0.4rem;
+}
+
+.subtitle {
+  margin: 0 0 1rem;
+}
+
+.model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1.25rem;
+}
+
+.model-list p {
+  margin: 0;
+}
+
+/* Model names vary in length, so a long one is cut off rather than wrapped. */
+.model-list .format {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 main {
   flex: 1;
   min-width: 0;

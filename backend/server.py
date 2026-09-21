@@ -24,6 +24,7 @@ from typing import Callable, Iterator
 from uuid import uuid4
 
 import magic
+import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse, Response
@@ -179,6 +180,15 @@ def via_dir_globals(module, call: Callable):
     return invoke
 
 
+def via_dir_globals_model(module, call: Callable):
+    """`via_dir_globals` for conversions where the user picks a model. `call` receives
+    the staged path and the model name."""
+    def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path, model: str):
+        with patched(module, input_dir=job_in, output_dir=job_out):
+            return call(staged, model)
+    return invoke
+
+
 def via_params(call: Callable):
     """Converter already accepts input_dir / output_dir arguments. No patching needed.
 
@@ -192,6 +202,15 @@ def via_params(call: Callable):
 # System dependency probes
 _LIBREOFFICE_APP = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
 
+
+def _ollama_reachable() -> bool:
+    try:
+        llm_pdf_md.list_ollama_models()
+    except requests.exceptions.RequestException:
+        return False
+    return True
+
+
 DEPS: dict[str, Callable[[], bool]] = {
     "tesseract": lambda: bool(which("tesseract")),
     "pandoc": lambda: bool(which("pandoc")),
@@ -201,6 +220,7 @@ DEPS: dict[str, Callable[[], bool]] = {
     ),
     "openai_key": lambda: bool(os.environ.get("OPENAI_API_KEY")),
     "anthropic_key": lambda: bool(os.environ.get("ANTHROPIC_API_KEY")),
+    "ollama": _ollama_reachable,
 }
 
 DEP_LABELS = {
@@ -210,6 +230,7 @@ DEP_LABELS = {
     "libreoffice": ("LibreOffice is not installed", "brew install --cask libreoffice"),
     "openai_key": ("OPENAI_API_KEY is not set", "add OPENAI_API_KEY to the .env file"),
     "anthropic_key": ("ANTHROPIC_API_KEY is not set", "add ANTHROPIC_API_KEY to the .env file"),
+    "ollama": ("Ollama is not running", "open the Ollama app or run `ollama serve`"),
 }
 
 
@@ -268,6 +289,10 @@ class Conversion:
     invoke: Callable
     requires: tuple[str, ...] = ()
     note: str | None = None
+    # True when the user picks a model to run this with. `invoke` then also takes it.
+    takes_model: bool = False
+    # Which part of the UI owns this conversion. None means the regular "Convert to" list.
+    group: str | None = None
 
 
 IMAGE_ONLY_OCR = (".png", ".gif", ".bmp", ".tiff", ".webp")
@@ -297,6 +322,12 @@ REGISTRY: list[Conversion] = [
                via_dir_globals(llm_pdf_md, lambda s: llm_pdf_md.convert_pdf_to_markdown_anthropic()),
                requires=("anthropic_key",),
                note="Sends the PDF to Anthropic's Claude. Slower, and it bills your key."),
+    Conversion((".pdf",), "pdf->md-local", "Markdown (OS model, free)", ".md",
+               via_dir_globals_model(
+                   llm_pdf_md,
+                   lambda s, model: llm_pdf_md.convert_pdf_to_markdown_local(model)),
+               requires=("ollama",), takes_model=True, group="llm",
+               note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first."),
 
     # --- office --------------------------------------------------------------
     Conversion((".pptx",), "pptx->md", "Markdown", ".md",
@@ -429,11 +460,17 @@ def formats() -> dict:
                     "id": conv.target_id,
                     "label": conv.label,
                     "ext": conv.target_ext,
+                    "group": conv.group,
                     "reason": reason,
                     "hint": hint,
                 })
             else:
-                entry = {"id": conv.target_id, "label": conv.label, "ext": conv.target_ext}
+                entry = {
+                    "id": conv.target_id,
+                    "label": conv.label,
+                    "ext": conv.target_ext,
+                    "group": conv.group,
+                }
                 if conv.note:
                     entry["note"] = conv.note
                 by_extension.setdefault(ext, []).append(entry)
@@ -445,8 +482,47 @@ def formats() -> dict:
     }
 
 
+@app.get("/api/local-models")
+def local_models() -> dict:
+    """Ollama models the UI can offer: the curated vision models, downloaded or not (so
+    a missing one can say how to get it), plus anything else already installed.
+
+    Empty when Ollama isn't reachable, /api/formats already carries the reason.
+    """
+    try:
+        installed = llm_pdf_md.list_ollama_models()
+    except requests.exceptions.RequestException:
+        return {"models": []}
+
+    curated = llm_pdf_md.OLLAMA_MODELS
+    others = sorted(name for name in installed if name not in curated)
+    return {
+        "models": [{"name": name, "installed": name in installed} for name in curated]
+        + [{"name": name, "installed": True} for name in others]
+    }
+
+
 def _error(message: str, hint: str | None = None, status: int = 400) -> JSONResponse:
     return JSONResponse({"error": message, "hint": hint}, status_code=status)
+
+
+def _model_problem(model: str | None) -> JSONResponse | None:
+    """The error to send back if `model` can't be used, or None if it's downloaded."""
+    if not model:
+        return _error("Pick a model to convert with.")
+
+    try:
+        installed = llm_pdf_md.list_ollama_models()
+    except requests.exceptions.RequestException:
+        reason, hint = DEP_LABELS["ollama"]
+        return _error(f"Cannot run this conversion. {reason}.", hint)
+
+    if model not in installed:
+        return _error(
+            f"The model '{model}' is not downloaded.",
+            f"Run `ollama pull {model}` in a terminal, then try again.",
+        )
+    return None
 
 
 @app.post("/api/detect")
@@ -477,7 +553,11 @@ def detect(file: UploadFile = File(...)):
 
 
 @app.post("/api/convert")
-def convert(file: UploadFile = File(...), target: str = Form(...)):
+def convert(
+    file: UploadFile = File(...),
+    target: str = Form(...),
+    model: str | None = Form(None),
+):
     conv = BY_TARGET_ID.get(target)
     if conv is None:
         return _error(f"Unknown conversion '{target}'.")
@@ -500,6 +580,13 @@ def convert(file: UploadFile = File(...), target: str = Form(...)):
         reason, hint = DEP_LABELS[missing[0]]
         return _error(f"Cannot run this conversion. {reason}.", hint)
 
+    # The guardrail: a model that isn't downloaded is refused here, before the upload
+    # is read, rather than failing minutes into a run.
+    if conv.takes_model:
+        problem = _model_problem(model)
+        if problem:
+            return problem
+
     data = file.file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         return _error(f"File is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.")
@@ -517,7 +604,8 @@ def convert(file: UploadFile = File(...), target: str = Form(...)):
 
         try:
             with redirect_stdout(captured), redirect_stderr(captured):
-                result = conv.invoke(job_dir, job_in, job_out, staged)
+                extra = (model,) if conv.takes_model else ()
+                result = conv.invoke(job_dir, job_in, job_out, staged, *extra)
         except Exception as exc:
             traceback.print_exc()
             return _error(

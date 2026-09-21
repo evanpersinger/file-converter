@@ -3,6 +3,8 @@ export interface Target {
   id: string
   label: string
   ext: string
+  /** Which part of the UI owns it. Null means the regular "Convert to" list. */
+  group: string | null
   note?: string
 }
 
@@ -11,8 +13,15 @@ export interface Unavailable {
   id: string
   label: string
   ext: string
+  group: string | null
   reason: string
   hint?: string
+}
+
+/** An Ollama model the UI can offer. Not installed means it has to be pulled first. */
+export interface LocalModel {
+  name: string
+  installed: boolean
 }
 
 /** One output format, rendered as a single button in the grid. */

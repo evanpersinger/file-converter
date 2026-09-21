@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { combine, convert, detect, extensionOf, getFormats } from './api'
-import type { FormatMap, Mismatch } from './types'
+import { combine, convert, detect, extensionOf, getFormats, getLocalModels } from './api'
+import type { FormatMap, LocalModel, Mismatch, Target, Unavailable } from './types'
 import './App.css'
 
 type Status =
@@ -24,6 +24,9 @@ const EXT_ALIASES: Record<string, string> = {
 
 const canonical = (ext: string) => EXT_ALIASES[ext] ?? ext
 
+const blockedReason = (dep: Unavailable) =>
+  dep.hint ? `${dep.reason}. ${dep.hint}` : dep.reason
+
 export default function App() {
   const [formats, setFormats] = useState<FormatMap | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -33,12 +36,19 @@ export default function App() {
   const [result, setResult] = useState<Result | null>(null)
   const [dragging, setDragging] = useState(false)
   const [mismatch, setMismatch] = useState<Mismatch | null>(null)
+  // null while loading. An empty list is the answer when Ollama is off, and the reason
+  // for that comes from the formats map.
+  const [localModels, setLocalModels] = useState<LocalModel[] | null>(null)
+  // Extension of the LLM script whose model list is open, and the model picked from it.
+  const [openLlm, setOpenLlm] = useState<string | null>(null)
+  const [model, setModel] = useState<string | null>(null)
   // Which file the newest detect() call was for. Adding a second file while the
   // first check is in flight would otherwise let the stale answer win.
   const latestPick = useRef<File | null>(null)
 
   useEffect(() => {
     getFormats().then(setFormats).catch((e: Error) => setLoadError(e.message))
+    getLocalModels().then(setLocalModels).catch(() => setLocalModels([]))
   }, [])
 
   // Release the blob URL when it gets replaced or the page unmounts. Without this,
@@ -64,8 +74,13 @@ export default function App() {
   // requires everything to share one extension anyway, so it is representative.
   const primary = files[0] ?? null
   const ext = primary ? extensionOf(primary.name) : ''
-  const targets = (ext && formats?.byExtension[ext]) || []
-  const blocked = (ext && formats?.unavailable[ext]) || []
+  const forFile = (ext && formats?.byExtension[ext]) || []
+  const blockedForFile = (ext && formats?.unavailable[ext]) || []
+  // LLM scripts have their own column, so "Convert to" only sees the ungrouped ones.
+  const targets = forFile.filter((t) => !t.group)
+  const blocked = blockedForFile.filter((u) => !u.group)
+  const llmTargets = forFile.filter((t) => t.group === 'llm')
+  const llmBlocked = blockedForFile.filter((u) => u.group === 'llm')
 
   const distinctExts = [...new Set(files.map((f) => canonical(extensionOf(f.name))))]
   const mixedExtensions = files.length >= 2 && distinctExts.length > 1
@@ -78,11 +93,24 @@ export default function App() {
   const routesFor = (formatExt: string) => targets.filter((t) => t.ext === formatExt)
 
   const selected = targets.find((t) => t.id === target) ?? null
+  const selectedLlm = llmTargets.find((t) => t.id === target) ?? null
   const variants = selected ? routesFor(selected.ext).slice(1) : []
+  const openRoute = llmTargets.find((t) => t.ext === openLlm) ?? null
+
+  // One button per output format an LLM script makes. Read off the map rather than
+  // hardcoded, so it shows before a file is chosen and a new script adds its own.
+  const llmFormats = formats
+    ? formats.allFormats.filter((f) =>
+        [...Object.values(formats.byExtension), ...Object.values(formats.unavailable)]
+          .flat()
+          .some((t) => t.group === 'llm' && t.ext === f.ext),
+      )
+    : []
 
   // The target borrows the registry's display name so both boxes read the same way.
   const sourceName = ext ? ext.slice(1).toUpperCase() : null
-  const targetName = formats?.allFormats.find((f) => f.ext === selected?.ext)?.name ?? null
+  const shownTarget = selected ?? selectedLlm
+  const targetName = formats?.allFormats.find((f) => f.ext === shownTarget?.ext)?.name ?? null
 
   function runDetect(file: File) {
     latestPick.current = file
@@ -131,6 +159,19 @@ export default function App() {
     }
   }
 
+  function toggleLlm(formatExt: string) {
+    const closing = openLlm === formatExt
+    setOpenLlm(closing ? null : formatExt)
+    // Closing the list takes its model selection with it.
+    if (closing && selectedLlm) setTarget(null)
+  }
+
+  // Picking a model selects the LLM route too, which is what clears "Convert to".
+  function pickModel(route: Target, name: string) {
+    setTarget(route.id)
+    setModel(name)
+  }
+
   async function run(action: () => Promise<{ blob: Blob; filename: string }>,
                      kind: 'converting' | 'combining') {
     setStatus({ kind })
@@ -167,9 +208,7 @@ export default function App() {
               : files.length === 0
                 ? 'Add a file to see what file type it can be converted to'
                 : dep
-                  ? dep.hint
-                    ? `${dep.reason}. ${dep.hint}`
-                    : dep.reason
+                  ? blockedReason(dep)
                   : `Cannot convert ${ext || 'this file'} to ${f.name}.`
 
             return (
@@ -206,6 +245,74 @@ export default function App() {
         ))}
 
         {selected?.note && <p className="muted note">{selected.note}</p>}
+      </aside>
+
+      <aside className="sidebar llm-panel">
+        <h2>Convert to</h2>
+        <p className="muted subtitle">Scripts use LLMs for conversion.</p>
+
+        <div className="formats">
+          {llmFormats.map((f) => {
+            const route = llmTargets.find((t) => t.ext === f.ext)
+            const dep = llmBlocked.find((u) => u.ext === f.ext)
+            const why = route
+              ? undefined
+              : files.length === 0
+                ? 'Add a file to see which LLM scripts can convert it'
+                : dep
+                  ? blockedReason(dep)
+                  : `No LLM script can convert ${ext || 'this file'} to ${f.name}.`
+
+            return (
+              <span key={f.ext} className="tip" data-tip={why}>
+                <button
+                  type="button"
+                  className={route && openLlm === f.ext ? 'format selected' : 'format'}
+                  disabled={!route}
+                  onClick={() => toggleLlm(f.ext)}
+                >
+                  {f.name}
+                </button>
+              </span>
+            )
+          })}
+        </div>
+
+        {openRoute && (
+          <div className="model-list">
+            <p className="muted">OS models</p>
+
+            {localModels === null && <p className="muted">Loading models...</p>}
+
+            {localModels?.length === 0 && (
+              <p className="muted">No models found. Is Ollama running?</p>
+            )}
+
+            {localModels && localModels.length > 0 && !localModels.some((m) => m.installed) && (
+              <p className="muted">Nothing downloaded yet. Hover a model to see how to get it.</p>
+            )}
+
+            {localModels?.map((m) => (
+              <span
+                key={m.name}
+                className="tip"
+                data-tip={m.installed ? undefined : `Not downloaded. Run: ollama pull ${m.name}`}
+              >
+                <button
+                  type="button"
+                  className={selectedLlm && model === m.name ? 'format selected' : 'format'}
+                  disabled={!m.installed}
+                  title={m.name}
+                  onClick={() => pickModel(openRoute, m.name)}
+                >
+                  {m.name}
+                </button>
+              </span>
+            ))}
+
+            {selectedLlm?.note && <p className="muted note">{selectedLlm.note}</p>}
+          </div>
+        )}
       </aside>
 
       <main>
@@ -300,13 +407,15 @@ export default function App() {
                 : files.length > 1
                   ? 'Converting takes one file at a time'
                   : !target
-                    ? 'Pick a format to convert to'
+                    ? 'Pick a format, or an LLM model, to convert with'
                     : undefined
             }
           >
             <button
               className="action"
-              onClick={() => primary && target && run(() => convert(primary, target), 'converting')}
+              onClick={() =>
+                primary && target && run(() => convert(primary, target, selectedLlm ? model : null), 'converting')
+              }
               disabled={files.length !== 1 || !target || busy}
             >
               {status.kind === 'converting' ? 'Converting...' : 'Convert Files'}
