@@ -66,7 +66,7 @@ import xlsx_csv
 BACKEND = Path(__file__).resolve().parent
 REPO = BACKEND.parent
 JOBS_ROOT = (REPO / ".webui_jobs").resolve()
-MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
+MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
 
 # The .env lives at the repo root, one level up from this file.
 load_dotenv(REPO / ".env")

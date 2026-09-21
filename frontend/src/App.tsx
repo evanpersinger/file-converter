@@ -66,12 +66,21 @@ export default function App() {
     getLocalModels().then(setLocalModels).catch(() => setLocalModels([]))
   }, [])
 
-  // Release the blob URL when it gets replaced or the page unmounts. Without this,
-  // every conversion would leak its result until a full page reload.
+  // Release a blob URL once it is no longer in `result`, whether the whole batch was
+  // replaced or a single file was removed from it. Without this, every conversion would
+  // leak its files until a full page reload. It is tracked in a ref rather than revoked
+  // in a cleanup, since a cleanup would also release the files that are staying.
+  const shownUrls = useRef<string[]>([])
+
   useEffect(() => {
-    if (!result) return
-    return () => result.downloads.forEach((d) => URL.revokeObjectURL(d.url))
+    const current = result?.downloads.map((d) => d.url) ?? []
+    shownUrls.current
+      .filter((url) => !current.includes(url))
+      .forEach((url) => URL.revokeObjectURL(url))
+    shownUrls.current = current
   }, [result])
+
+  useEffect(() => () => shownUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
   // A file dropped anywhere but the picker makes the browser navigate to it, which
   // throws away whatever is on screen. Swallow drops outside the target.
@@ -159,6 +168,13 @@ export default function App() {
     setTarget(null)
     setMismatch(null)
     latestPick.current = null
+  }
+
+  function removeDownload(url: string) {
+    setResult((current) => {
+      const downloads = current?.downloads.filter((d) => d.url !== url) ?? []
+      return downloads.length > 0 ? { downloads } : null
+    })
   }
 
   function downloadAll() {
@@ -540,9 +556,19 @@ export default function App() {
         )}
 
         {result?.downloads.map((d) => (
-          <a key={d.url} className="download" href={d.url} download={d.filename}>
-            Download {d.filename}
-          </a>
+          <div key={d.url} className="download-row">
+            <a className="download" href={d.url} download={d.filename}>
+              Download {d.filename}
+            </a>
+            <button
+              type="button"
+              className="remove"
+              onClick={() => removeDownload(d.url)}
+              aria-label={`Remove ${d.filename}`}
+            >
+              &times;
+            </button>
+          </div>
         ))}
 
         {status.kind === 'error' && <pre className="error">{status.message}</pre>}

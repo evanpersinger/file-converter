@@ -453,9 +453,17 @@ button:disabled {
 }
 
 /* Styled to match the Convert button, but filled, so it reads as the next action. */
+.download-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
 .download {
   display: block;
-  margin-top: 1.5rem;
+  flex: 1;
+  min-width: 0;
   padding: 0.7rem 1rem;
   border-radius: 6px;
   border: 3px solid var(--text);
