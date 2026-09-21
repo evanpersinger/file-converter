@@ -330,7 +330,7 @@ def convert_pdf_to_markdown_local(model: str = OLLAMA_MODEL) -> str:
 
 def _prompt_for_local_model() -> str:
     """Ask the user to pick one of the locally installed Ollama models. CLI entry point only,
-    callers going through the web UI or the agent must pass a model instead of hitting this."""
+    callers going through the web UI must pass a model instead of hitting this."""
     try:
         models = list_ollama_models()
     except requests.exceptions.RequestException:
@@ -357,8 +357,8 @@ def _prompt_for_local_model() -> str:
 
 def _prompt_for_provider() -> tuple[str, str]:
     """Ask the user to pick a model across all three provider sections. CLI entry point
-    only, callers going through the web UI or the agent must pass a provider and model
-    instead of hitting this.
+    only, callers going through the web UI must pass a provider and model instead of
+    hitting this.
 
     Returns (provider, model).
     """

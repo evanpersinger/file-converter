@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "file-converter"
 version = "1.0.0"
-description = "Simple scripts to convert files between different formats with AI agent support"
+description = "Simple scripts to convert files between different formats"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -18,7 +18,6 @@ keywords = [
     "markdown",
     "jupyter",
     "ocr",
-    "ai-agent",
     "openai",
 ]
 classifiers = [
@@ -38,8 +37,7 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "python-multipart>=0.0.9",
 
-    # AI Agent & LLM providers
-    "openai-agents>=0.5.0",
+    # LLM providers
     "openai>=2.7.1",
     "anthropic>=1.0",
     "vision-parse>=0.1.13",
@@ -115,17 +113,12 @@ dependencies = [
 Homepage = "https://github.com/evan/converter"
 Repository = "https://github.com/evan/converter"
 
-[project.scripts]
-file-convert-agent = "agent:run_agent"
-
 [tool.hatch.build.targets.wheel]
 packages = []
-# Flatten backend/ back to the top level in the built wheel, so the console script
-# `file-convert-agent = "agent:run_agent"` and the scripts' flat imports
-# (`from md_pdf import ...`) keep resolving after the backend/ reorg.
+# Flatten backend/ back to the top level in the built wheel, so the scripts' flat
+# imports (`from md_pdf import ...`) keep resolving after the backend/ reorg.
 sources = ["backend"]
 only-include = [
-    "backend/agent.py",
     "backend/combine_files.py",
     "backend/csv_md.py",
     "backend/csv_xlsx.py",
@@ -159,7 +152,6 @@ only-include = [
 
 [tool.hatch.build.targets.sdist]
 only-include = [
-    "backend/agent.py",
     "backend/combine_files.py",
     "backend/csv_md.py",
     "backend/csv_xlsx.py",

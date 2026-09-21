@@ -1,7 +1,6 @@
 # File Converter
 
-Simple scripts to convert files between different formats. Includes a local web UI and
-an AI agent for interactive file conversion.
+Simple scripts to convert files between different formats. Includes a local web UI.
 
 ## Quick Start
 
@@ -23,90 +22,15 @@ Open **http://localhost:3004**. Both have to be running.
 `--app-dir backend` and `--loop asyncio` are both required, the backend won't start
 without them.
 
-### AI Agent (Interactive Conversion)
-Use the AI agent to convert files through natural language:
-
-```bash
-# After installation, you can use the command directly:
-file-convert-agent
-
-# Or run the script directly:
-python backend/agent.py
-```
-
-Then ask it to convert files:
-- "Convert mock1.md to PDF"
-- "What files are in the input folder?"
-- "Convert all Word documents to PDF"
-
-The agent can use all conversion functions directly.
-
 ### Individual Scripts
 Each script can be run independently for specific conversions (see details below).
 
 ## Scripts
 
-### agent.py
-AI-powered file conversion agent that can convert files through natural language interaction.
-
-**Usage:**
-```bash
-# Using the installed command:
-file-convert-agent
-
-# Or run directly:
-python backend/agent.py
-```
-
-**Python packages:**
-- openai-agents>=0.5.0
-- openai>=2.7.1
-
-**API Key Requirements:**
-- Currently supports **OpenAI API keys only**
-- The agent uses the `openai-agents` package which is built specifically for OpenAI's API
-- Set your API key in environment variables: `export OPENAI_API_KEY=your_api_key_here`
-- Or add it to your `.env` file: `OPENAI_API_KEY=your_api_key_here`
-- Note: OpenAI-compatible APIs may work but are not officially tested
-- The `convert_pdf_to_markdown_anthropic` tool additionally needs `ANTHROPIC_API_KEY`; the agent itself still runs on OpenAI
-
-**Features:**
-- Interactive conversation interface
-- Natural language file conversion requests
-- Direct access to every conversion script in this repo
-- Can list the input/output folders and read files
-- Web search capability for additional information
-
-**Example interactions:**
-- "Convert mock1.md to PDF"
-- "List all files in the input folder"
-- "What conversions are supported?"
-
-**Tools available to the agent:**
-
-File tools: `list_files` (list the input or output folder), `read_file`, web search.
-
-Batch converters take no arguments. Each converts every matching file in `input/` and
-returns a summary of what it did:
-
-`convert_csv_to_markdown`, `convert_csv_to_xlsx`, `convert_xlsx_to_csv`,
-`convert_pdf_to_markdown`, `convert_pdf_to_markdown_openai`,
-`convert_pdf_to_markdown_anthropic`, `convert_docx_to_markdown`, `convert_pptx_to_markdown`,
-`convert_pptx_to_pdf`, `convert_heic_to_jpg`, `convert_heic_to_png`,
-`convert_heic_to_markdown`, `convert_heic_to_pdf`, `convert_jpg_to_png`, `convert_jpg_to_svg`,
-`convert_pdf_to_png`, `convert_jpg_to_markdown`, `convert_jpg_to_pdf`,
-`convert_jpg_to_ocr`, `convert_png_to_pdf`, `convert_png_to_svg`, `convert_sql_files`,
-`convert_screenshots_to_text`
-
-Single-file converters take a filename from `input/` plus an optional output name:
-
-`convert_md_to_pdf`, `convert_docx_to_pdf`, `convert_txt_to_pdf`, `convert_html_to_pdf`,
-`convert_notebook_to_pdf`, `convert_r_to_rmd`, `convert_rmd_to_pdf`, `combine_files`
-
 **Note on script structure:** every conversion script keeps its logic in a named
 function behind an `if __name__ == "__main__":` guard, so importing a script never
 runs a conversion as a side effect. Keep that pattern when adding new converters,
-otherwise the agent can't import them safely.
+otherwise the web server can't import them safely.
 
 ### xlsx_csv.py
 Converts Excel (.xlsx) to CSV (.csv).
@@ -930,7 +854,6 @@ converter/
 │   ├── tests/              # Pytest suite
 │   ├── test_files/         # Manual test fixtures (gitignored, not part of the pytest suite)
 │   ├── server.py           # FastAPI server behind the web UI
-│   ├── agent.py            # AI agent for interactive file conversion
 │   ├── xlsx_csv.py         # Excel to CSV converter
 │   ├── csv_xlsx.py         # CSV to Excel converter
 │   ├── csv_md.py           # CSV to Markdown converter
@@ -1007,9 +930,9 @@ they work the same no matter which directory you run from.
      before running the script**, e.g. `ollama pull qwen3.5:9b`. Nothing downloads
      automatically on first use, so this step has to happen first.
 
-4. **Optional: Set up API keys** (for `llm_pdf_md.py` and `agent.py`):
+4. **Optional: Set up API keys** (for `llm_pdf_md.py`):
    ```bash
-   # Create .env file. OPENAI_API_KEY powers the agent and the OpenAI PDF converter,
+   # Create .env file. OPENAI_API_KEY powers the OpenAI PDF converter,
    # ANTHROPIC_API_KEY powers the Claude PDF converter. Add whichever you use.
    # Not needed for the local Ollama path, that one uses no API key at all.
    echo "OPENAI_API_KEY=your_api_key_here" > .env
@@ -1029,12 +952,6 @@ uv sync --upgrade
 ```
 
 ## How to Use
-
-### Using the AI Agent (Recommended)
-1. Put your files in the `input` folder
-2. Run: `file-convert-agent` (or `python backend/agent.py`)
-3. Ask the agent to convert files using natural language
-4. Find converted files in the `output` folder
 
 ### Using Individual Scripts
 1. Put your files in the `input` folder
