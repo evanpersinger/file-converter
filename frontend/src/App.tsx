@@ -150,17 +150,27 @@ export default function App() {
     setFiles([...files, ...added])
   }
 
+  function clearFiles() {
+    setFiles([])
+    setStatus({ kind: 'idle' })
+    setResult(null)
+    setTarget(null)
+    setMismatch(null)
+    latestPick.current = null
+  }
+
   function removeAt(index: number) {
     const next = files.filter((_, i) => i !== index)
+    if (next.length === 0) {
+      clearFiles()
+      return
+    }
+
     setFiles(next)
     setStatus({ kind: 'idle' })
     setResult(null)
 
-    if (next.length === 0) {
-      setTarget(null)
-      setMismatch(null)
-      latestPick.current = null
-    } else if (index === 0) {
+    if (index === 0) {
       // The first file drives everything, so dropping it invalidates the target and
       // the mismatch answer.
       setTarget(null)
@@ -349,35 +359,49 @@ export default function App() {
       <main>
         {loadError && <p className="error">{loadError}</p>}
 
-        <label
-          className={dragging ? 'filepicker dragging' : 'filepicker'}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDragging(true)
-          }}
-          // dragleave also fires when the cursor crosses onto a child, so without the
-          // contains() check the highlight flickers as you move over the label text.
-          onDragLeave={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false)
-          }}
-          onDrop={(e) => {
-            e.preventDefault()
-            setDragging(false)
-            addFiles(e.dataTransfer.files)
-          }}
-        >
-          <input
-            type="file"
-            multiple
-            onChange={(e) => {
-              addFiles(e.target.files)
-              // Clearing the value lets the same file be picked again after removing
-              // it, which otherwise fires no change event.
-              e.target.value = ''
+        <div className="picker-row">
+          <label
+            className={dragging ? 'filepicker dragging' : 'filepicker'}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragging(true)
             }}
-          />
-          <span title={files.length === 1 ? files[0].name : undefined}>{pickerLabel}</span>
-        </label>
+            // dragleave also fires when the cursor crosses onto a child, so without the
+            // contains() check the highlight flickers as you move over the label text.
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragging(false)
+              addFiles(e.dataTransfer.files)
+            }}
+          >
+            <input
+              type="file"
+              multiple
+              onChange={(e) => {
+                addFiles(e.target.files)
+                // Clearing the value lets the same file be picked again after removing
+                // it, which otherwise fires no change event.
+                e.target.value = ''
+              }}
+            />
+            <span title={files.length === 1 ? files[0].name : undefined}>{pickerLabel}</span>
+          </label>
+
+          {/* Disabled while converting: the loop keeps going over the files it started
+              with, so clearing mid-batch would bring download links back for them. */}
+          <button
+            type="button"
+            className="clear"
+            onDoubleClick={clearFiles}
+            disabled={files.length === 0 || busy}
+          >
+            Clear
+            <span className="clear-hint">Click twice to clear</span>
+          </button>
+        </div>
 
         {files.length > 0 && (
           <ol className={files.length > 1 ? 'filelist numbered' : 'filelist'}>
@@ -476,6 +500,16 @@ export default function App() {
             </button>
           </span>
         </div>
+
+        <button
+          type="button"
+          className="clear-converted"
+          onDoubleClick={() => setResult(null)}
+          disabled={!result}
+        >
+          Clear
+          <span className="clear-hint">Click twice to clear</span>
+        </button>
 
         {status.kind === 'converting' && (
           <div className="progress-block">

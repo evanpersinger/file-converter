@@ -117,6 +117,34 @@ h2 {
   outline-offset: 2px;
 }
 
+/* The file box takes the width the Clear button leaves. */
+.picker-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.picker-row .filepicker {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Pinned to the file box's height so the two line up. */
+.clear {
+  flex: none;
+  box-sizing: border-box;
+  height: 5rem;
+  padding: 0 1.5rem;
+  font-size: 1.5rem;
+}
+
+/* The small line inside both Clear buttons, saying a single click won't do it. */
+.clear-hint {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
 .option {
   display: flex;
   align-items: flex-start;
@@ -221,6 +249,16 @@ h2 {
   display: flex;
   gap: 1rem;
   margin-top: 3rem;
+}
+
+/* Under Convert and Combine, sized to its text rather than the full row. Clears the
+   download links. */
+.clear-converted {
+  display: block;
+  box-sizing: border-box;
+  margin-top: 1rem;
+  padding: 0.4rem 1.25rem;
+  font-size: 1rem;
 }
 
 /* A fixed height, so making the text bigger doesn't make the button bigger. The text is
