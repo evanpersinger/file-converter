@@ -67,8 +67,15 @@ export default function App() {
   // first check is in flight would otherwise let the stale answer win.
   const latestPick = useRef<File | null>(null)
   // Set by Cancel, checked before each file in convertAll's loop so a multi-file batch
-  // stops picking up new files. The file already in progress still runs to completion.
+  // stops picking up new files.
   const cancelledBatch = useRef(false)
+  // The AbortController for whichever file convertAll is currently awaiting, so Cancel
+  // can drop the connection instead of waiting for a file with no way to stop mid-file.
+  const currentAbort = useRef<AbortController | null>(null)
+  // Whether the running batch is the local-model route, set once per batch. That route
+  // stops itself after the current page and returns a partial file, so Cancel must not
+  // abort its request too, that would throw the partial result away.
+  const localModelRun = useRef(false)
 
   useEffect(() => {
     getFormats().then(setFormats).catch((e: Error) => setLoadError(e.message))
@@ -251,18 +258,24 @@ export default function App() {
     const failures: string[] = []
     setResult(null)
     cancelledBatch.current = false
+    localModelRun.current = selectedLlm !== null
 
     for (const [index, file] of files.entries()) {
       if (cancelledBatch.current) break
       const id = crypto.randomUUID()
+      const controller = new AbortController()
+      currentAbort.current = controller
       setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: files.length })
       setJobId(id)
       setCancelling(false)
       try {
-        const { blob, filename } = await convert(file, targetId, selectedLlm ? model : null, id)
+        const { blob, filename } = await convert(file, targetId, selectedLlm ? model : null, id, controller.signal)
         downloads.push({ url: URL.createObjectURL(blob), filename })
       } catch (e) {
-        failures.push(`${file.name}: ${(e as Error).message}`)
+        // A cancelled file is meant to disappear, not show up as a failure.
+        if (!(e instanceof DOMException && e.name === 'AbortError')) {
+          failures.push(`${file.name}: ${(e as Error).message}`)
+        }
       }
     }
 
@@ -273,11 +286,15 @@ export default function App() {
     setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
   }
 
-  // Stops the batch from picking up the next file. The in-flight convert() call for
-  // the current file is left running: for the local-model route it resolves once the
-  // backend stops after its current page, for everything else it just finishes normally.
+  // Stops the batch from picking up the next file. For the local-model route the
+  // current file's request is left running, it resolves once the backend stops after
+  // its current page and hands back the partial file. Everything else has no way to
+  // stop mid-file server-side, so the request is aborted instead of waited on.
   async function cancelCurrentJob() {
     cancelledBatch.current = true
+    if (!localModelRun.current) {
+      currentAbort.current?.abort()
+    }
     if (!jobId) return
     setCancelling(true)
     try {

@@ -4,7 +4,7 @@ interface ProgressBarProps {
 }
 
 export default function ProgressBar({ percent }: ProgressBarProps) {
-  const label = percent === null ? 'Working...' : `${percent}%`
+  const label = percent === null ? 'Converting...' : `${percent}%`
 
   return (
     <div
