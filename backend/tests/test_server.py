@@ -171,6 +171,35 @@ def test_a_local_model_that_is_not_downloaded_is_rejected_with_the_pull_command(
     assert "ollama pull qwen3.5:9b" in body["hint"]
 
 
+def test_a_local_conversion_uses_the_model_the_user_chose(
+    client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The model in the request form has to be the one that actually reaches Ollama,
+    not just the one that passed the installed check."""
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:9b"])
+    calls: list[str] = []
+    monkeypatch.setattr(
+        server.llm_pdf_md,
+        "_convert_page_ollama",
+        lambda image_b64, model: calls.append(model) or "text",
+    )
+
+    pdf_path = tmp_path / "doc.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "pdf->md-local", "model": "qwen3.5:9b"},
+        files={"file": ("doc.pdf", pdf_path.read_bytes())},
+    )
+
+    assert response.status_code == 200
+    assert calls == ["qwen3.5:9b"]
+
+
 def test_local_models_flags_which_curated_models_are_downloaded(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
