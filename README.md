@@ -19,16 +19,20 @@ uv run uvicorn server:app --app-dir backend --reload --port 8019 --loop asyncio
 
 Open **http://localhost:3004**. Both have to be running.
 
+Converting several files at once runs them one after another. A **Cancel** button
+appears next to Download All while any conversion is running, and stops the batch
+before it picks up the next file, files already converted stay downloadable. For the
+local-model conversion below, cancelling also stops the file currently converting
+after its current page and keeps whatever pages already finished as the download;
+for every other conversion, the file already in progress just finishes normally.
+
 The second **Convert to** column ("Scripts use LLMs for conversion.") is for the PDF to
 Markdown conversion that runs on a local model. Pick a PDF, click **MD**, then pick one
 of your Open Source models, listed weakest to strongest. Convert stays disabled until
 you pick one. A model has to be downloaded first (`ollama pull <model>`), and models
 that aren't are greyed out with the pull command on hover. Ollama itself has to be
-running (open the Ollama app or run `ollama serve`). Since local models can be slow, a
-**Cancel** button appears next to Download All while one is running; cancelling stops
-it after the current page and keeps whatever pages already finished as the download,
-instead of losing the work. The OpenAI and Claude versions of this conversion are CLI
-only for now, see `llm_pdf_md.py` below.
+running (open the Ollama app or run `ollama serve`). The OpenAI and Claude versions of
+this conversion are CLI only for now, see `llm_pdf_md.py` below.
 
 `--app-dir backend` and `--loop asyncio` are both required, the backend won't start
 without them.

@@ -8,7 +8,7 @@ import './App.css'
 
 type Status =
   | { kind: 'idle' }
-  | { kind: 'converting'; fileName: string; position: number; total: number; cancellable: boolean }
+  | { kind: 'converting'; fileName: string; position: number; total: number }
   | { kind: 'combining' }
   | { kind: 'error'; message: string }
 
@@ -66,6 +66,9 @@ export default function App() {
   // Which file the newest detect() call was for. Adding a second file while the
   // first check is in flight would otherwise let the stale answer win.
   const latestPick = useRef<File | null>(null)
+  // Set by Cancel, checked before each file in convertAll's loop so a multi-file batch
+  // stops picking up new files. The file already in progress still runs to completion.
+  const cancelledBatch = useRef(false)
 
   useEffect(() => {
     getFormats().then(setFormats).catch((e: Error) => setLoadError(e.message))
@@ -246,15 +249,13 @@ export default function App() {
   async function convertAll(targetId: string) {
     const downloads: Download[] = []
     const failures: string[] = []
-    // Only the local-model route reads the cancel flag, so that's the only one worth
-    // offering a Cancel button for. Captured once: the batch keeps converting with
-    // whatever route it started with even if the selection changes mid-run.
-    const cancellable = selectedLlm !== null
     setResult(null)
+    cancelledBatch.current = false
 
     for (const [index, file] of files.entries()) {
+      if (cancelledBatch.current) break
       const id = crypto.randomUUID()
-      setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: files.length, cancellable })
+      setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: files.length })
       setJobId(id)
       setCancelling(false)
       try {
@@ -272,9 +273,11 @@ export default function App() {
     setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
   }
 
-  // The in-flight convert() call is left running: it resolves normally once the
-  // backend stops after its current page and hands back whatever pages finished.
+  // Stops the batch from picking up the next file. The in-flight convert() call for
+  // the current file is left running: for the local-model route it resolves once the
+  // backend stops after its current page, for everything else it just finishes normally.
   async function cancelCurrentJob() {
+    cancelledBatch.current = true
     if (!jobId) return
     setCancelling(true)
     try {
@@ -570,7 +573,7 @@ export default function App() {
             Download All
           </button>
 
-          {status.kind === 'converting' && status.cancellable && (
+          {status.kind === 'converting' && (
             <button type="button" onClick={cancelCurrentJob} disabled={cancelling}>
               {cancelling ? 'Cancelling...' : 'Cancel'}
             </button>
