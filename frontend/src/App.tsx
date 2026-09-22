@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { combine, convert, detect, extensionOf, getFormats, getLocalModels } from './api'
 import type { FormatMap, LocalModel, Mismatch, Target, Unavailable } from './types'
+import FileViewer from './FileViewer'
 import ProgressBar from './ProgressBar'
 import { useProgress } from './useProgress'
 import './App.css'
@@ -49,6 +50,8 @@ export default function App() {
   const [result, setResult] = useState<Result | null>(null)
   const [dragging, setDragging] = useState(false)
   const [mismatch, setMismatch] = useState<Mismatch | null>(null)
+  // The dropped file currently shown in the preview overlay, null when it's closed.
+  const [viewing, setViewing] = useState<File | null>(null)
   // null while loading. An empty list is the answer when Ollama is off, and the reason
   // for that comes from the formats map.
   const [localModels, setLocalModels] = useState<LocalModel[] | null>(null)
@@ -436,6 +439,9 @@ export default function App() {
             {files.map((f, i) => (
               <li key={`${f.name}-${i}`}>
                 <span title={f.name}>{f.name}</span>
+                <button type="button" className="view" onClick={() => setViewing(f)}>
+                  View
+                </button>
                 <button
                   type="button"
                   className="remove"
@@ -573,6 +579,8 @@ export default function App() {
 
         {status.kind === 'error' && <pre className="error">{status.message}</pre>}
       </main>
+
+      {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
