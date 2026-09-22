@@ -421,8 +421,9 @@ export default function App() {
             <span title={files.length === 1 ? files[0].name : undefined}>{pickerLabel}</span>
           </label>
 
-          {/* Disabled while converting: the loop keeps going over the files it started
-              with, so clearing mid-batch would bring download links back for them. */}
+          {/* Disabled while converting: the loop keeps working through the files it
+              started with, so clearing them mid-batch wouldn't stop their download
+              links from still showing up once each one finishes. */}
           <button
             type="button"
             className="clear"

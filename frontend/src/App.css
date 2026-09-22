@@ -380,9 +380,6 @@ h2 {
   font-weight: 500;
 }
 
-/* `safe` keeps a zoomed-in image's top-left corner reachable by scrolling. Without
-   it, centering a child larger than its container can clip the far edge in some
-   browsers with no way to scroll back to it. */
 .viewer-zoom {
   display: flex;
   align-items: center;
@@ -397,6 +394,9 @@ h2 {
   text-align: center;
 }
 
+/* `safe` keeps a zoomed-in image's top-left corner reachable by scrolling. Without
+   it, centering a child larger than its container can clip the far edge in some
+   browsers with no way to scroll back to it. */
 .viewer-body {
   flex: 1;
   min-height: 0;

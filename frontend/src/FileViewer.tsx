@@ -6,7 +6,7 @@ interface FileViewerProps {
   onClose: () => void
 }
 
-const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
 const TEXT_EXTS = ['.csv', '.txt', '.sql', '.r', '.rmd', '.md', '.ipynb']
 
 const ZOOM_STEP = 0.1
@@ -58,16 +58,28 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
     setZoom(null)
   }, [file])
 
+  // The View button that opened this never lost focus, since the overlay just covers
+  // it rather than taking focus itself. Closing via a key (Escape) is itself a
+  // keyboard event, which flips the browser's focus-ring heuristic back on for that
+  // still-focused button, so its focus ring reappears once the overlay unmounts.
+  // Blurring on the way out prevents that, regardless of which way it was closed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      ;(document.activeElement as HTMLElement | null)?.blur()
+      onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  function handleClose() {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    onClose()
+  }
+
   return (
-    <div className="viewer-overlay" onClick={onClose}>
+    <div className="viewer-overlay" onClick={handleClose}>
       {/* Stops a click inside the box from bubbling to the overlay and closing it. */}
       <div className="viewer-box" onClick={(e) => e.stopPropagation()}>
         <div className="viewer-header">
@@ -97,7 +109,7 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
             </div>
           )}
 
-          <button type="button" className="remove" onClick={onClose} aria-label="Close preview">
+          <button type="button" className="remove" onClick={handleClose} aria-label="Close preview">
             &times;
           </button>
         </div>
