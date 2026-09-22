@@ -23,6 +23,7 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
   const isImage = IMAGE_EXTS.includes(ext)
   const isPdf = ext === '.pdf'
   const isText = TEXT_EXTS.includes(ext)
+  const isMarkdown = ext === '.md'
 
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
@@ -137,7 +138,11 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
             />
           )}
           {isPdf && url && <iframe src={url} title={file.name} />}
-          {isText && (text === null ? <p className="muted">Loading...</p> : <pre>{text}</pre>)}
+          {isText && (
+            text === null
+              ? <p className="muted">Loading...</p>
+              : <pre className={isMarkdown ? 'markdown' : undefined}>{text}</pre>
+          )}
           {!isImage && !isPdf && !isText && (
             <p className="muted">No preview available for this file type yet.</p>
           )}

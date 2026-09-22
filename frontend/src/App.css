@@ -432,6 +432,15 @@ h2 {
   font-size: 0.85rem;
 }
 
+/* A plain page instead of the app's red/gold theme, like the PDF viewer's own white
+   background, since a document preview reads better as a document than as chrome. */
+.viewer-body pre.markdown {
+  background: #f7f6f2;
+  color: #1c1c1c;
+  border-radius: 4px;
+  padding: 1.5rem;
+}
+
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;

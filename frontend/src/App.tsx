@@ -15,6 +15,8 @@ type Status =
 interface Download {
   url: string
   filename: string
+  // Kept alongside the object URL so View can build a File out of it on demand.
+  blob: Blob
 }
 
 interface Result {
@@ -241,7 +243,7 @@ export default function App() {
       const { blob, filename } = await action(id)
       // Hold the result and let the user click Download, rather than firing the
       // download automatically.
-      setResult({ downloads: [{ url: URL.createObjectURL(blob), filename }] })
+      setResult({ downloads: [{ url: URL.createObjectURL(blob), filename, blob }] })
       setStatus({ kind: 'idle' })
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message })
@@ -270,7 +272,7 @@ export default function App() {
       setCancelling(false)
       try {
         const { blob, filename } = await convert(file, targetId, selectedLlm ? model : null, id, controller.signal)
-        downloads.push({ url: URL.createObjectURL(blob), filename })
+        downloads.push({ url: URL.createObjectURL(blob), filename, blob })
       } catch (e) {
         // A cancelled file is meant to disappear, not show up as a failure.
         if (!(e instanceof DOMException && e.name === 'AbortError')) {
@@ -613,6 +615,13 @@ export default function App() {
             <a className="download" href={d.url} download={d.filename}>
               Download {d.filename}
             </a>
+            <button
+              type="button"
+              className="view"
+              onClick={() => setViewing(new File([d.blob], d.filename, { type: d.blob.type }))}
+            >
+              View
+            </button>
             <button
               type="button"
               className="remove"
