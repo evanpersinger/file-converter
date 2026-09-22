@@ -23,6 +23,9 @@ script_dir = Path(__file__).resolve().parent
 input_dir = script_dir / "input"   # Folder containing files to convert
 output_dir = script_dir / "output"  # Folder where converted files will be saved
 
+# Patched per-request by server.py to check a job's cancel flag; a no-op for the CLI.
+should_cancel: Callable[[], bool] = lambda: False
+
 OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"]  # vision_parse only supports these two for OpenAI
 ANTHROPIC_MODELS = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
 OPENAI_MODEL = OPENAI_MODELS[0]
@@ -187,11 +190,17 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> str:
     page_count = doc.page_count
     pages = []
     for i, page in enumerate(doc, start=1):
+        # Checked before each page rather than mid-page: a page already in flight to
+        # Ollama can't be interrupted, so this is the earliest safe stopping point.
+        if should_cancel():
+            print(f"\rCancelled after page {i - 1}/{page_count}")
+            break
         print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
         png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
         image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
         pages.append(_convert_page_ollama(image_b64, model))
-    print(f"\rConverting page {page_count}/{page_count} (100%)")  # only true once every page is actually done
+    else:
+        print(f"\rConverting page {page_count}/{page_count} (100%)")  # only true once every page is actually done
     doc.close()
 
     return "\n\n".join(pages)
@@ -226,6 +235,8 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
     errors = []
 
     for pdf_name in pdf_names:
+        if should_cancel():
+            break
         pdf_path = input_dir / pdf_name
 
         try:
@@ -382,7 +393,7 @@ def _prompt_for_provider() -> tuple[str, str]:
     for name in ANTHROPIC_MODELS:
         print(f"  {i}) {_MODEL_DISPLAY_NAMES.get(name, name)}")
         i += 1
-    print("OS models:")
+    print("Open Source models:")
     if local_models:
         for name in local_models:
             print(f"  {i}) {name}")
@@ -399,7 +410,7 @@ def _prompt_for_provider() -> tuple[str, str]:
 
 if __name__ == "__main__":
     # Usage: python backend/llm_pdf_md.py [openai|anthropic|local] [model]
-    # With no arguments, shows a menu of ChatGPT/Anthropic/OS models to pick from.
+    # With no arguments, shows a menu of ChatGPT/Anthropic/Open Source models to pick from.
     # For "local" with no model given, prompts interactively from installed Ollama models.
     if len(sys.argv) > 1:
         provider = sys.argv[1]

@@ -78,6 +78,10 @@ _LOCK = threading.Lock()
 # /api/progress reads the percentage out of it.
 _JOB_OUTPUT: dict[str, io.StringIO] = {}
 
+# Cancel flags for the conversions currently running, by the same job_id.
+# /api/convert/{job_id}/cancel sets one; a running job's should_cancel checks it.
+_JOB_CANCEL: dict[str, threading.Event] = {}
+
 
 # Import sanity check
 # This project is also installed as a wheel (with backend/ flattened to top level),
@@ -121,15 +125,19 @@ def job_workspace() -> Iterator[tuple[Path, Path, Path]]:
 
 
 @contextmanager
-def tracked(job_id: str | None, output: io.StringIO) -> Iterator[None]:
-    """Expose `output` to /api/progress under `job_id` for as long as the job runs."""
+def tracked(job_id: str | None, output: io.StringIO) -> Iterator[threading.Event]:
+    """Expose `output` to /api/progress and a cancel flag to /api/convert/{job_id}/cancel,
+    both under `job_id`, for as long as the job runs. Yields the cancel event."""
+    cancel_event = threading.Event()
     if job_id:
         _JOB_OUTPUT[job_id] = output
+        _JOB_CANCEL[job_id] = cancel_event
     try:
-        yield
+        yield cancel_event
     finally:
         if job_id:
             _JOB_OUTPUT.pop(job_id, None)
+            _JOB_CANCEL.pop(job_id, None)
 
 
 _MISSING = object()
@@ -199,9 +207,13 @@ def via_dir_globals(module, call: Callable):
 
 def via_dir_globals_model(module, call: Callable):
     """`via_dir_globals` for conversions where the user picks a model. `call` receives
-    the staged path and the model name."""
-    def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path, model: str):
-        with patched(module, input_dir=job_in, output_dir=job_out):
+    the staged path and the model name. `should_cancel` defaults to a no-op so this
+    still works for callers (tests, other converters) that don't pass one."""
+    def invoke(
+        job_dir: Path, job_in: Path, job_out: Path, staged: Path, model: str,
+        should_cancel: Callable[[], bool] = lambda: False,
+    ):
+        with patched(module, input_dir=job_in, output_dir=job_out, should_cancel=should_cancel):
             return call(staged, model)
     return invoke
 
@@ -341,7 +353,7 @@ REGISTRY: list[Conversion] = [
                via_dir_globals(llm_pdf_md, lambda s: llm_pdf_md.convert_pdf_to_markdown_anthropic()),
                requires=("anthropic_key",), group="llm-cloud",
                note="Sends the PDF to Anthropic's Claude. Slower, and it bills your key."),
-    Conversion((".pdf",), "pdf->md-local", "Markdown (OS model, free)", ".md",
+    Conversion((".pdf",), "pdf->md-local", "Markdown (Open Source model, free)", ".md",
                via_dir_globals_model(
                    llm_pdf_md,
                    lambda s, model: llm_pdf_md.convert_pdf_to_markdown_local(model)),
@@ -575,6 +587,17 @@ def progress(job_id: str) -> dict:
     return {"percent": None if output is None else _latest_percent(output.getvalue())}
 
 
+@app.post("/api/convert/{job_id}/cancel")
+def cancel_convert(job_id: str):
+    """Signal a running conversion to stop. Only the local-model converter actually
+    checks the flag; other conversions ignore it and just run to completion."""
+    event = _JOB_CANCEL.get(job_id)
+    if event is None:
+        return _error("No conversion is running for that job.", status=404)
+    event.set()
+    return {"ok": True}
+
+
 @app.post("/api/detect")
 def detect(file: UploadFile = File(...)):
     """Report whether an upload's contents match the extension on its name.
@@ -654,8 +677,8 @@ def convert(
         staged.write_bytes(data)
 
         try:
-            with tracked(job_id, captured), redirect_stdout(captured), redirect_stderr(captured):
-                extra = (model,) if conv.takes_model else ()
+            with tracked(job_id, captured) as cancel_event, redirect_stdout(captured), redirect_stderr(captured):
+                extra = (model, cancel_event.is_set) if conv.takes_model else ()
                 result = conv.invoke(job_dir, job_in, job_out, staged, *extra)
         except Exception as exc:
             traceback.print_exc()

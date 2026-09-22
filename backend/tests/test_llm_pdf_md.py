@@ -120,6 +120,63 @@ def test_local_converts_multi_page_pdf_in_page_order(
     assert len(calls) == 2
 
 
+def test_local_stops_after_the_current_page_when_cancelled(
+    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = local_sandbox
+    _make_pdf(input_dir / "doc.pdf", pages=3)
+    calls: list[dict] = []
+
+    def fake_post(url, json, timeout):
+        calls.append(json)
+        return FakeResponse({"message": {"content": f"Page {len(calls)} content"}})
+
+    monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
+    # should_cancel is checked before each page starts, so setting it true after the
+    # first call means page 1 finishes and page 2 never starts.
+    monkeypatch.setattr(llm_pdf_md, "should_cancel", lambda: len(calls) >= 1)
+
+    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+
+    assert len(calls) == 1
+    assert (output_dir / "doc.md").read_text(encoding="utf-8") == "Page 1 content"
+    assert "Converted 1 file(s)" in summary
+
+
+def test_local_reports_no_content_when_cancelled_before_any_page(
+    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, _ = local_sandbox
+    _make_pdf(input_dir / "doc.pdf")
+    monkeypatch.setattr(llm_pdf_md, "should_cancel", lambda: True)
+    posts: list[dict] = []
+    monkeypatch.setattr(llm_pdf_md.requests, "post", lambda *a, **k: posts.append(k))
+
+    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+
+    assert posts == []
+    assert "No files converted" in summary
+
+
+def test_local_stops_picking_up_new_files_once_cancelled(
+    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = local_sandbox
+    _make_pdf(input_dir / "a.pdf")
+    _make_pdf(input_dir / "b.pdf")
+    monkeypatch.setattr(
+        llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": "text"}})
+    )
+    # Cancel takes effect once the first file has landed in output/, before the loop
+    # picks up the second one.
+    monkeypatch.setattr(llm_pdf_md, "should_cancel", lambda: any(output_dir.iterdir()))
+
+    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+
+    assert len(list(output_dir.iterdir())) == 1
+    assert "Converted 1 file(s)" in summary
+
+
 def test_local_recognizes_uppercase_pdf_extension(
     local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:

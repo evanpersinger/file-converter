@@ -67,6 +67,14 @@ export async function convert(
   }
 }
 
+/** Ask the backend to stop a running conversion after its current step. */
+export async function cancelConversion(jobId: string): Promise<void> {
+  const response = await fetch(`/api/convert/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
+  if (!response.ok) {
+    throw new Error('Could not cancel the conversion.')
+  }
+}
+
 /** Percent done for a running conversion, or null when the backend has none to report. */
 export async function getProgress(jobId: string): Promise<number | null> {
   const response = await fetch(`/api/progress/${encodeURIComponent(jobId)}`)

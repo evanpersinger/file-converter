@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { combine, convert, detect, extensionOf, getFormats, getLocalModels } from './api'
+import { cancelConversion, combine, convert, detect, extensionOf, getFormats, getLocalModels } from './api'
 import type { FormatMap, LocalModel, Mismatch, Target, Unavailable } from './types'
 import FileViewer from './FileViewer'
 import ProgressBar from './ProgressBar'
@@ -8,7 +8,7 @@ import './App.css'
 
 type Status =
   | { kind: 'idle' }
-  | { kind: 'converting'; fileName: string; position: number; total: number }
+  | { kind: 'converting'; fileName: string; position: number; total: number; cancellable: boolean }
   | { kind: 'combining' }
   | { kind: 'error'; message: string }
 
@@ -59,6 +59,9 @@ export default function App() {
   const [model, setModel] = useState<string | null>(null)
   // Set while a conversion is running, so the backend can be asked how far along it is.
   const [jobId, setJobId] = useState<string | null>(null)
+  // True once Cancel has been clicked for the current job, so the button can't be
+  // clicked twice while the backend is still winding the job down.
+  const [cancelling, setCancelling] = useState(false)
   const { percent, elapsed } = useProgress(jobId)
   // Which file the newest detect() call was for. Adding a second file while the
   // first check is in flight would otherwise let the stale answer win.
@@ -243,12 +246,17 @@ export default function App() {
   async function convertAll(targetId: string) {
     const downloads: Download[] = []
     const failures: string[] = []
+    // Only the local-model route reads the cancel flag, so that's the only one worth
+    // offering a Cancel button for. Captured once: the batch keeps converting with
+    // whatever route it started with even if the selection changes mid-run.
+    const cancellable = selectedLlm !== null
     setResult(null)
 
     for (const [index, file] of files.entries()) {
       const id = crypto.randomUUID()
-      setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: files.length })
+      setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: files.length, cancellable })
       setJobId(id)
+      setCancelling(false)
       try {
         const { blob, filename } = await convert(file, targetId, selectedLlm ? model : null, id)
         downloads.push({ url: URL.createObjectURL(blob), filename })
@@ -262,6 +270,18 @@ export default function App() {
       setResult({ downloads })
     }
     setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
+  }
+
+  // The in-flight convert() call is left running: it resolves normally once the
+  // backend stops after its current page and hands back whatever pages finished.
+  async function cancelCurrentJob() {
+    if (!jobId) return
+    setCancelling(true)
+    try {
+      await cancelConversion(jobId)
+    } catch {
+      setCancelling(false)
+    }
   }
 
   const pickerLabel =
@@ -352,7 +372,7 @@ export default function App() {
 
         {selectedLlm && (
           <div className="model-list">
-            <p className="muted">OS models</p>
+            <p className="muted">Open Source models</p>
 
             {localModels === null && <p className="muted">Loading models...</p>}
 
@@ -549,6 +569,12 @@ export default function App() {
           <button type="button" onClick={downloadAll} disabled={!result}>
             Download All
           </button>
+
+          {status.kind === 'converting' && status.cancellable && (
+            <button type="button" onClick={cancelCurrentJob} disabled={cancelling}>
+              {cancelling ? 'Cancelling...' : 'Cancel'}
+            </button>
+          )}
         </div>
 
         {status.kind === 'converting' && (

@@ -200,6 +200,40 @@ def test_a_local_conversion_uses_the_model_the_user_chose(
     assert calls == ["qwen3.5:9b"]
 
 
+def test_a_local_conversion_returns_partial_output_when_cancelled(
+    client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelling mid-conversion should still hand back whatever pages finished before
+    the flag was set, not fail the request or lose that work."""
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:9b"])
+    job_id = "cancel-mid-job"
+    calls: list[str] = []
+
+    def fake_convert_page(image_b64: str, model: str) -> str:
+        calls.append(model)
+        server._JOB_CANCEL[job_id].set()  # same event /api/convert/{job_id}/cancel sets
+        return f"page {len(calls)}"
+
+    monkeypatch.setattr(server.llm_pdf_md, "_convert_page_ollama", fake_convert_page)
+
+    pdf_path = tmp_path / "doc.pdf"
+    doc = fitz.open()
+    for _ in range(3):
+        doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "pdf->md-local", "model": "qwen3.5:9b", "job_id": job_id},
+        files={"file": ("doc.pdf", pdf_path.read_bytes())},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"page 1"
+    assert len(calls) == 1
+
+
 def test_local_models_flags_which_curated_models_are_downloaded(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -255,6 +289,21 @@ def test_progress_reads_the_output_of_a_running_job(client: TestClient) -> None:
         assert client.get("/api/progress/job-1").json() == {"percent": 25}
 
     assert client.get("/api/progress/job-1").json() == {"percent": None}
+
+
+def test_cancelling_an_unknown_job_is_a_404(client: TestClient) -> None:
+    response = client.post("/api/convert/no-such-job/cancel")
+    assert response.status_code == 404
+
+
+def test_cancelling_a_running_job_sets_its_flag(client: TestClient) -> None:
+    with server.tracked("job-1", io.StringIO()) as cancel_event:
+        assert not cancel_event.is_set()
+
+        response = client.post("/api/convert/job-1/cancel")
+
+        assert response.status_code == 200
+        assert cancel_event.is_set()
 
 
 def test_the_local_converters_progress_output_is_readable_as_a_percentage(

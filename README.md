@@ -21,11 +21,14 @@ Open **http://localhost:3004**. Both have to be running.
 
 The second **Convert to** column ("Scripts use LLMs for conversion.") is for the PDF to
 Markdown conversion that runs on a local model. Pick a PDF, click **MD**, then pick one
-of your Ollama models, listed weakest to strongest. Convert stays disabled until you
-pick one. A model has to be downloaded first (`ollama pull <model>`), and models that
-aren't are greyed out with the pull command on hover. Ollama itself has to be running
-(open the Ollama app or run `ollama serve`). The OpenAI and Claude versions of this
-conversion are CLI only for now, see `llm_pdf_md.py` below.
+of your Open Source models, listed weakest to strongest. Convert stays disabled until
+you pick one. A model has to be downloaded first (`ollama pull <model>`), and models
+that aren't are greyed out with the pull command on hover. Ollama itself has to be
+running (open the Ollama app or run `ollama serve`). Since local models can be slow, a
+**Cancel** button appears next to Download All while one is running; cancelling stops
+it after the current page and keeps whatever pages already finished as the download,
+instead of losing the work. The OpenAI and Claude versions of this conversion are CLI
+only for now, see `llm_pdf_md.py` below.
 
 `--app-dir backend` and `--loop asyncio` are both required, the backend won't start
 without them.
@@ -112,7 +115,7 @@ local Ollama vision model) for high-quality conversion.
 
 **Usage:**
 ```bash
-python backend/llm_pdf_md.py            # no args: menu of ChatGPT/Anthropic/OS models to pick from
+python backend/llm_pdf_md.py            # no args: menu of ChatGPT/Anthropic/Open Source models to pick from
 python backend/llm_pdf_md.py anthropic  # Claude
 python backend/llm_pdf_md.py local              # local Ollama, prompts you to pick a model
 python backend/llm_pdf_md.py local qwen3.5:9b   # local Ollama, model given directly
@@ -120,7 +123,7 @@ python backend/llm_pdf_md.py local qwen3.5:9b   # local Ollama, model given dire
 
 Conversion isn't instant, especially on the local Ollama path: each page is a separate
 model call, and a local vision model can take well over a minute per page depending on
-your hardware. Expect it to take a while, particularly with OS models.
+your hardware. Expect it to take a while, particularly with Open Source models.
 
 **Python packages:**
 - vision-parse>=0.1.13 (OpenAI path)
