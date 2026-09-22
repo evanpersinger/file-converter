@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { extensionOf } from './api'
 
 interface FileViewerProps {
@@ -8,6 +8,10 @@ interface FileViewerProps {
 
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
 const TEXT_EXTS = ['.csv', '.txt', '.sql', '.r', '.rmd', '.md', '.ipynb']
+
+const ZOOM_STEP = 0.1
+const MIN_ZOOM = 0.25
+const MAX_ZOOM = 3
 
 /**
  * Preview a file before it's converted. Images and PDFs render directly, plain-text
@@ -22,6 +26,12 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
 
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
+  // Null until the image loads and its natural size is known.
+  const [naturalWidth, setNaturalWidth] = useState<number | null>(null)
+  // Fraction of natural size, e.g. 1 = 100%. Starts at whatever fits the preview box,
+  // computed once the image loads, then +/- step from there.
+  const [zoom, setZoom] = useState<number | null>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!isImage && !isPdf) return
@@ -44,6 +54,11 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
   }, [file, isText])
 
   useEffect(() => {
+    setNaturalWidth(null)
+    setZoom(null)
+  }, [file])
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
@@ -57,13 +72,58 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
       <div className="viewer-box" onClick={(e) => e.stopPropagation()}>
         <div className="viewer-header">
           <span className="viewer-title" title={file.name}>{file.name}</span>
+
+          {isImage && zoom !== null && (
+            <div className="viewer-zoom">
+              <button
+                type="button"
+                className="remove"
+                onClick={() => setZoom((z) => Math.max(MIN_ZOOM, (z ?? 1) - ZOOM_STEP))}
+                disabled={zoom <= MIN_ZOOM}
+                aria-label="Zoom out"
+              >
+                &minus;
+              </button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button
+                type="button"
+                className="remove"
+                onClick={() => setZoom((z) => Math.min(MAX_ZOOM, (z ?? 1) + ZOOM_STEP))}
+                disabled={zoom >= MAX_ZOOM}
+                aria-label="Zoom in"
+              >
+                +
+              </button>
+            </div>
+          )}
+
           <button type="button" className="remove" onClick={onClose} aria-label="Close preview">
             &times;
           </button>
         </div>
 
-        <div className="viewer-body">
-          {isImage && url && <img src={url} alt={file.name} />}
+        <div className="viewer-body" ref={bodyRef}>
+          {isImage && url && (
+            <img
+              src={url}
+              alt={file.name}
+              // Fires once the browser knows the image's real pixel size. Fit-to-box
+              // never enlarges past that size, only shrinks, so this is also the
+              // ceiling for the starting zoom.
+              onLoad={(e) => {
+                const { naturalWidth: w, naturalHeight: h } = e.currentTarget
+                setNaturalWidth(w)
+                const box = bodyRef.current?.getBoundingClientRect()
+                const fitScale = box ? Math.min(1, box.width / w, box.height / h) : 1
+                setZoom(Math.max(MIN_ZOOM, fitScale))
+              }}
+              style={
+                zoom !== null && naturalWidth !== null
+                  ? { width: `${naturalWidth * zoom}px`, maxWidth: 'none', maxHeight: 'none' }
+                  : undefined
+              }
+            />
+          )}
           {isPdf && url && <iframe src={url} title={file.name} />}
           {isText && (text === null ? <p className="muted">Loading...</p> : <pre>{text}</pre>)}
           {!isImage && !isPdf && !isText && (
