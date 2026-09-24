@@ -43,6 +43,14 @@ const blockedReason = (dep: Unavailable) =>
 const formatDuration = (seconds: number) =>
   seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 
+// Adds freshly converted files to the ones already listed. An earlier result is only
+// replaced by one with the same name and extension, so converting a file to a second
+// format leaves the first result alone. Files in `added` never replace each other.
+function mergeDownloads(existing: Download[], added: Download[]): Download[] {
+  const replaced = new Set(added.map((d) => d.filename))
+  return [...existing.filter((d) => !replaced.has(d.filename)), ...added]
+}
+
 export default function App() {
   const [formats, setFormats] = useState<FormatMap | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -84,8 +92,8 @@ export default function App() {
     getLocalModels().then(setLocalModels).catch(() => setLocalModels([]))
   }, [])
 
-  // Release a blob URL once it is no longer in `result`, whether the whole batch was
-  // replaced or a single file was removed from it. Without this, every conversion would
+  // Release a blob URL once it is no longer in `result`, whether a new conversion
+  // replaced it or it was removed from the list. Without this, every conversion would
   // leak its files until a full page reload. It is tracked in a ref rather than revoked
   // in a cleanup, since a cleanup would also release the files that are staying.
   const shownUrls = useRef<string[]>([])
@@ -237,13 +245,13 @@ export default function App() {
                      running: Status) {
     const id = crypto.randomUUID()
     setStatus(running)
-    setResult(null)
     setJobId(id)
     try {
       const { blob, filename } = await action(id)
+      const download = { url: URL.createObjectURL(blob), filename, blob }
       // Hold the result and let the user click Download, rather than firing the
       // download automatically.
-      setResult({ downloads: [{ url: URL.createObjectURL(blob), filename, blob }] })
+      setResult((current) => ({ downloads: mergeDownloads(current?.downloads ?? [], [download]) }))
       setStatus({ kind: 'idle' })
     } catch (e) {
       setStatus({ kind: 'error', message: (e as Error).message })
@@ -258,7 +266,6 @@ export default function App() {
   async function convertAll(targetId: string) {
     const downloads: Download[] = []
     const failures: string[] = []
-    setResult(null)
     cancelledBatch.current = false
     localModelRun.current = selectedLlm !== null
 
@@ -283,7 +290,7 @@ export default function App() {
 
     setJobId(null)
     if (downloads.length > 0) {
-      setResult({ downloads })
+      setResult((current) => ({ downloads: mergeDownloads(current?.downloads ?? [], downloads) }))
     }
     setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
   }
