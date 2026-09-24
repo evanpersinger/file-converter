@@ -10,6 +10,14 @@ interface FileViewerProps {
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
 const TEXT_EXTS = ['.csv', '.txt', '.sql', '.r', '.rmd', '.md', '.ipynb']
 
+// The backend sends every converted file as application/octet-stream, and a browser
+// saves that instead of showing it. This already picks how to render by extension, so
+// it types the blob by extension too. Anything not listed keeps its own type.
+const MIME_TYPES: Partial<Record<string, string>> = {
+  '.pdf': 'application/pdf',
+  '.svg': 'image/svg+xml',
+}
+
 const ZOOM_STEP = 0.1
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 3
@@ -48,10 +56,10 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
 
   useEffect(() => {
     if (!isImage && !isPdf) return
-    const objectUrl = URL.createObjectURL(file)
+    const objectUrl = URL.createObjectURL(file.slice(0, file.size, MIME_TYPES[ext] ?? file.type))
     setUrl(objectUrl)
     return () => URL.revokeObjectURL(objectUrl)
-  }, [file, isImage, isPdf])
+  }, [file, ext, isImage, isPdf])
 
   useEffect(() => {
     if (!isText) return
