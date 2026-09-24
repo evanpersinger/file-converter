@@ -445,13 +445,13 @@ The script calls vtracer with its defaults. If the output looks wrong, the knobs
 reaching for are `colormode` (`color` or `binary`), `mode` (`spline` or `polygon`) and
 `filter_speckle`, passed to the `convert_image_to_svg_py` call in the script.
 
-### jpg_ocr.py
+### jpg_txt.py
 Converts JPG/JPEG images to plain text (.txt) using OCR. Same OCR as `jpg_md.py`, but
 the output is plain text with no Markdown formatting.
 
 **Usage:**
 ```bash
-python backend/jpg_ocr.py
+python backend/jpg_txt.py
 ```
 
 **Python packages:**
@@ -888,7 +888,7 @@ converter/
 │   ├── heic_pdf.py         # HEIC to PDF converter
 │   ├── jpg_pdf.py          # JPG/JPEG to PDF converter
 │   ├── jpg_md.py           # JPG/JPEG to Markdown converter (OCR)
-│   ├── jpg_ocr.py          # JPG/JPEG to plain text converter (OCR)
+│   ├── jpg_txt.py          # JPG/JPEG to plain text converter (OCR)
 │   ├── jpg_png.py          # JPG/JPEG to PNG converter
 │   ├── jpg_svg.py          # JPG/JPEG to SVG converter (vector tracing)
 │   ├── heic_png.py         # HEIC to PNG converter
@@ -1016,7 +1016,7 @@ This means you can update your source file and convert it again to get an update
 | PNG images | SVG (traced) | `png_svg.py` |
 | PDF | PNG (one per page) | `pdf_png.py` |
 | JPG/JPEG images | Markdown (.md) | `jpg_md.py` |
-| JPG/JPEG images | Text (.txt) | `jpg_ocr.py` |
+| JPG/JPEG images | Text (.txt) | `jpg_txt.py` |
 | Screenshots/Images | Text | `ss_txt.py` (`--structured` for tables) |
 | R (.R) | R Markdown (.Rmd) | `R_Rmd.py` |
 | R Markdown (.Rmd) | PDF | `Rmd_pdf.py` |

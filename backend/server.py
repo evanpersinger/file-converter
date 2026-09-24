@@ -44,10 +44,10 @@ import heic_png
 import html_pdf
 import ipynb_pdf
 import jpg_md
-import jpg_ocr
 import jpg_pdf
 import jpg_png
 import jpg_svg
+import jpg_txt
 import llm_pdf_md
 import md_pdf
 import pdf_md
@@ -90,7 +90,7 @@ _JOB_CANCEL: dict[str, threading.Event] = {}
 # the work, and conversions would silently write into site-packages. Fail loudly.
 _CONVERTER_MODULES = [
     csv_md, csv_xlsx, docx_md, docx_pdf, heic_jpg, heic_md, heic_png, html_pdf,
-    ipynb_pdf, jpg_md, jpg_ocr, jpg_pdf, jpg_png, jpg_svg, md_pdf, pdf_md, pdf_png,
+    ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, md_pdf, pdf_md, pdf_png,
     png_pdf, png_svg, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt, txt_pdf,
     xlsx_csv, combine_files,
 ]
@@ -388,7 +388,7 @@ REGISTRY: list[Conversion] = [
                via_globals(jpg_md, lambda s: jpg_md.convert_jpg_to_markdown()),
                requires=("tesseract",)),
     Conversion((".jpg", ".jpeg"), "jpg->txt", "Text", ".txt",
-               via_globals(jpg_ocr, lambda s: jpg_ocr.convert_jpg_to_ocr()),
+               via_globals(jpg_txt, lambda s: jpg_txt.convert_jpg_to_txt()),
                requires=("tesseract",)),
     Conversion((".jpg", ".jpeg"), "jpg->pdf", "PDF", ".pdf",
                via_globals(jpg_pdf, lambda s: jpg_pdf.convert_jpg_to_pdf())),
@@ -401,7 +401,7 @@ REGISTRY: list[Conversion] = [
     Conversion((".png",), "png->svg", "SVG", ".svg",
                via_globals(png_svg, lambda s: png_svg.convert_png_to_svg())),
 
-    # ss_txt is the only OCR route for these formats (jpg/jpeg are served by jpg_ocr,
+    # ss_txt is the only OCR route for these formats (jpg/jpeg are served by jpg_txt,
     # so registering ss_txt for them too would just be a duplicate "Text" option).
     Conversion(IMAGE_ONLY_OCR, "img->txt", "Text", ".txt",
                via_file_attr(ss_txt, lambda s: ss_txt.convert_screenshots_to_text()),

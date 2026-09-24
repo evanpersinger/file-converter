@@ -7,6 +7,7 @@ heading, promotes large-font text to subheadings, and writes the text to output/
 import os
 import glob
 from pptx import Presentation
+from pptx.shapes.group import GroupShape
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,30 +17,65 @@ input_folder = os.path.join(script_dir, 'input')
 output_folder = os.path.join(script_dir, 'output')
 
 
+def _cell_text(cell):
+    """Cell text on one line, with pipes escaped so they stay inside the cell."""
+    if cell.is_spanned:
+        return ""
+    return " ".join(cell.text.split()).replace("|", "\\|")
+
+
+def _table_to_markdown(table):
+    """Render a table as Markdown, treating the first row as the header.
+
+    Markdown has no column span, so a cell covered by a merge comes out empty and
+    the text stays in the cell the merge started from.
+    """
+    header, *body = [[_cell_text(cell) for cell in row.cells] for row in table.rows]
+    lines = ['| ' + ' | '.join(header) + ' |',
+             '| ' + ' | '.join(['---'] * len(header)) + ' |']
+    lines += ['| ' + ' | '.join(row) + ' |' for row in body]
+    return '\n'.join(lines)
+
+
+def _append_shape_text(shape, markdown_content):
+    """Append one shape's text to markdown_content, recursing into groups."""
+    if isinstance(shape, GroupShape):
+        for child in shape.shapes:
+            _append_shape_text(child, markdown_content)
+        return
+
+    if shape.has_table:
+        # Blank lines on both sides, or a neighbouring line gets read as part of the table
+        markdown_content.append(f"\n{_table_to_markdown(shape.table)}\n\n")
+        return
+
+    if hasattr(shape, "text") and shape.text.strip():
+        text = shape.text.strip()
+
+        # Check if this is likely a title
+        if hasattr(shape, "text_frame") and shape.text_frame.paragraphs:
+            first_para = shape.text_frame.paragraphs[0]
+            if first_para.runs and first_para.runs[0].font.size:
+                if first_para.runs[0].font.size > 200000:
+                    markdown_content.append(f"### {text}\n")
+                    return
+
+        markdown_content.append(f"{text}\n")
+
+
 def extract_text_from_pptx(pptx_file):
     """Extract text from PowerPoint file and format as markdown"""
     prs = Presentation(pptx_file)
     markdown_content = []
-    
+
     for slide_num, slide in enumerate(prs.slides, start=1):
         markdown_content.append(f"## Slide {slide_num}\n")
-        
+
         for shape in slide.shapes:
-            if hasattr(shape, "text") and shape.text.strip():
-                text = shape.text.strip()
-                
-                # Check if this is likely a title
-                if hasattr(shape, "text_frame") and shape.text_frame.paragraphs:
-                    first_para = shape.text_frame.paragraphs[0]
-                    if first_para.runs and first_para.runs[0].font.size:
-                        if first_para.runs[0].font.size > 200000:
-                            markdown_content.append(f"### {text}\n")
-                            continue
-                
-                markdown_content.append(f"{text}\n")
-        
+            _append_shape_text(shape, markdown_content)
+
         markdown_content.append("\n---\n\n")
-    
+
     return ''.join(markdown_content)
 
 

@@ -24,7 +24,7 @@ input_folder = os.path.join(script_dir, 'input')
 output_folder = os.path.join(script_dir, 'output')
 
 
-def convert_jpg_to_ocr() -> str:
+def convert_jpg_to_txt() -> str:
     """Convert all JPG/JPEG files in the input folder to text files using OCR.
 
     Returns:
@@ -101,6 +101,6 @@ def convert_jpg_to_ocr() -> str:
 
 
 if __name__ == "__main__":
-    result = convert_jpg_to_ocr()
+    result = convert_jpg_to_txt()
     if not result.startswith("Converted"):
         print(result)
