@@ -5,8 +5,9 @@ The decks are built with python-pptx in each test, so there are no binary fixtur
 
 from pathlib import Path
 
+import pytest
 from pptx import Presentation
-from pptx.util import Inches
+from pptx.util import Inches, Pt
 
 import pptx_md
 
@@ -24,12 +25,110 @@ def extract(prs: Presentation, tmp_path: Path) -> str:
     return pptx_md.extract_text_from_pptx(str(path))
 
 
-def test_titles_and_plain_text_boxes_are_unchanged(tmp_path: Path) -> None:
+def add_textbox(slide, text: str):
+    frame = slide.shapes.add_textbox(Inches(1), Inches(1.5), Inches(3), Inches(1)).text_frame
+    frame.text = text
+    return frame
+
+
+def test_each_shape_is_its_own_paragraph(tmp_path: Path) -> None:
     prs, slide = new_slide()
     slide.shapes.title.text = "TITLETEXT"
-    slide.shapes.add_textbox(Inches(1), Inches(1.5), Inches(3), Inches(1)).text_frame.text = "PLAINBOXTEXT"
+    add_textbox(slide, "PLAINBOXTEXT")
 
-    assert extract(prs, tmp_path) == "## Slide 1\nTITLETEXT\nPLAINBOXTEXT\n\n---\n\n"
+    assert extract(prs, tmp_path) == "## Slide 1\nTITLETEXT\n\nPLAINBOXTEXT\n\n---\n\n"
+
+
+def test_paragraphs_in_one_shape_are_separated_and_empty_ones_dropped(tmp_path: Path) -> None:
+    prs, slide = new_slide()
+    add_textbox(slide, "ONE\n\nTWO")
+
+    assert extract(prs, tmp_path) == "## Slide 1\nONE\n\nTWO\n\n---\n\n"
+
+
+def test_soft_line_break_becomes_a_markdown_hard_break(tmp_path: Path) -> None:
+    prs, slide = new_slide()
+    add_textbox(slide, "before\vafter")
+
+    result = extract(prs, tmp_path)
+
+    assert "before\\\nafter\n\n" in result
+    assert "\x0b" not in result
+
+
+def test_large_font_text_becomes_a_one_line_heading(tmp_path: Path) -> None:
+    prs, slide = new_slide()
+    frame = add_textbox(slide, "Line one\vLine two\nSecond paragraph")
+    frame.paragraphs[0].runs[0].font.size = Pt(24)
+
+    assert "### Line one Line two Second paragraph\n\n" in extract(prs, tmp_path)
+
+
+@pytest.mark.parametrize("source, expected", [
+    ("*star*", "\\*star\\*"),
+    ("`code`", "\\`code\\`"),
+    ("[a](b)", "\\[a\\](b)"),
+    ("<b>", "\\<b>"),
+    ("C:\\Users", "C:\\\\Users"),
+    ("_lead and trail_", "\\_lead and trail\\_"),
+    ("pptx_md.py and snake_case", "pptx_md.py and snake_case"),
+    ("# not a heading", "\\# not a heading"),
+    ("#hashtag", "#hashtag"),
+    ("> not a quote", "\\> not a quote"),
+    ("- not a bullet", "\\- not a bullet"),
+    ("+ not a bullet", "\\+ not a bullet"),
+    ("---", "\\---"),
+    ("1. not a list", "1\\. not a list"),
+    ("2) not a list", "2\\) not a list"),
+    ("3.5 stars", "3.5 stars"),
+    ("~~struck~~", "\\~\\~struck\\~\\~"),
+    ("about ~5 minutes", "about ~5 minutes"),
+    ("&amp; &#35; &copy;", "\\&amp; \\&#35; \\&copy;"),
+    ("R&D and AT&T", "R&D and AT&T"),
+])
+def test_markdown_characters_in_text_stay_literal(tmp_path: Path, source: str, expected: str) -> None:
+    prs, slide = new_slide()
+    add_textbox(slide, source)
+
+    assert extract(prs, tmp_path) == f"## Slide 1\n{expected}\n\n---\n\n"
+
+
+def test_a_marker_after_a_soft_line_break_is_escaped(tmp_path: Path) -> None:
+    prs, slide = new_slide()
+    add_textbox(slide, "before\v# after")
+
+    assert "before\\\n\\# after\n\n" in extract(prs, tmp_path)
+
+
+def test_a_tilde_pair_split_by_a_soft_line_break_is_escaped(tmp_path: Path) -> None:
+    prs, slide = new_slide()
+    add_textbox(slide, "~one\vtwo~")
+
+    assert "\\~one\\\ntwo\\~\n\n" in extract(prs, tmp_path)
+
+
+def test_markdown_characters_in_a_heading_stay_literal(tmp_path: Path) -> None:
+    prs, slide = new_slide()
+    frame = add_textbox(slide, "*Big* title")
+    frame.paragraphs[0].runs[0].font.size = Pt(24)
+
+    assert "### \\*Big\\* title\n\n" in extract(prs, tmp_path)
+
+
+@pytest.mark.parametrize("source, expected", [
+    ("Title #", "Title \\#"),
+    ("Title ##", "Title \\##"),
+    ("#", "\\#"),
+    ("C#", "C#"),
+])
+def test_a_trailing_hash_in_a_heading_is_not_a_closing_sequence(
+    tmp_path: Path, source: str, expected: str
+) -> None:
+    prs, slide = new_slide()
+    frame = add_textbox(slide, source)
+    frame.paragraphs[0].runs[0].font.size = Pt(24)
+
+    assert f"### {expected}\n\n" in extract(prs, tmp_path)
 
 
 def add_table(slide, cells: list[list[str]]):
@@ -45,7 +144,7 @@ def test_table_becomes_a_markdown_table(tmp_path: Path) -> None:
     prs, slide = new_slide()
     add_table(slide, [["A", "B"], ["C", "D"]])
 
-    assert extract(prs, tmp_path) == "## Slide 1\n\n| A | B |\n| --- | --- |\n| C | D |\n\n\n---\n\n"
+    assert extract(prs, tmp_path) == "## Slide 1\n| A | B |\n| --- | --- |\n| C | D |\n\n---\n\n"
 
 
 def test_text_after_a_table_is_not_glued_to_it(tmp_path: Path) -> None:
@@ -61,6 +160,13 @@ def test_pipes_and_line_breaks_stay_inside_their_cell(tmp_path: Path) -> None:
     add_table(slide, [["a|b", "one\ntwo"], ["x", "y"]])
 
     assert "| a\\|b | one two |\n| --- | --- |\n| x | y |" in extract(prs, tmp_path)
+
+
+def test_markdown_characters_in_a_cell_stay_literal(tmp_path: Path) -> None:
+    prs, slide = new_slide()
+    add_table(slide, [["*a* | b", "snake_case"], ["1. x", "y"]])
+
+    assert "| \\*a\\* \\| b | snake_case |\n| --- | --- |\n| 1. x | y |" in extract(prs, tmp_path)
 
 
 def test_merged_cell_keeps_its_text_and_the_column_count(tmp_path: Path) -> None:
