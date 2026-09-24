@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { PptxViewer } from '@aiden0z/pptx-renderer'
 import { extensionOf } from './api'
 
 interface FileViewerProps {
@@ -13,24 +14,35 @@ const ZOOM_STEP = 0.1
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 3
 
+type PptxStatus =
+  | { kind: 'loading' }
+  | { kind: 'ready' }
+  | { kind: 'error'; message: string }
+
 /**
- * Preview a file before it's converted. Images and PDFs render directly, plain-text
- * formats (csv, txt, sql, R, md, Rmd, ipynb) show as text. Anything else (docx, pptx,
- * xlsx, heic, ...) says so rather than showing nothing.
+ * Preview a file before it's converted. Images and PDFs render directly, pptx decks are
+ * drawn slide by slide in the browser, plain-text formats (csv, txt, sql, R, md, Rmd,
+ * ipynb) show as text. Anything else (docx, xlsx, heic, ...) says so rather than showing
+ * nothing.
  */
 export default function FileViewer({ file, onClose }: FileViewerProps) {
   const ext = extensionOf(file.name)
   const isImage = IMAGE_EXTS.includes(ext)
   const isPdf = ext === '.pdf'
+  const isPptx = ext === '.pptx'
   const isText = TEXT_EXTS.includes(ext)
   const isMarkdown = ext === '.md'
 
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
+  const [pptxStatus, setPptxStatus] = useState<PptxStatus>({ kind: 'loading' })
+  const pptxRef = useRef<HTMLDivElement>(null)
+  const pptxViewerRef = useRef<PptxViewer | null>(null)
   // Null until the image loads and its natural size is known.
   const [naturalWidth, setNaturalWidth] = useState<number | null>(null)
   // Fraction of natural size, e.g. 1 = 100%. Starts at whatever fits the preview box,
-  // computed once the image loads, then +/- step from there.
+  // computed once the image loads, then +/- step from there. For a pptx it is a fraction
+  // of the size that fits the box (1 = a slide fills the width), set once the deck loads.
   const [zoom, setZoom] = useState<number | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
 
@@ -53,6 +65,60 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
       active = false
     }
   }, [file, isText])
+
+  useEffect(() => {
+    const container = pptxRef.current
+    if (!isPptx || !container) return
+    setPptxStatus({ kind: 'loading' })
+    const controller = new AbortController()
+
+    async function render(target: HTMLDivElement) {
+      try {
+        // Loaded on demand so the renderer and its chart library stay out of the
+        // initial bundle for everyone who never previews a deck.
+        const [pptx, buffer] = await Promise.all([
+          import('@aiden0z/pptx-renderer'),
+          file.arrayBuffer(),
+        ])
+        const viewer = await pptx.PptxViewer.open(buffer, target, {
+          // Users upload these, so cap what a hostile zip can unpack to.
+          zipLimits: pptx.RECOMMENDED_ZIP_LIMITS,
+          listOptions: { windowed: true },
+          scrollContainer: target,
+          signal: controller.signal,
+        })
+        if (controller.signal.aborted) {
+          viewer.destroy()
+          return
+        }
+        pptxViewerRef.current = viewer
+        setZoom(1)
+        setPptxStatus({ kind: 'ready' })
+      } catch (error) {
+        if (controller.signal.aborted) return
+        setPptxStatus({
+          kind: 'error',
+          message: error instanceof Error ? error.message : 'unknown error',
+        })
+      }
+    }
+    void render(container)
+
+    return () => {
+      controller.abort()
+      pptxViewerRef.current?.destroy()
+      pptxViewerRef.current = null
+    }
+  }, [file, isPptx])
+
+  // The renderer scales relative to fitting the box too, so the fraction maps straight
+  // onto its percent.
+  useEffect(() => {
+    const viewer = pptxViewerRef.current
+    if (zoom === null || !viewer) return
+    const percent = Math.round(zoom * 100)
+    if (viewer.zoomPercent !== percent) void viewer.setZoom(percent)
+  }, [zoom])
 
   useEffect(() => {
     setNaturalWidth(null)
@@ -86,7 +152,7 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
         <div className="viewer-header">
           <span className="viewer-title" title={file.name}>{file.name}</span>
 
-          {isImage && zoom !== null && (
+          {(isImage || isPptx) && zoom !== null && (
             <div className="viewer-zoom">
               <button
                 type="button"
@@ -138,12 +204,24 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
             />
           )}
           {isPdf && url && <iframe src={url} title={file.name} />}
+          {isPptx && (
+            <div className="pptx-wrap">
+              {/* The renderer draws the slides into this div. */}
+              <div className="pptx-container" ref={pptxRef} />
+              {pptxStatus.kind === 'loading' && <p className="muted pptx-status">Loading...</p>}
+              {pptxStatus.kind === 'error' && (
+                <p className="muted pptx-status">
+                  Could not preview this presentation: {pptxStatus.message}
+                </p>
+              )}
+            </div>
+          )}
           {isText && (
             text === null
               ? <p className="muted">Loading...</p>
               : <pre className={isMarkdown ? 'markdown' : undefined}>{text}</pre>
           )}
-          {!isImage && !isPdf && !isText && (
+          {!isImage && !isPdf && !isPptx && !isText && (
             <p className="muted">No preview available for this file type yet.</p>
           )}
         </div>
