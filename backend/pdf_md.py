@@ -21,6 +21,7 @@ TESSERACT_CONFIG = r"--oem 3 --psm 3"  # psm 3 = auto page layout, good for full
 TESSERACT_LANG = "eng"
 ENABLE_MATH = True                 # normalize math notation to unicode
 EXTRACT_IMAGES = False             # if True, save embedded images and link them in the markdown
+EDGE_LINES = 3                     # page numbers only sit in a page's first/last N non-blank lines
 
 # Point pytesseract at the tesseract binary if it's on PATH.
 # (Correct attribute is `tesseract_cmd`; the old code set `pytesseract_cmd`, a no-op.)
@@ -206,6 +207,23 @@ def normalize_math(text, ocr=False):
     return text
 
 
+# A page number on its own line: 1-4 digits, optionally a markdown heading or bold (## 3, **3**).
+_PAGE_NUMBER = re.compile(r"[#*\s]*[0-9]{1,4}[*\s]*")
+
+
+def strip_page_numbers(text):
+    """Drop page-number lines from the top and bottom of one page's markdown.
+
+    Only the first and last EDGE_LINES non-blank lines are checked, so a digits-only line
+    in the middle of a page (a table cell, a list marker) is never touched.
+    """
+    lines = text.split("\n")
+    nonblank = [i for i, line in enumerate(lines) if line.strip()]
+    edge = set(nonblank[:EDGE_LINES] + nonblank[-EDGE_LINES:])
+    kept = [line for i, line in enumerate(lines) if not (i in edge and _PAGE_NUMBER.fullmatch(line))]
+    return "\n".join(kept).strip()
+
+
 # PDF -> markdown
 def _ocr_page(page):
     """Render a page to an image and OCR it."""
@@ -246,7 +264,7 @@ def pdf_to_markdown(pdf_path):
             md_kwargs.update(write_images=True, image_path=image_folder, image_format="png")
         chunks = pymupdf4llm.to_markdown(doc, **md_kwargs)
         for page_no, chunk in zip(text_pages, chunks):
-            md_by_page[page_no] = normalize_math(chunk["text"].strip(), ocr=False)
+            md_by_page[page_no] = normalize_math(strip_page_numbers(chunk["text"].strip()), ocr=False)
 
     # Scanned/image pages -> OCR
     if ocr_pages:

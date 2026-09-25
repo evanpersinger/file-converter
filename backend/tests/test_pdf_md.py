@@ -8,7 +8,7 @@ math survives with only its delimiters normalized, and code spans are never touc
 
 import pytest
 
-from pdf_md import normalize_math
+from pdf_md import normalize_math, strip_page_numbers
 
 
 @pytest.mark.parametrize(
@@ -172,6 +172,37 @@ def test_dashes_are_kept_on_searchable_pages_and_flattened_by_ocr(
     is often misread as one, gets it flattened to a hyphen."""
     assert normalize_math(source, ocr=False) == source
     assert normalize_math(source, ocr=True) == ocr_expected
+
+
+@pytest.mark.parametrize("marker", ["3", "## 3", "## **3**", "**3**"])
+def test_page_number_at_the_bottom_of_a_page_is_removed(marker: str) -> None:
+    assert strip_page_numbers(f"Some body text.\n\n{marker}") == "Some body text."
+
+
+def test_page_number_at_the_top_of_a_page_is_removed() -> None:
+    assert strip_page_numbers("12\n\nSome body text.") == "Some body text."
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "1. Collect the raw data",
+        "> 8 Smith (1999) himself describes a different approach.",
+        "019239130213012391293129312913912391239",
+        "12345",
+        "|Metric|Q1|Q2|",
+    ],
+)
+def test_edge_lines_that_are_real_content_are_kept(line: str) -> None:
+    """Only a bare 1-4 digit line counts as a page number, not a list item, a footnote,
+    a long digit string, or a table row."""
+    source = f"Some body text.\n\n{line}"
+    assert strip_page_numbers(source) == source
+
+
+def test_digit_only_line_in_the_middle_of_a_page_is_kept() -> None:
+    source = "\n".join(["one", "two", "three", "42", "four", "five", "six"])
+    assert strip_page_numbers(source) == source
 
 
 @pytest.mark.parametrize("source", ["", None])
