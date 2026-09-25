@@ -97,7 +97,7 @@ python backend/csv_md.py
 3. Saves markdown files to the `output/` folder
 
 ### pdf_md.py
-Converts PDF files to Markdown. Searchable pages become real Markdown (headings, lists, tables, code) via pymupdf4llm; scanned/image pages fall back to Tesseract OCR, handled page by page so mixed PDFs work. Math notation (LaTeX `\( \)` / `$$`, super/subscripts, operators) is normalized.
+Converts PDF files to Markdown. Searchable pages become real Markdown (headings, lists, tables, code) via pymupdf4llm; scanned/image pages fall back to Tesseract OCR, handled page by page so mixed PDFs work. Math notation (LaTeX `\( \)` / `$$`, super/subscripts, operators) is normalized. Each page starts with an `<!-- page N -->` marker (the PDF's own page number, hidden when the Markdown is rendered), and the printed page numbers at the top and bottom of searchable pages are removed.
 
 **Usage:**
 ```bash

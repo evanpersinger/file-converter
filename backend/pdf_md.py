@@ -277,8 +277,8 @@ def pdf_to_markdown(pdf_path):
     kind = "searchable" if not ocr_pages else ("scanned" if not text_pages else "mixed")
     print(f"{n_pages} page(s): {len(text_pages)} searchable, {len(ocr_pages)} OCR ({kind})")
 
-    parts = [md_by_page.get(i, "") for i in range(n_pages)]
-    return "\n\n".join(p for p in parts if p).strip() + "\n"
+    parts = [f"<!-- page {i + 1} -->\n\n{md_by_page[i]}" for i in range(n_pages) if md_by_page.get(i)]
+    return "\n\n".join(parts).strip() + "\n"
 
 
 # Runner

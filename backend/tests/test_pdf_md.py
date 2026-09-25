@@ -6,9 +6,12 @@ behaviours the module docstring promises: LaTeX commands become unicode, real La
 math survives with only its delimiters normalized, and code spans are never touched.
 """
 
+from pathlib import Path
+
+import fitz
 import pytest
 
-from pdf_md import normalize_math, strip_page_numbers
+from pdf_md import normalize_math, pdf_to_markdown, strip_page_numbers
 
 
 @pytest.mark.parametrize(
@@ -216,3 +219,21 @@ def test_normalization_is_idempotent() -> None:
     source = r"\alpha x^2 <= \beta and `x_i` stays"
     once = normalize_math(source)
     assert normalize_math(once) == once
+
+
+def test_each_page_starts_with_a_page_marker(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "two_pages.pdf"
+    doc = fitz.open()
+    for text in (
+        "The first page has enough text to count as searchable.",
+        "The second page also has enough text to be searchable.",
+    ):
+        doc.new_page().insert_text((72, 72), text)
+    doc.save(pdf_path)
+    doc.close()
+
+    markdown = pdf_to_markdown(str(pdf_path))
+
+    assert markdown.index("<!-- page 1 -->") < markdown.index("first page")
+    assert markdown.index("first page") < markdown.index("<!-- page 2 -->")
+    assert markdown.index("<!-- page 2 -->") < markdown.index("second page")
