@@ -11,7 +11,7 @@ from pathlib import Path
 import fitz
 import pytest
 
-from pdf_md import normalize_math, pdf_to_markdown, strip_page_numbers
+from pdf_md import normalize_math, pdf_to_markdown, strip_page_numbers, strip_repeated_headers
 
 
 @pytest.mark.parametrize(
@@ -208,6 +208,47 @@ def test_digit_only_line_in_the_middle_of_a_page_is_kept() -> None:
     assert strip_page_numbers(source) == source
 
 
+def test_running_header_is_kept_on_the_first_page_and_dropped_from_later_ones() -> None:
+    pages = [
+        "58 A. B. Author\n\nFirst page text.",
+        "59 A. B. Author\n\nSecond page text.",
+        "60 A. B. Author\n\nThird page text.",
+    ]
+    assert strip_repeated_headers(pages) == [
+        "58 A. B. Author\n\nFirst page text.",
+        "Second page text.",
+        "Third page text.",
+    ]
+
+
+def test_running_footer_is_dropped_the_same_way() -> None:
+    pages = [
+        "First text.\n\nJournal of Medicine | Vol 42 | Page 17",
+        "Second text.\n\nJournal of Medicine | Vol 42 | Page 18",
+        "Third text.\n\nJournal of Medicine | Vol 42 | Page 19",
+    ]
+    assert strip_repeated_headers(pages) == [pages[0], "Second text.", "Third text."]
+
+
+@pytest.mark.parametrize("repeated_line", ["|Metric|Q1|Q2|", "## Introduction"])
+def test_repeated_table_rows_and_headings_are_kept(repeated_line: str) -> None:
+    pages = [f"{repeated_line}\n\n{word} page text." for word in ("First", "Second", "Third")]
+    assert strip_repeated_headers(pages) == pages
+
+
+def test_line_repeated_on_fewer_than_three_pages_is_kept() -> None:
+    pages = ["Shared line\n\nFirst page text.", "Shared line\n\nSecond page text.", "Third page text."]
+    assert strip_repeated_headers(pages) == pages
+
+
+def test_repeated_line_in_the_middle_of_a_page_is_kept() -> None:
+    pages = [
+        "\n".join([f"{w} a", f"{w} b", f"{w} c", "Shared line", f"{w} d", f"{w} e", f"{w} f"])
+        for w in ("first", "second", "third")
+    ]
+    assert strip_repeated_headers(pages) == pages
+
+
 @pytest.mark.parametrize("source", ["", None])
 def test_falsy_input_is_returned_unchanged(source: str | None) -> None:
     assert normalize_math(source) == source
@@ -237,3 +278,20 @@ def test_each_page_starts_with_a_page_marker(tmp_path: Path) -> None:
     assert markdown.index("<!-- page 1 -->") < markdown.index("first page")
     assert markdown.index("first page") < markdown.index("<!-- page 2 -->")
     assert markdown.index("<!-- page 2 -->") < markdown.index("second page")
+
+
+def test_running_header_is_kept_once_in_the_converted_output(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "three_pages.pdf"
+    doc = fitz.open()
+    for i, name in enumerate(("Alpha", "Bravo", "Charlie")):
+        page = doc.new_page()
+        page.insert_text((72, 40), f"{58 + i} A. B. Author")
+        page.insert_text((72, 300), f"{name} page has enough text to count as searchable.")
+    doc.save(pdf_path)
+    doc.close()
+
+    markdown = pdf_to_markdown(str(pdf_path))
+
+    assert markdown.count("A. B. Author") == 1
+    for name in ("Alpha", "Bravo", "Charlie"):
+        assert name in markdown

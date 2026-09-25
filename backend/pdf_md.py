@@ -6,6 +6,7 @@ Searchable pages go through pymupdf4llm, scanned pages through Tesseract OCR (En
 import os
 import re
 import shutil
+from collections import Counter
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -21,7 +22,8 @@ TESSERACT_CONFIG = r"--oem 3 --psm 3"  # psm 3 = auto page layout, good for full
 TESSERACT_LANG = "eng"
 ENABLE_MATH = True                 # normalize math notation to unicode
 EXTRACT_IMAGES = False             # if True, save embedded images and link them in the markdown
-EDGE_LINES = 3                     # page numbers only sit in a page's first/last N non-blank lines
+EDGE_LINES = 3                     # page numbers/headers only sit in a page's first/last N non-blank lines
+MIN_HEADER_PAGES = 3               # an edge line repeating on this many pages is a running header
 
 # Point pytesseract at the tesseract binary if it's on PATH.
 # (Correct attribute is `tesseract_cmd`; the old code set `pytesseract_cmd`, a no-op.)
@@ -224,6 +226,56 @@ def strip_page_numbers(text):
     return "\n".join(kept).strip()
 
 
+_DIGITS = re.compile(r"[0-9]+")
+
+
+def _header_key(line):
+    """The line with its digits removed, so "58 A. B. Author" and "60 A. B. Author" match.
+
+    Empty for table rows and markdown headings, which are never treated as running headers.
+    """
+    if line.lstrip().startswith(("|", "#")):
+        return ""
+    return " ".join(_DIGITS.sub("", line).split())
+
+
+def strip_repeated_headers(pages):
+    """Drop running headers and footers that repeat across pages, keeping the first copy.
+
+    Only the first and last EDGE_LINES non-blank lines of a page are checked. An edge line
+    is a running header/footer if, digits aside, it sits at the edge of MIN_HEADER_PAGES or
+    more pages. The first page it shows up on keeps it, so details that may appear nowhere
+    else (a journal name, a DOI) survive once.
+    """
+    split = [page.split("\n") for page in pages]
+    edges = []
+    for lines in split:
+        nonblank = [i for i, line in enumerate(lines) if line.strip()]
+        edges.append(set(nonblank[:EDGE_LINES] + nonblank[-EDGE_LINES:]))
+
+    page_counts = Counter(
+        key
+        for lines, edge in zip(split, edges)
+        for key in {_header_key(lines[i]) for i in edge}
+        if key
+    )
+    repeated = {key for key, count in page_counts.items() if count >= MIN_HEADER_PAGES}
+
+    seen = set()
+    cleaned = []
+    for lines, edge in zip(split, edges):
+        kept = []
+        for i, line in enumerate(lines):
+            key = _header_key(line) if i in edge else ""
+            if key in repeated:
+                if key in seen:
+                    continue
+                seen.add(key)
+            kept.append(line)
+        cleaned.append("\n".join(kept).strip())
+    return cleaned
+
+
 # PDF -> markdown
 def _ocr_page(page):
     """Render a page to an image and OCR it."""
@@ -263,8 +315,9 @@ def pdf_to_markdown(pdf_path):
             os.makedirs(image_folder, exist_ok=True)
             md_kwargs.update(write_images=True, image_path=image_folder, image_format="png")
         chunks = pymupdf4llm.to_markdown(doc, **md_kwargs)
-        for page_no, chunk in zip(text_pages, chunks):
-            md_by_page[page_no] = normalize_math(strip_page_numbers(chunk["text"].strip()), ocr=False)
+        texts = strip_repeated_headers([strip_page_numbers(chunk["text"].strip()) for chunk in chunks])
+        for page_no, text in zip(text_pages, texts):
+            md_by_page[page_no] = normalize_math(text, ocr=False)
 
     # Scanned/image pages -> OCR
     if ocr_pages:
