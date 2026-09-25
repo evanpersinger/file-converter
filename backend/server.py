@@ -192,23 +192,16 @@ def via_file_attr(module, call: Callable):
     return invoke
 
 
-def via_dir_globals(module, call: Callable):
-    """Module has `input_dir` / `output_dir` Path globals read at call time (llm_pdf_md).
-
-    The OpenAI path in that module only imports vision_parse when it runs, so a uvloop
-    event loop breaks that one conversion at call time instead of at server startup.
-    Run with `--loop asyncio` for it to work.
-    """
-    def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
-        with patched(module, input_dir=job_in, output_dir=job_out):
-            return call(staged)
-    return invoke
-
-
 def via_dir_globals_model(module, call: Callable):
-    """`via_dir_globals` for conversions where the user picks a model. `call` receives
-    the staged path and the model name. `should_cancel` defaults to a no-op so this
-    still works for callers (tests, other converters) that don't pass one."""
+    """Module has `input_dir` / `output_dir` Path globals read at call time (llm_pdf_md),
+    and the user picks the model. `call` receives the staged path and the model name.
+    `should_cancel` defaults to a no-op so this still works for callers (tests, other
+    converters) that don't pass one.
+
+    The OpenAI path in llm_pdf_md only imports vision_parse when it runs, so a uvloop event
+    loop breaks that one conversion at call time instead of at server startup. Run with
+    `--loop asyncio` for it to work.
+    """
     def invoke(
         job_dir: Path, job_in: Path, job_out: Path, staged: Path, model: str,
         should_cancel: Callable[[], bool] = lambda: False,
@@ -320,6 +313,9 @@ class Conversion:
     note: str | None = None
     # True when the user picks a model to run this with. `invoke` then also takes it.
     takes_model: bool = False
+    # The models the user may pick for a cloud conversion. Empty for the local one, whose
+    # models are whatever Ollama has downloaded.
+    model_names: tuple[str, ...] = ()
     # Which part of the UI owns this conversion. None means the regular "Convert to" list,
     # "llm" the LLM column. "llm-cloud" belongs there too, but that column has no cloud
     # models yet, so the UI shows those conversions nowhere.
@@ -345,13 +341,19 @@ REGISTRY: list[Conversion] = [
     Conversion((".pdf",), "pdf->png", "PNG", ".png",
                via_globals(pdf_png, lambda s: pdf_png.convert_pdf_to_png()),
                note="One PNG per page. Multi-page PDFs come back as a zip."),
-    Conversion((".pdf",), "pdf->md-ai", "Markdown (LLM: GPT-4o mini, costs money)", ".md",
-               via_dir_globals(llm_pdf_md, lambda s: llm_pdf_md.convert_pdf_to_markdown_openai()),
-               requires=("openai_key",), group="llm-cloud",
+    Conversion((".pdf",), "pdf->md-ai", "Markdown (LLM: OpenAI, costs money)", ".md",
+               via_dir_globals_model(
+                   llm_pdf_md,
+                   lambda s, model: llm_pdf_md.convert_pdf_to_markdown_openai(model)),
+               requires=("openai_key",), takes_model=True,
+               model_names=tuple(llm_pdf_md.OPENAI_MODELS), group="llm-cloud",
                note="Sends the PDF to OpenAI's Vision API. Slower, and it bills your key."),
-    Conversion((".pdf",), "pdf->md-claude", "Markdown (LLM: Claude Sonnet 5, costs money)", ".md",
-               via_dir_globals(llm_pdf_md, lambda s: llm_pdf_md.convert_pdf_to_markdown_anthropic()),
-               requires=("anthropic_key",), group="llm-cloud",
+    Conversion((".pdf",), "pdf->md-claude", "Markdown (LLM: Claude, costs money)", ".md",
+               via_dir_globals_model(
+                   llm_pdf_md,
+                   lambda s, model: llm_pdf_md.convert_pdf_to_markdown_anthropic(model)),
+               requires=("anthropic_key",), takes_model=True,
+               model_names=tuple(llm_pdf_md.ANTHROPIC_MODELS), group="llm-cloud",
                note="Sends the PDF to Anthropic's Claude. Slower, and it bills your key."),
     Conversion((".pdf",), "pdf->md-local", "Markdown (Open Source model, free)", ".md",
                via_dir_globals_model(
@@ -547,10 +549,22 @@ def _error(message: str, hint: str | None = None, status: int = 400) -> JSONResp
     return JSONResponse({"error": message, "hint": hint}, status_code=status)
 
 
-def _model_problem(model: str | None) -> JSONResponse | None:
-    """The error to send back if `model` can't be used, or None if it's downloaded."""
+def _model_problem(conv: Conversion, model: str | None) -> JSONResponse | None:
+    """The error to send back if `model` can't be used for `conv`, or None if it can.
+
+    There is no default model: a request without one is refused, so nothing runs (or bills)
+    on a model nobody chose.
+    """
     if not model:
         return _error("Pick a model to convert with.")
+
+    if conv.model_names:
+        if model not in conv.model_names:
+            return _error(
+                f"'{model}' is not a model this conversion can use.",
+                f"Pick one of: {', '.join(conv.model_names)}",
+            )
+        return None
 
     try:
         installed = llm_pdf_md.list_ollama_models()
@@ -654,10 +668,11 @@ def convert(
         reason, hint = DEP_LABELS[missing[0]]
         return _error(f"Cannot run this conversion. {reason}.", hint)
 
-    # The guardrail: a model that isn't downloaded is refused here, before the upload
-    # is read, rather than failing minutes into a run.
+    # The guardrail: a missing model, or one that isn't downloaded (local) or isn't a known
+    # one (cloud), is refused here, before the upload is read, rather than failing minutes
+    # into a run or billing for a model nobody chose.
     if conv.takes_model:
-        problem = _model_problem(model)
+        problem = _model_problem(conv, model)
         if problem:
             return problem
 

@@ -53,7 +53,7 @@ def local_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path
     """Point llm_pdf_md's Path globals at a throwaway pair of directories.
 
     llm_pdf_md reads `input_dir`/`output_dir` (Path objects) at call time, this is the
-    same thing server.py's `via_dir_globals` patches for a real web UI request.
+    same thing server.py's `via_dir_globals_model` patches for a real web UI request.
     """
     input_dir = tmp_path / "input"
     output_dir = tmp_path / "output"
@@ -71,13 +71,13 @@ def ollama_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
 
 # --- convert_pdf_to_markdown_local: folder-loop behavior -----------------------------
 def test_local_reports_when_input_is_empty(local_sandbox, ollama_reachable) -> None:
-    assert llm_pdf_md.convert_pdf_to_markdown_local() == "No PDF files found in input folder"
+    assert llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b") == "No PDF files found in input folder"
 
 
 def test_local_reports_when_only_markdown_present(local_sandbox, ollama_reachable) -> None:
     input_dir, _ = local_sandbox
     (input_dir / "notes.md").write_text("hi")
-    assert llm_pdf_md.convert_pdf_to_markdown_local() == "That file is already in md format"
+    assert llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b") == "That file is already in md format"
 
 
 def test_local_reports_when_ollama_is_unreachable(
@@ -93,7 +93,7 @@ def test_local_reports_when_ollama_is_unreachable(
     posts: list[dict] = []
     monkeypatch.setattr(llm_pdf_md.requests, "post", lambda *a, **k: posts.append(k))
 
-    result = llm_pdf_md.convert_pdf_to_markdown_local()
+    result = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert result.startswith("Error: Ollama not reachable")
     assert posts == []  # never even tried to convert a page
@@ -136,7 +136,7 @@ def test_local_stops_after_the_current_page_when_cancelled(
     # first call means page 1 finishes and page 2 never starts.
     monkeypatch.setattr(llm_pdf_md, "should_cancel", lambda: len(calls) >= 1)
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert len(calls) == 1
     assert (output_dir / "doc.md").read_text(encoding="utf-8") == "Page 1 content"
@@ -152,7 +152,7 @@ def test_local_reports_no_content_when_cancelled_before_any_page(
     posts: list[dict] = []
     monkeypatch.setattr(llm_pdf_md.requests, "post", lambda *a, **k: posts.append(k))
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert posts == []
     assert "No files converted" in summary
@@ -171,7 +171,7 @@ def test_local_stops_picking_up_new_files_once_cancelled(
     # picks up the second one.
     monkeypatch.setattr(llm_pdf_md, "should_cancel", lambda: any(output_dir.iterdir()))
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert len(list(output_dir.iterdir())) == 1
     assert "Converted 1 file(s)" in summary
@@ -186,7 +186,7 @@ def test_local_recognizes_uppercase_pdf_extension(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": "x"}})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert "SCAN.md" in summary
     assert (output_dir / "SCAN.md").exists()
@@ -214,22 +214,18 @@ def test_local_sends_deterministic_options_and_the_chosen_model(
     assert calls[0]["keep_alive"] == llm_pdf_md.OLLAMA_KEEP_ALIVE
 
 
-def test_local_defaults_to_the_configured_model_when_none_given(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    input_dir, _ = local_sandbox
-    _make_pdf(input_dir / "doc.pdf")
-    calls: list[dict] = []
-
-    def fake_post(url, json, timeout):
-        calls.append(json)
-        return FakeResponse({"message": {"content": "text"}})
-
-    monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
-
-    llm_pdf_md.convert_pdf_to_markdown_local()
-
-    assert calls[0]["model"] == llm_pdf_md.OLLAMA_MODEL
+@pytest.mark.parametrize(
+    "convert",
+    [
+        llm_pdf_md.convert_pdf_to_markdown_openai,
+        llm_pdf_md.convert_pdf_to_markdown_anthropic,
+        llm_pdf_md.convert_pdf_to_markdown_local,
+    ],
+)
+def test_conversions_require_a_model_instead_of_defaulting_to_one(convert) -> None:
+    """Nothing may run, or bill, on a model the user didn't choose."""
+    with pytest.raises(TypeError):
+        convert()
 
 
 def test_local_reports_password_protected_pdf_as_a_per_file_error(
@@ -241,7 +237,7 @@ def test_local_reports_password_protected_pdf_as_a_per_file_error(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": "x"}})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert "No files converted" in summary
     assert "password protected" in summary
@@ -258,7 +254,7 @@ def test_local_reports_malformed_ollama_response_as_a_per_file_error(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"unexpected": "shape"})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert "No files converted" in summary
     assert "doc.pdf" in summary
@@ -273,7 +269,7 @@ def test_local_reports_empty_page_content_as_no_content(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": ""}})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert "conversion returned no content" in summary
 
@@ -289,7 +285,7 @@ def test_local_reports_all_empty_pages_as_no_content(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": ""}})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert "conversion returned no content" in summary
     assert not (output_dir / "blank.md").exists()
@@ -314,7 +310,7 @@ def test_local_continues_after_one_pdf_fails_mid_batch(
 
     monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local()
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
     assert "Converted 1 file(s)" in summary
     assert "1 failed" in summary
@@ -334,13 +330,6 @@ def test_list_ollama_models_parses_names(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 # --- _prompt_for_local_model -----------------------------------------------------------
-def test_prompt_blank_input_picks_the_first_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:9b", "gemma4:12b"])
-    monkeypatch.setattr("builtins.input", lambda _prompt="": "")
-
-    assert llm_pdf_md._prompt_for_local_model() == "qwen3.5:9b"
-
-
 def test_prompt_valid_number_picks_that_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:9b", "gemma4:12b"])
     monkeypatch.setattr("builtins.input", lambda _prompt="": "2")
@@ -348,33 +337,34 @@ def test_prompt_valid_number_picks_that_model(monkeypatch: pytest.MonkeyPatch) -
     assert llm_pdf_md._prompt_for_local_model() == "gemma4:12b"
 
 
-@pytest.mark.parametrize("bad_choice", ["abc", "0", "99", "-1", "1.5"])
-def test_prompt_invalid_choice_falls_back_to_the_first_model(
+@pytest.mark.parametrize("bad_choice", ["", "abc", "0", "99", "-1", "1.5"])
+def test_prompt_asks_again_instead_of_picking_a_model_for_the_user(
     monkeypatch: pytest.MonkeyPatch, bad_choice: str
 ) -> None:
+    """A blank or invalid answer must not fall back to a default model: it asks again, and
+    the model returned is the one picked on the second try."""
     monkeypatch.setattr(llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:9b", "gemma4:12b"])
-    monkeypatch.setattr("builtins.input", lambda _prompt="": bad_choice)
+    answers = iter([bad_choice, "2"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
 
-    assert llm_pdf_md._prompt_for_local_model() == "qwen3.5:9b"
+    assert llm_pdf_md._prompt_for_local_model() == "gemma4:12b"
 
 
-def test_prompt_falls_back_to_default_when_no_models_installed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_prompt_exits_when_no_models_installed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llm_pdf_md, "list_ollama_models", lambda: [])
 
-    assert llm_pdf_md._prompt_for_local_model() == llm_pdf_md.OLLAMA_MODEL
+    with pytest.raises(SystemExit, match="No Ollama models installed"):
+        llm_pdf_md._prompt_for_local_model()
 
 
-def test_prompt_falls_back_to_default_when_ollama_is_unreachable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_prompt_exits_when_ollama_is_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
     def raise_connection_error():
         raise requests.exceptions.ConnectionError()
 
     monkeypatch.setattr(llm_pdf_md, "list_ollama_models", raise_connection_error)
 
-    assert llm_pdf_md._prompt_for_local_model() == llm_pdf_md.OLLAMA_MODEL
+    with pytest.raises(SystemExit, match="Could not reach Ollama"):
+        llm_pdf_md._prompt_for_local_model()
 
 
 # --- _convert_pdf_anthropic --------------------------------------------------------------
@@ -406,7 +396,7 @@ def test_anthropic_raises_when_claude_refuses(tmp_path: Path) -> None:
     client = _FakeAnthropicClient(SimpleNamespace(stop_reason="refusal", content=[]))
 
     with pytest.raises(RuntimeError, match="declined"):
-        llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODEL)
+        llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODELS[0])
 
 
 def test_anthropic_raises_when_output_is_cut_off(tmp_path: Path) -> None:
@@ -415,7 +405,7 @@ def test_anthropic_raises_when_output_is_cut_off(tmp_path: Path) -> None:
     client = _FakeAnthropicClient(SimpleNamespace(stop_reason="max_tokens", content=[]))
 
     with pytest.raises(RuntimeError, match="too long"):
-        llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODEL)
+        llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODELS[0])
 
 
 def test_anthropic_returns_empty_string_when_there_are_no_text_blocks(tmp_path: Path) -> None:
@@ -429,4 +419,4 @@ def test_anthropic_returns_empty_string_when_there_are_no_text_blocks(tmp_path: 
     )
     client = _FakeAnthropicClient(message)
 
-    assert llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODEL) == ""
+    assert llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODELS[0]) == ""

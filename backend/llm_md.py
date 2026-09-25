@@ -16,11 +16,8 @@ import requests
 from openai import OpenAI
 
 from llm_pdf_md import (
-    ANTHROPIC_MODEL,
     LOCAL_RENDER_DPI,
     OLLAMA_HOST,
-    OLLAMA_MODEL,
-    OPENAI_MODEL,
     _convert_page_ollama,
     _convert_pdf_local,
     _prompt_for_local_model,
@@ -176,14 +173,14 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
 
 
 # Public entry points
-def convert_handwriting_to_markdown_openai(model: str = OPENAI_MODEL) -> str:
+def convert_handwriting_to_markdown_openai(model: str) -> str:
     """Convert all JPG and PDF files in the input folder to Markdown using OpenAI's Vision API.
 
     Costs money and sends the files to OpenAI. Requires OPENAI_API_KEY to be set in the
     environment or a .env file.
 
     Args:
-        model: OpenAI model to use. Defaults to OPENAI_MODEL.
+        model: OpenAI model to use.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -198,7 +195,7 @@ def convert_handwriting_to_markdown_openai(model: str = OPENAI_MODEL) -> str:
     )
 
 
-def convert_handwriting_to_markdown_anthropic(model: str = ANTHROPIC_MODEL) -> str:
+def convert_handwriting_to_markdown_anthropic(model: str) -> str:
     """Convert all JPG and PDF files in the input folder to Markdown using Anthropic's Claude.
 
     Costs money and sends the files to Anthropic. Requires ANTHROPIC_API_KEY to be set in the
@@ -206,7 +203,7 @@ def convert_handwriting_to_markdown_anthropic(model: str = ANTHROPIC_MODEL) -> s
     file size cap on the PDF itself.
 
     Args:
-        model: Anthropic model to use. Defaults to ANTHROPIC_MODEL.
+        model: Anthropic model to use.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -220,15 +217,14 @@ def convert_handwriting_to_markdown_anthropic(model: str = ANTHROPIC_MODEL) -> s
     )
 
 
-def convert_handwriting_to_markdown_local(model: str = OLLAMA_MODEL) -> str:
+def convert_handwriting_to_markdown_local(model: str) -> str:
     """Convert all JPG and PDF files in the input folder to Markdown using a local Ollama model.
 
     Free, no API key or internet needed. Requires Ollama running locally with a vision-capable
     model pulled. Slower than the cloud paths and quality depends on the model.
 
     Args:
-        model: name of a locally pulled Ollama model, as shown by `ollama list`. Defaults to
-            OLLAMA_MODEL.
+        model: name of a locally pulled Ollama model, as shown by `ollama list`.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -245,18 +241,21 @@ if __name__ == "__main__":
     # Usage: python backend/llm_md.py [openai|anthropic|local] [model]
     # With no arguments, shows a menu of ChatGPT/Anthropic/Open Source models to pick from.
     # For "local" with no model given, prompts interactively from installed Ollama models.
+    # There is no default model: openai and anthropic exit with a usage message without one.
     if len(sys.argv) > 1:
         provider = sys.argv[1]
         chosen_model = sys.argv[2] if len(sys.argv) > 2 else None
     else:
         provider, chosen_model = _prompt_for_provider()
 
-    if provider == "anthropic":
-        result = convert_handwriting_to_markdown_anthropic(chosen_model or ANTHROPIC_MODEL)
-    elif provider == "local":
+    if provider == "local":
         result = convert_handwriting_to_markdown_local(chosen_model or _prompt_for_local_model())
+    elif provider == "anthropic" and chosen_model:
+        result = convert_handwriting_to_markdown_anthropic(chosen_model)
+    elif provider == "openai" and chosen_model:
+        result = convert_handwriting_to_markdown_openai(chosen_model)
     else:
-        result = convert_handwriting_to_markdown_openai(chosen_model or OPENAI_MODEL)
+        sys.exit("Usage: python backend/llm_md.py [openai|anthropic|local] [model] (openai and anthropic need a model)")
 
     if not result.startswith("Converted"):
         print(result)

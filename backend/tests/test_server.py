@@ -171,6 +171,66 @@ def test_a_local_model_that_is_not_downloaded_is_rejected_with_the_pull_command(
     assert "ollama pull qwen3.5:9b" in body["hint"]
 
 
+_CLOUD_ROUTES = [
+    ("pdf->md-ai", "OPENAI_API_KEY", "convert_pdf_to_markdown_openai", "gpt-4o"),
+    ("pdf->md-claude", "ANTHROPIC_API_KEY", "convert_pdf_to_markdown_anthropic", "claude-sonnet-5"),
+]
+
+
+@pytest.mark.parametrize(("target_id", "key_var", "_func", "_model"), _CLOUD_ROUTES)
+def test_a_cloud_conversion_without_a_model_is_rejected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+    target_id: str, key_var: str, _func: str, _model: str,
+) -> None:
+    """No default model: the request is refused before anything runs or bills."""
+    monkeypatch.setenv(key_var, "test-key")
+
+    response = client.post(
+        "/api/convert",
+        data={"target": target_id},
+        files={"file": ("a.pdf", b"%PDF-1.4\n")},
+    )
+    assert response.status_code == 400
+    assert "Pick a model" in response.json()["error"]
+
+
+@pytest.mark.parametrize(("target_id", "key_var", "_func", "_model"), _CLOUD_ROUTES)
+def test_a_cloud_model_that_is_not_a_known_one_is_rejected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+    target_id: str, key_var: str, _func: str, _model: str,
+) -> None:
+    monkeypatch.setenv(key_var, "test-key")
+
+    response = client.post(
+        "/api/convert",
+        data={"target": target_id, "model": "not-a-real-model"},
+        files={"file": ("a.pdf", b"%PDF-1.4\n")},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert "not a model" in body["error"]
+    assert _model in body["hint"]
+
+
+@pytest.mark.parametrize(("target_id", "key_var", "func", "model"), _CLOUD_ROUTES)
+def test_a_cloud_conversion_uses_the_model_the_user_chose(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch,
+    target_id: str, key_var: str, func: str, model: str,
+) -> None:
+    """The model in the request form has to be the one that reaches the provider."""
+    monkeypatch.setenv(key_var, "test-key")
+    calls: list[str] = []
+    monkeypatch.setattr(server.llm_pdf_md, func, lambda chosen: calls.append(chosen) or "done")
+
+    client.post(
+        "/api/convert",
+        data={"target": target_id, "model": model},
+        files={"file": ("a.pdf", b"%PDF-1.4\n")},
+    )
+
+    assert calls == [model]
+
+
 def test_a_local_conversion_uses_the_model_the_user_chose(
     client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

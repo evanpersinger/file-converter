@@ -119,11 +119,15 @@ local Ollama vision model) for high-quality conversion.
 
 **Usage:**
 ```bash
-python backend/llm_pdf_md.py            # no args: menu of ChatGPT/Anthropic/Open Source models to pick from
-python backend/llm_pdf_md.py anthropic  # Claude
-python backend/llm_pdf_md.py local              # local Ollama, prompts you to pick a model
-python backend/llm_pdf_md.py local qwen3.5:9b   # local Ollama, model given directly
+python backend/llm_pdf_md.py                                # no args: menu of ChatGPT/Anthropic/Open Source models to pick from
+python backend/llm_pdf_md.py anthropic claude-sonnet-5      # Claude, the model is required
+python backend/llm_pdf_md.py openai gpt-4o-mini             # OpenAI, the model is required
+python backend/llm_pdf_md.py local                          # local Ollama, prompts you to pick a model
+python backend/llm_pdf_md.py local qwen3.5:9b               # local Ollama, model given directly
 ```
+
+There is no default model, so nobody can start a paid run by accident. The CLI and the web
+API both refuse to run without one.
 
 Conversion isn't instant, especially on the local Ollama path: each page is a separate
 model call, and a local vision model can take well over a minute per page depending on
@@ -142,10 +146,10 @@ your hardware. Expect it to take a while, particularly with Open Source models.
    - OpenAI: `OPENAI_API_KEY=your_api_key_here`
    - Anthropic: `ANTHROPIC_API_KEY=your_api_key_here`
 
-The OpenAI path renders each page to an image and sends it to `gpt-4o-mini` (default) or
-`gpt-4o`. The Claude path sends the PDF itself to `claude-sonnet-5` (default) or
-`claude-haiku-4-5-20251001`, which read PDFs natively (limit 32 MB per file). Pick the
-model from the no-arg menu, or pass it as the second argument, e.g.
+The OpenAI path renders each page to an image and sends it to `gpt-4o-mini` or `gpt-4o`.
+The Claude path sends the PDF itself to `claude-sonnet-5` or `claude-haiku-4-5-20251001`,
+which read PDFs natively (limit 32 MB per file). Pick the model from the no-arg menu, or
+pass it as the second argument, e.g.
 `python backend/llm_pdf_md.py anthropic claude-haiku-4-5-20251001`. Both cost money and
 bill the key they use.
 
@@ -162,10 +166,10 @@ bill the key they use.
 - Free, no API key, nothing sent over the network. Slower than the cloud paths, and
   quality depends entirely on the model you pick.
 - Renders each page to an image, same idea as the OpenAI path, and sends it to the model
-  you choose. The CLI lists whatever models are installed in Ollama (`ollama list`);
-  `OLLAMA_MODEL` in the script (`qwen3.5:9b`) is only the fallback when `local` is run
-  and Ollama can't be reached or has no models installed. The model unloads from memory
-  15 seconds after the last page (`OLLAMA_KEEP_ALIVE`), instead of Ollama's normal
+  you choose. The CLI lists whatever models are installed in Ollama (`ollama list`) and
+  keeps asking until you pick a number from the list. If Ollama can't be reached or has no
+  models installed, it exits with a message instead of picking one. The model unloads from
+  memory 15 seconds after the last page (`OLLAMA_KEEP_ALIVE`), instead of Ollama's normal
   5-minute idle default.
 
 **Page limit (Claude path):** roughly 100 pages per PDF, fewer for dense text or
@@ -195,13 +199,15 @@ and mark any word it can't read as `[illegible]`.
 
 **Usage:**
 ```bash
-python backend/llm_md.py                    # no args: menu of ChatGPT/Anthropic/Open Source models to pick from
-python backend/llm_md.py anthropic          # Claude
-python backend/llm_md.py local              # local Ollama, prompts you to pick a model
-python backend/llm_md.py local qwen3.5:9b   # local Ollama, model given directly
+python backend/llm_md.py                                # no args: menu of ChatGPT/Anthropic/Open Source models to pick from
+python backend/llm_md.py anthropic claude-sonnet-5      # Claude, the model is required
+python backend/llm_md.py openai gpt-4o-mini             # OpenAI, the model is required
+python backend/llm_md.py local                          # local Ollama, prompts you to pick a model
+python backend/llm_md.py local gemma4:12b               # local Ollama, model given directly
 ```
 
-Setup, API keys, and the Ollama requirements are the same as `llm_pdf_md.py` (see above).
+There is no default model, so nobody can start a paid run by accident. Setup, API keys, and
+the Ollama requirements are the same as `llm_pdf_md.py` (see above).
 PDFs go to the model one page image at a time on every path, so the 32 MB / roughly 100 page
 limits of `llm_pdf_md.py`'s Claude path don't apply here. A page that fails (a rate limit, for
 example) fails the whole file. OpenAI and Claude cost money and send your files to the

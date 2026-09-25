@@ -28,11 +28,8 @@ should_cancel: Callable[[], bool] = lambda: False
 
 OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"]  # vision_parse only supports these two for OpenAI
 ANTHROPIC_MODELS = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
-OPENAI_MODEL = OPENAI_MODELS[0]
-ANTHROPIC_MODEL = ANTHROPIC_MODELS[0]
 OLLAMA_MODELS = ["qwen3.5:9b", "qwen3.5:4b"]  # vision-capable local models, must be pulled via `ollama pull <model>`
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_MODEL = OLLAMA_MODELS[0]
 OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script completes conversion, overrides Ollama's 5 min default
 _MODEL_DISPLAY_NAMES = {"claude-haiku-4-5-20251001": "claude-haiku-4.5"}  # friendlier label for the CLI menu, actual model id is unchanged
 LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
@@ -273,14 +270,14 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
 
 
 # Public entry points
-def convert_pdf_to_markdown_openai(model: str = OPENAI_MODEL) -> str:
+def convert_pdf_to_markdown_openai(model: str) -> str:
     """Convert all PDF files in the input folder to Markdown using OpenAI's Vision API.
 
     Higher quality than the local pdf_md.py converter, but slower and it costs money.
     Requires OPENAI_API_KEY to be set in the environment or a .env file.
 
     Args:
-        model: OpenAI model to use. Defaults to OPENAI_MODEL.
+        model: OpenAI model to use.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -295,7 +292,7 @@ def convert_pdf_to_markdown_openai(model: str = OPENAI_MODEL) -> str:
     return _convert_all(lambda pdf_path: "\n\n".join(convert_with_retry(parser, pdf_path) or []))
 
 
-def convert_pdf_to_markdown_anthropic(model: str = ANTHROPIC_MODEL) -> str:
+def convert_pdf_to_markdown_anthropic(model: str) -> str:
     """Convert all PDF files in the input folder to Markdown using Anthropic's Claude.
 
     Higher quality than the local pdf_md.py converter, but slower and it costs money.
@@ -304,7 +301,7 @@ def convert_pdf_to_markdown_anthropic(model: str = ANTHROPIC_MODEL) -> str:
     hit the 64K output cap and fail.
 
     Args:
-        model: Anthropic model to use. Defaults to ANTHROPIC_MODEL.
+        model: Anthropic model to use.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -316,15 +313,14 @@ def convert_pdf_to_markdown_anthropic(model: str = ANTHROPIC_MODEL) -> str:
     return _convert_all(lambda pdf_path: _convert_pdf_anthropic(client, pdf_path, model))
 
 
-def convert_pdf_to_markdown_local(model: str = OLLAMA_MODEL) -> str:
+def convert_pdf_to_markdown_local(model: str) -> str:
     """Convert all PDF files in the input folder to Markdown using a local Ollama vision model.
 
     Free, no API key or internet needed. Requires Ollama running locally with a vision-capable
     model pulled. Slower than the cloud paths and quality depends on the model.
 
     Args:
-        model: name of a locally pulled Ollama model, as shown by `ollama list`. Defaults to
-            OLLAMA_MODEL.
+        model: name of a locally pulled Ollama model, as shown by `ollama list`.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -341,29 +337,28 @@ def convert_pdf_to_markdown_local(model: str = OLLAMA_MODEL) -> str:
 
 def _prompt_for_local_model() -> str:
     """Ask the user to pick one of the locally installed Ollama models. CLI entry point only,
-    callers going through the web UI must pass a model instead of hitting this."""
+    callers going through the web UI must pass a model instead of hitting this.
+
+    There is no default: a blank or invalid answer asks again, so nobody starts a run on a
+    model they didn't choose.
+    """
     try:
         models = list_ollama_models()
     except requests.exceptions.RequestException:
-        print(f"Could not reach Ollama at {OLLAMA_HOST}, using default: {OLLAMA_MODEL}")
-        return OLLAMA_MODEL
+        sys.exit(f"Could not reach Ollama at {OLLAMA_HOST}. Run `ollama serve` (or open the Ollama app).")
 
     if not models:
-        print(f"No Ollama models installed, using default: {OLLAMA_MODEL}")
-        return OLLAMA_MODEL
+        sys.exit("No Ollama models installed. Pull one with `ollama pull <model>`.")
 
     print("Installed Ollama models:")
     for i, name in enumerate(models, start=1):
         print(f"  {i}) {name}")
 
-    choice = input("Select a model: ").strip()
-    if not choice:
-        return models[0]
-    if choice.isdigit() and 1 <= int(choice) <= len(models):
-        return models[int(choice) - 1]
-
-    print(f"Invalid choice, using {models[0]}")
-    return models[0]
+    while True:
+        choice = input("Select a model: ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(models):
+            return models[int(choice) - 1]
+        print("Enter a number from the list above.")
 
 
 def _prompt_for_provider() -> tuple[str, str]:
@@ -412,18 +407,21 @@ if __name__ == "__main__":
     # Usage: python backend/llm_pdf_md.py [openai|anthropic|local] [model]
     # With no arguments, shows a menu of ChatGPT/Anthropic/Open Source models to pick from.
     # For "local" with no model given, prompts interactively from installed Ollama models.
+    # There is no default model: openai and anthropic exit with a usage message without one.
     if len(sys.argv) > 1:
         provider = sys.argv[1]
         chosen_model = sys.argv[2] if len(sys.argv) > 2 else None
     else:
         provider, chosen_model = _prompt_for_provider()
 
-    if provider == "anthropic":
-        result = convert_pdf_to_markdown_anthropic(chosen_model or ANTHROPIC_MODEL)
-    elif provider == "local":
+    if provider == "local":
         result = convert_pdf_to_markdown_local(chosen_model or _prompt_for_local_model())
+    elif provider == "anthropic" and chosen_model:
+        result = convert_pdf_to_markdown_anthropic(chosen_model)
+    elif provider == "openai" and chosen_model:
+        result = convert_pdf_to_markdown_openai(chosen_model)
     else:
-        result = convert_pdf_to_markdown_openai(chosen_model or OPENAI_MODEL)
+        sys.exit("Usage: python backend/llm_pdf_md.py [openai|anthropic|local] [model] (openai and anthropic need a model)")
 
     if not result.startswith("Converted"):
         print(result)
