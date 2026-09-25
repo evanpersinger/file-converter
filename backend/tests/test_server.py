@@ -181,7 +181,7 @@ def test_a_local_conversion_uses_the_model_the_user_chose(
     monkeypatch.setattr(
         server.llm_pdf_md,
         "_convert_page_ollama",
-        lambda image_b64, model: calls.append(model) or "text",
+        lambda image_b64, model, prompt: calls.append(model) or "text",
     )
 
     pdf_path = tmp_path / "doc.pdf"
@@ -209,7 +209,7 @@ def test_a_local_conversion_returns_partial_output_when_cancelled(
     job_id = "cancel-mid-job"
     calls: list[str] = []
 
-    def fake_convert_page(image_b64: str, model: str) -> str:
+    def fake_convert_page(image_b64: str, model: str, prompt: str) -> str:
         calls.append(model)
         server._JOB_CANCEL[job_id].set()  # same event /api/convert/{job_id}/cancel sets
         return f"page {len(calls)}"
@@ -316,7 +316,7 @@ def test_the_local_converters_progress_output_is_readable_as_a_percentage(
     doc.new_page()
     doc.save(pdf)
     doc.close()
-    monkeypatch.setattr(server.llm_pdf_md, "_convert_page_ollama", lambda image_b64, model: "text")
+    monkeypatch.setattr(server.llm_pdf_md, "_convert_page_ollama", lambda image_b64, model, prompt: "text")
 
     server.llm_pdf_md._convert_pdf_local(pdf, "any:1b")
 

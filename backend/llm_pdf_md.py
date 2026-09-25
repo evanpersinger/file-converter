@@ -153,13 +153,13 @@ def _convert_pdf_anthropic(client: anthropic.Anthropic, pdf_path: Path, model: s
 
 
 # Local (Ollama reads each page as an image, no API key or internet needed)
-def _convert_page_ollama(image_b64: str, model: str) -> str:
-    """Send one rendered page to the local Ollama vision model and return its Markdown."""
+def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT) -> str:
+    """Send one image to the local Ollama vision model and return its Markdown."""
     response = requests.post(
         f"{OLLAMA_HOST}/api/chat",
         json={
             "model": model,
-            "messages": [{"role": "user", "content": _PAGE_PROMPT, "images": [image_b64]}],
+            "messages": [{"role": "user", "content": prompt, "images": [image_b64]}],
             "stream": False,
             # Faithful transcription, not conversation. The model's default (1) leaves room
             # to paraphrase; 0 keeps it deterministic, same reasoning as the OpenAI/Claude paths.
@@ -176,7 +176,7 @@ def _convert_page_ollama(image_b64: str, model: str) -> str:
     return response.json()["message"]["content"]
 
 
-def _convert_pdf_local(pdf_path: Path, model: str) -> str:
+def _convert_pdf_local(pdf_path: Path, model: str, prompt: str = _PAGE_PROMPT) -> str:
     """Render each page of the PDF to an image and transcribe it with the local Ollama model.
 
     Page by page, like the OpenAI path, since local vision models handle one image far more
@@ -198,7 +198,7 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> str:
         print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
         png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
         image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
-        pages.append(_convert_page_ollama(image_b64, model))
+        pages.append(_convert_page_ollama(image_b64, model, prompt))
     else:
         print(f"\rConverting page {page_count}/{page_count} (100%)")  # only true once every page is actually done
     doc.close()

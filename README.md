@@ -187,6 +187,26 @@ Combining several images into one large image before converting to PDF makes thi
 very slow and can make it fail. See [CONVERSIONS.md](CONVERSIONS.md) for why, and what to
 do instead.
 
+### llm_md.py
+Converts handwritten JPGs and PDFs to Markdown using an LLM (OpenAI, Anthropic's Claude, or a
+local Ollama vision model). It exists because the Tesseract scripts (`jpg_md.py`,
+`pdf_md.py`) can't read handwriting. The prompt asks the model to transcribe the handwriting
+and mark any word it can't read as `[illegible]`.
+
+**Usage:**
+```bash
+python backend/llm_md.py                    # no args: menu of ChatGPT/Anthropic/Open Source models to pick from
+python backend/llm_md.py anthropic          # Claude
+python backend/llm_md.py local              # local Ollama, prompts you to pick a model
+python backend/llm_md.py local qwen3.5:9b   # local Ollama, model given directly
+```
+
+Setup, API keys, and the Ollama requirements are the same as `llm_pdf_md.py` (see above).
+PDFs go to the model one page image at a time on every path, so the 32 MB / roughly 100 page
+limits of `llm_pdf_md.py`'s Claude path don't apply here. A page that fails (a rate limit, for
+example) fails the whole file. OpenAI and Claude cost money and send your files to the
+provider.
+
 ### ss_txt.py
 Converts screenshots and images to text using OCR (Optical Character Recognition). Has two modes: plain text (default) and structured content (tables/layout).
 
@@ -879,6 +899,7 @@ converter/
 │   ├── csv_md.py           # CSV to Markdown converter
 │   ├── pdf_md.py           # PDF to Markdown converter (pymupdf4llm + OCR)
 │   ├── llm_pdf_md.py       # PDF to Markdown converter (LLM-powered: OpenAI, Claude, or local Ollama)
+│   ├── llm_md.py           # Handwritten JPG/PDF to Markdown converter (LLM-powered: OpenAI, Claude, or local Ollama)
 │   ├── ss_txt.py           # Screenshot to text converter (OCR; --structured for tables)
 │   ├── ipynb_pdf.py        # Jupyter notebook to PDF converter
 │   ├── md_pdf.py           # Markdown to PDF converter (Pandoc, enhanced)
@@ -1022,6 +1043,7 @@ This means you can update your source file and convert it again to get an update
 | R Markdown (.Rmd) | PDF | `Rmd_pdf.py` |
 | Multiple files, one shared extension | Single file | `combine_files.py` |
 | PDF (LLM-powered) | Markdown (.md) | `llm_pdf_md.py` |
+| Handwritten JPG/JPEG or PDF | Markdown (.md), via LLM (OpenAI/Claude/local Ollama) | `llm_md.py` |
 
 ## Flows That Don't Work
 
