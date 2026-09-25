@@ -155,6 +155,25 @@ def test_ocr_mode_leaves_digits_inside_words(source: str) -> None:
     assert normalize_math(source, ocr=True) == source
 
 
+@pytest.mark.parametrize(
+    ("source", "ocr_expected"),
+    [
+        ("a long day — and a longer night", "a long day - and a longer night"),
+        ("Internet – it lacks a center", "Internet - it lacks a center"),
+        ("pages 2745–2754", "pages 2745-2754"),
+        ("x – y = 3", "x - y = 3"),
+        ("fell to –5 degrees", "fell to -5 degrees"),
+    ],
+)
+def test_dashes_are_kept_on_searchable_pages_and_flattened_by_ocr(
+    source: str, ocr_expected: str
+) -> None:
+    """A dash in searchable prose is a real dash. Only OCR text, where a minus sign
+    is often misread as one, gets it flattened to a hyphen."""
+    assert normalize_math(source, ocr=False) == source
+    assert normalize_math(source, ocr=True) == ocr_expected
+
+
 @pytest.mark.parametrize("source", ["", None])
 def test_falsy_input_is_returned_unchanged(source: str | None) -> None:
     assert normalize_math(source) == source

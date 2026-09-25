@@ -143,10 +143,10 @@ def _apply_math(text, ocr):
         text,
     )
 
-    # em/en dashes commonly stand in for a minus sign
-    text = text.replace("—", "-").replace("–", "-")
-
     if ocr:
+        # OCR often reads a minus sign as an em/en dash. Searchable pages keep their
+        # dashes, since in prose and page ranges they are real dashes.
+        text = text.replace("—", "-").replace("–", "-")
         # A lone variable letter followed by a single digit at a token boundary
         # (x2 -> x²) but never inside a word (COVID19, GPT4 stay put).
         text = re.sub(
