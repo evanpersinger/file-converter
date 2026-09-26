@@ -19,6 +19,14 @@
   /* Dashed lines read worse thick, so they have their own, skinnier setting. */
   --line-dashed: 2px;
 
+  /* How far a hovered button lifts (up and to the left), and the dark shadow used under
+     filled buttons, where a gold shadow would blend into the fill. */
+  --pop: 4px;
+  --pop-dark: rgba(0, 0, 0, 0.55);
+  /* What a hovered button fills with: a dark, mostly opaque gold. Dark enough that the
+     gold text on it still measures about 4.4:1, so it can be this solid. */
+  --hover-fill: rgba(120, 85, 20, 0.8);
+
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
@@ -86,11 +94,20 @@ button {
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, transform 0.12s ease, box-shadow 0.12s ease;
 }
 
+/* Hover "pop": the button lifts up and to the left and leaves a solid block where it
+   was. Pressing it drops it flat again. */
 button:not(:disabled):hover {
-  background: var(--shade);
+  transform: translate(calc(var(--pop) * -1), calc(var(--pop) * -1));
+  box-shadow: var(--pop) var(--pop) 0 var(--text);
+  background: var(--hover-fill);
+}
+
+button:not(:disabled):active {
+  transform: none;
+  box-shadow: none;
 }
 
 input[type='checkbox'] {

@@ -96,7 +96,7 @@ h2 {
   border-radius: 6px;
   text-align: center;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 /* A long filename would otherwise blow out the fixed height. Full name is on the
@@ -111,6 +111,18 @@ h2 {
 .filepicker.dragging {
   border-color: var(--text);
   background: var(--shade);
+}
+
+/* The same pop as the buttons. */
+.filepicker:hover {
+  transform: translate(calc(var(--pop) * -1), calc(var(--pop) * -1));
+  box-shadow: var(--pop) var(--pop) 0 var(--text);
+  background: var(--hover-fill);
+}
+
+.filepicker:active {
+  transform: none;
+  box-shadow: none;
 }
 
 /* Dashed only while a file is over the target, so it reads as "let go here" without
@@ -213,6 +225,12 @@ h2 {
 
 .format.selected:not(:disabled):hover {
   background: #e0e0e0;
+  box-shadow: var(--pop) var(--pop) 0 var(--pop-dark);
+}
+
+/* The rule above outranks the general pressed rule, so it has to be undone here too. */
+.format.selected:not(:disabled):active {
+  box-shadow: none;
 }
 
 /* From / To summary. Dashed while empty, solid once filled, so an unanswered box
@@ -346,6 +364,7 @@ h2 {
   border-width: var(--line-thin);
   border-radius: 3px;
   opacity: 0.7;
+  --pop: 2px; /* a smaller lift, these buttons are tiny */
 }
 
 .remove:hover {
@@ -358,6 +377,7 @@ h2 {
   font-size: 0.75rem;
   border-width: var(--line-thin);
   border-radius: 3px;
+  --pop: 2px;
 }
 
 /* Preview overlay for a dropped file, opened by its View button. */
@@ -630,11 +650,19 @@ button:disabled {
   font-weight: 500;
   text-align: center;
   text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 .download:hover {
   background: #e0e0e0;
   border-color: #e0e0e0;
+  transform: translate(calc(var(--pop) * -1), calc(var(--pop) * -1));
+  box-shadow: var(--pop) var(--pop) 0 var(--pop-dark);
+}
+
+.download:active {
+  transform: none;
+  box-shadow: none;
 }
 
 /* Same dark panel as .error, with a warm border so it reads as "heads up" rather
