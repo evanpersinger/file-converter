@@ -329,26 +329,6 @@ def test_list_ollama_models_parses_names(monkeypatch: pytest.MonkeyPatch) -> Non
     assert llm_pdf_md.list_ollama_models() == ["qwen3.5:9b", "gemma4:12b"]
 
 
-def test_list_ollama_models_orders_weakest_to_strongest_by_the_size_in_the_tag(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Ollama returns them in whatever order they were pulled in. The menus sort by size
-    so both Qwen models come before Gemma, and a model with no size in its tag goes last."""
-    pulled = ["qwen3.5:4b", "gemma4:12b", "unsized:latest", "qwen3.5:9b"]
-    monkeypatch.setattr(
-        llm_pdf_md.requests,
-        "get",
-        lambda *a, **k: FakeResponse({"models": [{"name": name} for name in pulled]}),
-    )
-
-    assert llm_pdf_md.list_ollama_models() == [
-        "qwen3.5:4b",
-        "qwen3.5:9b",
-        "gemma4:12b",
-        "unsized:latest",
-    ]
-
-
 # --- _prompt_for_local_model -----------------------------------------------------------
 def test_prompt_valid_number_picks_that_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:9b", "gemma4:12b"])

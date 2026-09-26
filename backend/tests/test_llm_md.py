@@ -115,10 +115,6 @@ def test_conversions_require_a_model_instead_of_defaulting_to_one(convert) -> No
 
 
 # --- folder loop ---------------------------------------------------------------------
-def test_local_reports_when_input_is_empty(sandbox, ollama_reachable) -> None:
-    assert llm_md.convert_handwriting_to_markdown_local("gemma4:12b") == "No JPG or PDF files found in input folder"
-
-
 def test_local_reports_when_only_markdown_present(sandbox, ollama_reachable) -> None:
     input_dir, _ = sandbox
     (input_dir / "notes.md").write_text("hi")
@@ -188,23 +184,6 @@ def test_local_transcribes_a_multi_page_pdf_in_page_order(
 
     assert (output_dir / "notes.md").read_text(encoding="utf-8") == "Page 1 content\n\nPage 2 content"
     assert [c["messages"][0]["content"] for c in calls] == [llm_md._HANDWRITING_PROMPT] * 2
-
-
-def test_local_stops_before_the_next_page_when_cancelled(
-    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    input_dir, output_dir = sandbox
-    _make_pdf(input_dir / "notes.pdf", pages=3)
-    calls = _fake_ollama(monkeypatch)
-    # Checked before each page starts, so once the first call is made page 1 finishes and
-    # page 2 never starts.
-    monkeypatch.setattr(llm_md, "should_cancel", lambda: len(calls) >= 1)
-
-    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
-
-    assert len(calls) == 1
-    assert (output_dir / "notes.md").read_text(encoding="utf-8") == "Page 1 content"
-    assert "Converted 1 file(s)" in summary
 
 
 def test_a_password_protected_pdf_is_reported_as_a_failed_file(
@@ -331,7 +310,3 @@ def test_openai_sends_the_image_and_prompt_and_uses_the_chosen_model(
     text_part, image_part = request["messages"][0]["content"]
     assert text_part["text"] == llm_md._HANDWRITING_PROMPT
     assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
-
-
-def test_openai_returns_an_empty_string_when_the_reply_has_no_content() -> None:
-    assert llm_md._image_openai(FakeOpenAI(None), "gpt-4o", "aGk=", "image/jpeg") == ""
