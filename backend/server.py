@@ -48,6 +48,7 @@ import jpg_pdf
 import jpg_png
 import jpg_svg
 import jpg_txt
+import llm_md
 import llm_pdf_md
 import md_pdf
 import pdf_md
@@ -92,7 +93,7 @@ _CONVERTER_MODULES = [
     csv_md, csv_xlsx, docx_md, docx_pdf, heic_jpg, heic_md, heic_png, html_pdf,
     ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, md_pdf, pdf_md, pdf_png,
     png_pdf, png_svg, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt, txt_pdf,
-    xlsx_csv, combine_files,
+    xlsx_csv, combine_files, llm_md,
 ]
 _stray = [m.__name__ for m in _CONVERTER_MODULES
           if Path(m.__file__).resolve().parent != BACKEND]
@@ -311,6 +312,9 @@ class Conversion:
     invoke: Callable
     requires: tuple[str, ...] = ()
     note: str | None = None
+    # A short sentence shown under the conversion's button, for telling apart two buttons
+    # that make the same format (the two LLM Markdown scripts).
+    caption: str | None = None
     # True when the user picks a model to run this with. `invoke` then also takes it.
     takes_model: bool = False
     # The models the user may pick for a cloud conversion. Empty for the local one, whose
@@ -360,6 +364,14 @@ REGISTRY: list[Conversion] = [
                    llm_pdf_md,
                    lambda s, model: llm_pdf_md.convert_pdf_to_markdown_local(model)),
                requires=("ollama",), takes_model=True, group="llm",
+               note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first."),
+    # The one LLM conversion that takes more than PDFs: llm_md reads handwriting from JPGs and PDFs.
+    Conversion((".jpg", ".jpeg", ".pdf"), "handwriting->md", "Markdown (handwriting, Open Source model, free)", ".md",
+               via_dir_globals_model(
+                   llm_md,
+                   lambda s, model: llm_md.convert_handwriting_to_markdown_local(model)),
+               requires=("ollama",), takes_model=True, group="llm",
+               caption="Used for handwriting, like actual writing on paper.",
                note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first."),
 
     # --- office --------------------------------------------------------------
@@ -479,7 +491,8 @@ def formats() -> dict:
     the page is enough to make OCR targets appear.
 
     Both maps carry the target extension, since the UI groups conversions into one
-    button per output format and needs it to know which button an entry belongs to.
+    button per output format and needs it to know which button an entry belongs to. The
+    LLM column is the exception: one button per conversion, told apart by its caption.
     """
     by_extension: dict[str, list[dict]] = {}
     unavailable: dict[str, list[dict]] = {}
@@ -487,23 +500,18 @@ def formats() -> dict:
     for conv in REGISTRY:
         missing = missing_deps(conv.requires)
         for ext in conv.source_exts:
+            entry = {
+                "id": conv.target_id,
+                "label": conv.label,
+                "ext": conv.target_ext,
+                "group": conv.group,
+            }
+            if conv.caption:
+                entry["caption"] = conv.caption
             if missing:
                 reason, hint = DEP_LABELS[missing[0]]
-                unavailable.setdefault(ext, []).append({
-                    "id": conv.target_id,
-                    "label": conv.label,
-                    "ext": conv.target_ext,
-                    "group": conv.group,
-                    "reason": reason,
-                    "hint": hint,
-                })
+                unavailable.setdefault(ext, []).append({**entry, "reason": reason, "hint": hint})
             else:
-                entry = {
-                    "id": conv.target_id,
-                    "label": conv.label,
-                    "ext": conv.target_ext,
-                    "group": conv.group,
-                }
                 if conv.note:
                     entry["note"] = conv.note
                 by_extension.setdefault(ext, []).append(entry)

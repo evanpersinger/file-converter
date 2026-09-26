@@ -29,6 +29,24 @@
   margin: 0 0 1rem;
 }
 
+/* One script per row, not two to a row like the format grid, so each caption has the
+   full width to read. */
+.llm-routes {
+  display: flex;
+  flex-direction: column;
+  gap: 2.75rem;
+}
+
+.llm-route {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.llm-route p {
+  margin: 0;
+}
+
 .model-list {
   display: flex;
   flex-direction: column;

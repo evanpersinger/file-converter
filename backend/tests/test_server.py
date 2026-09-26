@@ -14,6 +14,7 @@ from pathlib import Path
 import fitz
 import pandas as pd
 import pytest
+import requests
 from fastapi.testclient import TestClient
 
 import server
@@ -241,7 +242,7 @@ def test_a_local_conversion_uses_the_model_the_user_chose(
     monkeypatch.setattr(
         server.llm_pdf_md,
         "_convert_page_ollama",
-        lambda image_b64, model, prompt: calls.append(model) or "text",
+        lambda image_b64, model: calls.append(model) or "text",
     )
 
     pdf_path = tmp_path / "doc.pdf"
@@ -269,7 +270,7 @@ def test_a_local_conversion_returns_partial_output_when_cancelled(
     job_id = "cancel-mid-job"
     calls: list[str] = []
 
-    def fake_convert_page(image_b64: str, model: str, prompt: str) -> str:
+    def fake_convert_page(image_b64: str, model: str) -> str:
         calls.append(model)
         server._JOB_CANCEL[job_id].set()  # same event /api/convert/{job_id}/cancel sets
         return f"page {len(calls)}"
@@ -292,6 +293,135 @@ def test_a_local_conversion_returns_partial_output_when_cancelled(
     assert response.status_code == 200
     assert response.content == b"page 1"
     assert len(calls) == 1
+
+
+_HANDWRITING_CAPTION = "Used for handwriting, like actual writing on paper."
+
+
+@pytest.mark.parametrize("ext", [".jpg", ".jpeg", ".pdf"])
+def test_the_handwriting_conversion_is_offered_for_jpg_jpeg_and_pdf(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, ext: str
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["gemma4:12b"])
+
+    routes = client.get("/api/formats").json()["byExtension"][ext]
+
+    route = next(t for t in routes if t["id"] == "handwriting->md")
+    assert route["group"] == "llm"
+    assert route["ext"] == ".md"
+    assert route["caption"] == _HANDWRITING_CAPTION
+
+
+def test_only_the_handwriting_conversion_has_a_caption(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["gemma4:12b"])
+
+    pdf_routes = {t["id"]: t for t in client.get("/api/formats").json()["byExtension"][".pdf"]}
+
+    assert "caption" not in pdf_routes["pdf->md-local"]
+    assert pdf_routes["handwriting->md"]["caption"] == _HANDWRITING_CAPTION
+
+
+def test_the_caption_is_still_sent_when_the_conversion_is_unavailable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The LLM column shows its buttons before a file is chosen, and when Ollama is off,
+    so the caption can't depend on the conversion being runnable."""
+
+    def raise_connection_error():
+        raise requests.exceptions.ConnectionError()
+
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", raise_connection_error)
+
+    routes = client.get("/api/formats").json()["unavailable"][".jpg"]
+
+    route = next(t for t in routes if t["id"] == "handwriting->md")
+    assert route["caption"] == _HANDWRITING_CAPTION
+
+
+def test_a_handwriting_conversion_without_a_model_is_rejected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["gemma4:12b"])
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "handwriting->md"},
+        files={"file": ("a.jpg", b"not really a jpg")},
+    )
+    assert response.status_code == 400
+    assert "Pick a model" in response.json()["error"]
+
+
+def test_a_handwriting_conversion_uses_the_model_the_user_chose(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["gemma4:12b"])
+    calls: list[str] = []
+    monkeypatch.setattr(
+        server.llm_md,
+        "convert_handwriting_to_markdown_local",
+        lambda chosen: calls.append(chosen) or "done",
+    )
+
+    client.post(
+        "/api/convert",
+        data={"target": "handwriting->md", "model": "gemma4:12b"},
+        files={"file": ("a.jpg", b"not really a jpg")},
+    )
+
+    assert calls == ["gemma4:12b"]
+
+
+def test_cancelling_a_handwriting_conversion_returns_the_pages_finished(
+    client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cancel flag the server patches on has to be the one llm_md's page loop reads,
+    otherwise Cancel would silently do nothing for a handwritten PDF."""
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["gemma4:12b"])
+    job_id = "cancel-handwriting-job"
+    calls: list[str] = []
+
+    def fake_convert_page(image_b64: str, model: str, prompt: str) -> str:
+        calls.append(model)
+        server._JOB_CANCEL[job_id].set()  # same event /api/convert/{job_id}/cancel sets
+        return f"page {len(calls)}"
+
+    monkeypatch.setattr(server.llm_md, "_convert_page_ollama", fake_convert_page)
+
+    pdf_path = tmp_path / "notes.pdf"
+    doc = fitz.open()
+    for _ in range(3):
+        doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "handwriting->md", "model": "gemma4:12b", "job_id": job_id},
+        files={"file": ("notes.pdf", pdf_path.read_bytes())},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"page 1"
+    assert len(calls) == 1
+
+
+def test_the_handwriting_converters_progress_output_is_readable_as_a_percentage(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pins the print in llm_md to the pattern /api/progress parses."""
+    pdf = tmp_path / "two.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+    doc.save(pdf)
+    doc.close()
+
+    server.llm_md._convert_pdf_pages(pdf, lambda image_b64, media_type: "text")
+
+    assert server._latest_percent(capsys.readouterr().out) == 100
 
 
 def test_local_models_flags_which_curated_models_are_downloaded(
@@ -376,7 +506,7 @@ def test_the_local_converters_progress_output_is_readable_as_a_percentage(
     doc.new_page()
     doc.save(pdf)
     doc.close()
-    monkeypatch.setattr(server.llm_pdf_md, "_convert_page_ollama", lambda image_b64, model, prompt: "text")
+    monkeypatch.setattr(server.llm_pdf_md, "_convert_page_ollama", lambda image_b64, model: "text")
 
     server.llm_pdf_md._convert_pdf_local(pdf, "any:1b")
 

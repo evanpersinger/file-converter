@@ -146,14 +146,19 @@ export default function App() {
   const selectedLlm = llmTargets.find((t) => t.id === target) ?? null
   const variants = selected ? routesFor(selected.ext).slice(1) : []
 
-  // One button per output format an LLM script makes. Read off the map rather than
-  // hardcoded, so it shows before a file is chosen and a new script adds its own.
-  const llmFormats = formats
-    ? formats.allFormats.filter((f) =>
-        [...Object.values(formats.byExtension), ...Object.values(formats.unavailable)]
-          .flat()
-          .some((t) => t.group === 'llm' && t.ext === f.ext),
-      )
+  // One button per LLM script, not per output format: two scripts can make the same
+  // format (the typed and handwriting Markdown ones), and each one's caption tells them
+  // apart. Read off the map rather than hardcoded, so it shows before a file is chosen
+  // and a new script adds its own. A script is listed once however many file types it takes.
+  const llmRoutes = formats
+    ? [
+        ...new Map(
+          [...Object.values(formats.byExtension), ...Object.values(formats.unavailable)]
+            .flat()
+            .filter((t) => t.group === 'llm')
+            .map((t) => [t.id, t] as const),
+        ).values(),
+      ]
     : []
 
   // The target borrows the registry's display name so both boxes read the same way.
@@ -372,29 +377,33 @@ export default function App() {
         <h2>Convert to</h2>
         <p className="muted subtitle">Scripts use LLMs for conversion.</p>
 
-        <div className="formats">
-          {llmFormats.map((f) => {
-            const route = llmTargets.find((t) => t.ext === f.ext)
-            const dep = llmBlocked.find((u) => u.ext === f.ext)
+        <div className="llm-routes">
+          {llmRoutes.map((r) => {
+            const route = llmTargets.find((t) => t.id === r.id)
+            const dep = llmBlocked.find((u) => u.id === r.id)
+            const name = formats?.allFormats.find((f) => f.ext === r.ext)?.name ?? r.ext
             const why = route
               ? undefined
               : files.length === 0
                 ? 'Add a file to see which LLM scripts can convert it'
                 : dep
                   ? blockedReason(dep)
-                  : `No LLM script can convert ${ext || 'this file'} to ${f.name}.`
+                  : `This script does not take ${ext || 'this kind of'} files.`
 
             return (
-              <span key={f.ext} className="tip" data-tip={why}>
-                <button
-                  type="button"
-                  className={selectedLlm?.ext === f.ext ? 'format selected' : 'format'}
-                  disabled={!route}
-                  onClick={() => route && toggleLlm(route)}
-                >
-                  {f.name}
-                </button>
-              </span>
+              <div key={r.id} className="llm-route">
+                <span className="tip" data-tip={why}>
+                  <button
+                    type="button"
+                    className={selectedLlm?.id === r.id ? 'format selected' : 'format'}
+                    disabled={!route}
+                    onClick={() => route && toggleLlm(route)}
+                  >
+                    {name}
+                  </button>
+                </span>
+                {r.caption && <p className="muted note">{r.caption}</p>}
+              </div>
             )
           })}
         </div>

@@ -26,13 +26,16 @@ local-model conversion below, cancelling also stops the file currently convertin
 after its current page and keeps whatever pages already finished as the download;
 for every other conversion, the file already in progress just finishes normally.
 
-The second **Convert to** column ("Scripts use LLMs for conversion.") is for the PDF to
-Markdown conversion that runs on a local model. Pick a PDF, click **MD**, then pick one
-of your Open Source models, listed weakest to strongest. Convert stays disabled until
-you pick one. A model has to be downloaded first (`ollama pull <model>`), and models
-that aren't are greyed out with the pull command on hover. Ollama itself has to be
-running (open the Ollama app or run `ollama serve`). The OpenAI and Claude versions of
-this conversion are CLI only for now, see `llm_pdf_md.py` below.
+The second **Convert to** column ("Scripts use LLMs for conversion.") is for conversions
+that run on a local model, one button per script. It has two **MD** buttons. The first is
+for typed PDFs (`llm_pdf_md.py`). The second, captioned "Used for handwriting, like actual
+writing on paper.", is `llm_md.py`, and it takes JPGs and PDFs. Pick a file, click the
+**MD** button that fits it, then pick one of your Open Source models, listed weakest to
+strongest. Convert stays disabled until you pick one. A model has to be downloaded first
+(`ollama pull <model>`), and models that aren't are greyed out with the pull command on
+hover. Ollama itself has to be running (open the Ollama app or run `ollama serve`). The
+OpenAI and Claude versions of these conversions are CLI only for now, see `llm_pdf_md.py`
+and `llm_md.py` below.
 
 `--app-dir backend` and `--loop asyncio` are both required, the backend won't start
 without them.
@@ -193,9 +196,10 @@ do instead.
 
 ### llm_md.py
 Converts handwritten JPGs and PDFs to Markdown using an LLM (OpenAI, Anthropic's Claude, or a
-local Ollama vision model). It exists because the Tesseract scripts (`jpg_md.py`,
-`pdf_md.py`) can't read handwriting. The prompt asks the model to transcribe the handwriting
-and mark any word it can't read as `[illegible]`.
+local Ollama vision model). It only takes JPG/JPEG and PDF files, and only converts them to
+Markdown. It exists because the Tesseract scripts (`jpg_md.py`, `pdf_md.py`) can't read
+handwriting. The prompt asks the model to transcribe the handwriting and mark any word it
+can't read as `[illegible]`.
 
 **Usage:**
 ```bash

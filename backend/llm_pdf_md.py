@@ -173,7 +173,7 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
     return response.json()["message"]["content"]
 
 
-def _convert_pdf_local(pdf_path: Path, model: str, prompt: str = _PAGE_PROMPT) -> str:
+def _convert_pdf_local(pdf_path: Path, model: str) -> str:
     """Render each page of the PDF to an image and transcribe it with the local Ollama model.
 
     Page by page, like the OpenAI path, since local vision models handle one image far more
@@ -195,7 +195,7 @@ def _convert_pdf_local(pdf_path: Path, model: str, prompt: str = _PAGE_PROMPT) -
         print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
         png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
         image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
-        pages.append(_convert_page_ollama(image_b64, model, prompt))
+        pages.append(_convert_page_ollama(image_b64, model))
     else:
         print(f"\rConverting page {page_count}/{page_count} (100%)")  # only true once every page is actually done
     doc.close()

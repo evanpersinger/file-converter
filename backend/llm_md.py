@@ -1,7 +1,7 @@
 """Convert handwritten JPGs and PDFs in input/ to Markdown in output/ using an LLM.
 
-Exists because Tesseract (jpg_md.py, pdf_md.py) can't read handwriting. OpenAI and Claude need
-OPENAI_API_KEY / ANTHROPIC_API_KEY (env or .env) and cost money, local needs Ollama, free.
+Only takes JPG/JPEG and PDF files, and exists because Tesseract (jpg_md.py, pdf_md.py) can't read
+handwriting. OpenAI and Claude need OPENAI_API_KEY / ANTHROPIC_API_KEY and cost money, local needs Ollama.
 """
 
 import base64
@@ -19,7 +19,6 @@ from llm_pdf_md import (
     LOCAL_RENDER_DPI,
     OLLAMA_HOST,
     _convert_page_ollama,
-    _convert_pdf_local,
     _prompt_for_local_model,
     _prompt_for_provider,
 )
@@ -28,6 +27,12 @@ from llm_pdf_md import (
 script_dir = Path(__file__).resolve().parent
 input_dir = script_dir / "input"   # Folder containing files to convert
 output_dir = script_dir / "output"  # Folder where converted files will be saved
+
+
+# Patched per-request by server.py to check a job's cancel flag; a no-op for the CLI.
+def should_cancel() -> bool:
+    return False
+
 
 _HANDWRITING_PROMPT = (
     "Transcribe the handwriting in this image. Mark any word you cannot read as [illegible]."
@@ -82,6 +87,7 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
     """Render each page of the PDF to an image and transcribe them one at a time.
 
     convert_image takes a base64 image and its media type, and returns the transcription.
+    Stops before the next page when should_cancel() is true, and returns the pages finished.
     """
     doc = fitz.open(pdf_path)
     if doc.is_encrypted and not doc.authenticate(""):
@@ -91,12 +97,18 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
     page_count = doc.page_count
     pages = []
     for i, page in enumerate(doc, start=1):
-        print(f"\rConverting page {i}/{page_count}", end="", flush=True)
+        # Checked before each page rather than mid-page: a page already in flight to the
+        # model can't be interrupted, so this is the earliest safe stopping point.
+        if should_cancel():
+            print(f"\rCancelled after page {i - 1}/{page_count}")
+            break
+        print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
         png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
         image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
         pages.append(convert_image(image_b64, "image/png"))
+    else:
+        print(f"\rConverting page {page_count}/{page_count} (100%)")  # only true once every page is done
     doc.close()
-    print()
 
     return "\n\n".join(pages)
 
@@ -107,14 +119,6 @@ def _convert_file(path: Path, convert_image: Callable[[str, str], str]) -> str:
         return _convert_pdf_pages(path, convert_image)
     image_b64 = base64.standard_b64encode(path.read_bytes()).decode("ascii")
     return convert_image(image_b64, "image/jpeg")
-
-
-def _convert_local(path: Path, model: str) -> str:
-    """Transcribe one JPG or PDF with the local Ollama model."""
-    if path.suffix.lower() == ".pdf":
-        return _convert_pdf_local(path, model, _HANDWRITING_PROMPT)
-    image_b64 = base64.standard_b64encode(path.read_bytes()).decode("ascii")
-    return _convert_page_ollama(image_b64, model, _HANDWRITING_PROMPT)
 
 
 # Shared folder loop
@@ -139,6 +143,8 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
     errors = []
 
     for name in names:
+        if should_cancel():
+            break
         path = input_dir / name
 
         try:
@@ -190,9 +196,11 @@ def convert_handwriting_to_markdown_openai(model: str) -> str:
         return "Error: OPENAI_API_KEY not found. Please add OPENAI_API_KEY to your .env file"
 
     client = OpenAI(api_key=api_key)
-    return _convert_all(
-        lambda path: _convert_file(path, lambda b64, media_type: _image_openai(client, model, b64, media_type))
-    )
+
+    def convert_image(image_b64: str, media_type: str) -> str:
+        return _image_openai(client, model, image_b64, media_type)
+
+    return _convert_all(lambda path: _convert_file(path, convert_image))
 
 
 def convert_handwriting_to_markdown_anthropic(model: str) -> str:
@@ -212,9 +220,11 @@ def convert_handwriting_to_markdown_anthropic(model: str) -> str:
         return "Error: ANTHROPIC_API_KEY not found. Please add ANTHROPIC_API_KEY to your .env file"
 
     client = anthropic.Anthropic()
-    return _convert_all(
-        lambda path: _convert_file(path, lambda b64, media_type: _image_anthropic(client, model, b64, media_type))
-    )
+
+    def convert_image(image_b64: str, media_type: str) -> str:
+        return _image_anthropic(client, model, image_b64, media_type)
+
+    return _convert_all(lambda path: _convert_file(path, convert_image))
 
 
 def convert_handwriting_to_markdown_local(model: str) -> str:
@@ -234,7 +244,10 @@ def convert_handwriting_to_markdown_local(model: str) -> str:
     except requests.exceptions.RequestException:
         return f"Error: Ollama not reachable at {OLLAMA_HOST}. Run `ollama serve` (or open the Ollama app)."
 
-    return _convert_all(lambda path: _convert_local(path, model))
+    def convert_image(image_b64: str, _media_type: str) -> str:
+        return _convert_page_ollama(image_b64, model, _HANDWRITING_PROMPT)
+
+    return _convert_all(lambda path: _convert_file(path, convert_image))
 
 
 if __name__ == "__main__":

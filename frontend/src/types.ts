@@ -6,6 +6,8 @@ export interface Target {
   /** Which part of the UI owns it. Null means the regular "Convert to" list. */
   group: string | null
   note?: string
+  /** A short sentence under its button, for telling apart LLM scripts that make the same format. */
+  caption?: string
 }
 
 /** A conversion the backend knows about but cannot run, and why. */
@@ -14,6 +16,7 @@ export interface Unavailable {
   label: string
   ext: string
   group: string | null
+  caption?: string
   reason: string
   hint?: string
 }
