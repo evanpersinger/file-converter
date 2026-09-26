@@ -26,6 +26,10 @@ local-model conversion below, cancelling also stops the file currently convertin
 after its current page and keeps whatever pages already finished as the download;
 for every other conversion, the file already in progress just finishes normally.
 
+Each picked file and each converted result has a **View** button that opens it in a viewer
+with zoom controls, so you can check a file before converting it or before downloading the
+result. PowerPoint files get their own slide renderer.
+
 The second **Convert to** column ("Scripts use LLMs for conversion.") is for conversions
 that run on a local model, one button per script. It has two **MD** buttons. The first is
 for typed PDFs (`llm_pdf_md.py`). The second, captioned "Used for handwriting, like actual
@@ -939,11 +943,16 @@ converter/
 ├── frontend/               # All TypeScript code (Vite + React)
 │   ├── index.html
 │   └── src/
+│       ├── main.tsx        # Entry point
 │       ├── App.tsx         # The page: both Convert to columns, file picker, convert and combine
+│       ├── FileViewer.tsx  # The View popup, with zoom
 │       ├── ProgressBar.tsx # Progress bar shown while converting
 │       ├── useProgress.ts  # Polls the backend for progress and counts elapsed time
 │       ├── api.ts          # Backend calls
-│       └── types.ts        # Shared types
+│       ├── types.ts        # Shared types
+│       ├── index.css       # Global styles and the tunable UI sizes
+│       └── App.css         # Page layout styles
+├── CONVERSIONS.md          # Conversion chains that produce bad output
 ├── pyproject.toml          # Python package dependencies
 └── .env                    # Store your OpenAI and/or Anthropic API keys here (optional)
 ```
@@ -1053,7 +1062,6 @@ This means you can update your source file and convert it again to get an update
 | R (.R) | R Markdown (.Rmd) | `R_Rmd.py` |
 | R Markdown (.Rmd) | PDF | `Rmd_pdf.py` |
 | Multiple files, one shared extension | Single file | `combine_files.py` |
-| PDF (LLM-powered) | Markdown (.md) | `llm_pdf_md.py` |
 | Handwritten JPG/JPEG or PDF | Markdown (.md), via LLM (OpenAI/Claude/local Ollama) | `llm_md.py` |
 
 ## Flows That Don't Work
