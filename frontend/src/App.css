@@ -92,7 +92,7 @@ h2 {
   padding: 0 1rem;
   font-size: 1.75rem;
   font-weight: 500;
-  border: 3px solid var(--border);
+  border: var(--line-thick) solid var(--border);
   border-radius: 6px;
   text-align: center;
   cursor: pointer;
@@ -117,6 +117,7 @@ h2 {
    the box looking unfinished the rest of the time. */
 .filepicker.dragging {
   border-style: dashed;
+  border-width: var(--line-dashed);
 }
 
 /* Visually hidden rather than display:none, so the input stays keyboard focusable
@@ -201,7 +202,7 @@ h2 {
   font-size: 1.05rem;
   font-family: var(--mono);
   letter-spacing: 0.04em;
-  border-width: 2px;
+  border-width: var(--line-mid);
   border-radius: 4px;
 }
 
@@ -239,12 +240,15 @@ h2 {
   justify-content: center;
   height: 6rem;
   padding: 1rem;
-  border: 2px dashed var(--border);
+  border: var(--line-dashed) dashed var(--border);
   border-radius: 6px;
 }
 
+/* The box is border-box with a fixed height, so the thicker solid border doesn't change
+   its size, it only takes room from the inside. */
 .box.filled {
   border-style: solid;
+  border-width: var(--line-mid);
   border-color: var(--text);
 }
 
@@ -339,7 +343,7 @@ h2 {
   padding: 0 0.4rem;
   font-size: 0.9rem;
   line-height: 1.4;
-  border-width: 1px;
+  border-width: var(--line-thin);
   border-radius: 3px;
   opacity: 0.7;
 }
@@ -352,7 +356,7 @@ h2 {
   flex: none;
   padding: 0.1rem 0.5rem;
   font-size: 0.75rem;
-  border-width: 1px;
+  border-width: var(--line-thin);
   border-radius: 3px;
 }
 
@@ -375,7 +379,7 @@ h2 {
   height: min(40rem, 100%);
   box-sizing: border-box;
   border-radius: 8px;
-  border: 3px solid var(--text);
+  border: var(--line-thick) solid var(--text);
   background: var(--bg);
   overflow: hidden;
 }
@@ -386,7 +390,7 @@ h2 {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.9rem 1.1rem;
-  border-bottom: 2px solid var(--border);
+  border-bottom: var(--line-mid) solid var(--border);
 }
 
 .viewer-title {
@@ -528,7 +532,7 @@ button:disabled {
   padding: 0.35rem 0.5rem;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.85);
-  border: 1px solid var(--border);
+  border: var(--line-thin) solid var(--border);
   color: var(--text);
   font-size: 0.7rem;
   line-height: 1.35;
@@ -578,7 +582,7 @@ button:disabled {
   justify-content: center;
   height: 2.5rem;
   box-sizing: border-box;
-  border: 3px solid var(--text);
+  border: var(--line-thick) solid var(--text);
   border-radius: 6px;
   overflow: hidden;
   font-family: var(--mono);
@@ -620,7 +624,7 @@ button:disabled {
   min-width: 0;
   padding: 0.7rem 1rem;
   border-radius: 6px;
-  border: 3px solid var(--text);
+  border: var(--line-thick) solid var(--text);
   background: var(--text);
   color: var(--bg);
   font-weight: 500;
@@ -640,7 +644,7 @@ button:disabled {
   padding: 0.7rem 0.9rem;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.42);
-  border: 1px solid #ffd98a;
+  border: var(--line-thin) solid #ffd98a;
   font-size: 0.75rem;
   line-height: 1.5;
 }
@@ -652,7 +656,7 @@ button:disabled {
   padding: 0.75rem 1rem;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.42);
-  border: 1px solid #ffc9c0;
+  border: var(--line-thin) solid #ffc9c0;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.85rem;

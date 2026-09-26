@@ -11,6 +11,14 @@
      of punching an opaque hole in it. */
   --shade: rgba(0, 0, 0, 0.28);
 
+  /* Border thicknesses, the one place to make every border thicker or thinner. The
+     dividers between columns are not on this scale, they are 8px on .sidebar. */
+  --line-thin: 3px;
+  --line-mid: 5px;
+  --line-thick: 7px;
+  /* Dashed lines read worse thick, so they have their own, skinnier setting. */
+  --line-dashed: 2px;
+
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
@@ -74,7 +82,7 @@ button {
   font-weight: 500;
   padding: 0.7rem 1rem;
   border-radius: 6px;
-  border: 3px solid var(--text);
+  border: var(--line-thick) solid var(--text);
   background: transparent;
   color: var(--text);
   cursor: pointer;
