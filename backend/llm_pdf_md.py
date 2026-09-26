@@ -6,6 +6,7 @@ cost money. Local path needs Ollama running with a vision model pulled, free.
 
 import base64
 import os
+import re
 import sys
 import time
 from collections.abc import Callable
@@ -27,7 +28,7 @@ output_dir = script_dir / "output"  # Folder where converted files will be saved
 should_cancel: Callable[[], bool] = lambda: False
 
 OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"]  # vision_parse only supports these two for OpenAI
-ANTHROPIC_MODELS = ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
+ANTHROPIC_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-5"]  # weakest first, same as the other menus
 OLLAMA_MODELS = ["qwen3.5:9b", "qwen3.5:4b"]  # vision-capable local models, must be pulled via `ollama pull <model>`
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script completes conversion, overrides Ollama's 5 min default
@@ -203,11 +204,24 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> str:
     return "\n\n".join(pages)
 
 
+_MODEL_SIZE = re.compile(r":(\d+(?:\.\d+)?)b\b", re.IGNORECASE)
+
+
+def model_size(name: str) -> float:
+    """Parameter count in billions read off the tag (`qwen3.5:9b` is 9.0), used as a
+    stand-in for how strong a model is. Infinity when the tag doesn't say."""
+    match = _MODEL_SIZE.search(name)
+    return float(match.group(1)) if match else float("inf")
+
+
 def list_ollama_models() -> list[str]:
-    """Return the names of models currently pulled in the local Ollama installation."""
+    """Return the names of models currently pulled in the local Ollama installation,
+    weakest to strongest by the size in the tag (models with no size last), so the CLI
+    menus and the web UI list them in the same order."""
     response = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
     response.raise_for_status()
-    return [m["name"] for m in response.json().get("models", [])]
+    names = [m["name"] for m in response.json().get("models", [])]
+    return sorted(names, key=lambda name: (model_size(name), name))
 
 
 # Shared folder loop

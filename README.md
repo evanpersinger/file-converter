@@ -150,9 +150,10 @@ your hardware. Expect it to take a while, particularly with Open Source models.
    - Anthropic: `ANTHROPIC_API_KEY=your_api_key_here`
 
 The OpenAI path renders each page to an image and sends it to `gpt-4o-mini` or `gpt-4o`.
-The Claude path sends the PDF itself to `claude-sonnet-5` or `claude-haiku-4-5-20251001`,
-which read PDFs natively (limit 32 MB per file). Pick the model from the no-arg menu, or
-pass it as the second argument, e.g.
+The Claude path sends the PDF itself to `claude-haiku-4-5-20251001` or `claude-sonnet-5`,
+which read PDFs natively (limit 32 MB per file). Pick the model from the no-arg menu, which
+lists models weakest to strongest (the local ones by the size in the tag), or pass it as the
+second argument, e.g.
 `python backend/llm_pdf_md.py anthropic claude-haiku-4-5-20251001`. Both cost money and
 bill the key they use.
 

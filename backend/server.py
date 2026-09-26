@@ -523,16 +523,6 @@ def formats() -> dict:
     }
 
 
-_MODEL_SIZE = re.compile(r":(\d+(?:\.\d+)?)b\b", re.IGNORECASE)
-
-
-def _model_size(name: str) -> float:
-    """Parameter count in billions read off the tag (`qwen3.5:9b` is 9.0), used as a
-    stand-in for how strong a model is. Infinity when the tag doesn't say."""
-    match = _MODEL_SIZE.search(name)
-    return float(match.group(1)) if match else float("inf")
-
-
 @app.get("/api/local-models")
 def local_models() -> dict:
     """Ollama models the UI can offer: the curated vision models, downloaded or not (so
@@ -550,7 +540,7 @@ def local_models() -> dict:
     others = [name for name in installed if name not in curated]
     models = [{"name": name, "installed": name in installed} for name in curated]
     models += [{"name": name, "installed": True} for name in others]
-    return {"models": sorted(models, key=lambda m: (_model_size(m["name"]), m["name"]))}
+    return {"models": sorted(models, key=lambda m: (llm_pdf_md.model_size(m["name"]), m["name"]))}
 
 
 def _error(message: str, hint: str | None = None, status: int = 400) -> JSONResponse:
