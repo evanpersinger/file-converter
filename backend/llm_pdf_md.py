@@ -34,6 +34,7 @@ OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script completes conversion, overrides Ollama's 5 min default
 _MODEL_DISPLAY_NAMES = {"claude-haiku-4-5-20251001": "claude-haiku-4.5"}  # friendlier label for the CLI menu, actual model id is unchanged
 LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
+OLLAMA_PAGE_TIMEOUT_SECONDS = 60  # a page taking longer than this is treated as stuck, not just slow
 
 _DOCUMENT_PROMPT = (
     "Convert this PDF to Markdown. Reproduce the text faithfully and completely, do not "
@@ -167,8 +168,9 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
             "think": False,
             "keep_alive": OLLAMA_KEEP_ALIVE,
         },
-        # Local vision models are slow, especially on CPU. A single page can take a while.
-        timeout=900,
+        # A page that doesn't respond within this window is treated as failed and skipped
+        # by the caller, rather than left to hang.
+        timeout=OLLAMA_PAGE_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
     return response.json()["message"]["content"]
