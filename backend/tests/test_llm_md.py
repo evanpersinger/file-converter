@@ -186,6 +186,28 @@ def test_local_transcribes_a_multi_page_pdf_in_page_order(
     assert [c["messages"][0]["content"] for c in calls] == [llm_md._HANDWRITING_PROMPT] * 2
 
 
+def test_local_saves_the_pages_finished_before_a_later_page_fails(
+    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = sandbox
+    _make_pdf(input_dir / "notes.pdf", pages=3)
+    calls: list[dict] = []
+
+    def fake_post(url, json, timeout):
+        calls.append(json)
+        if len(calls) == 3:
+            raise requests.exceptions.ReadTimeout("timed out")
+        return FakeResponse({"message": {"content": f"Page {len(calls)} content"}})
+
+    monkeypatch.setattr(llm_md.requests, "post", fake_post)
+
+    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+
+    assert (output_dir / "notes.md").read_text(encoding="utf-8") == "Page 1 content\n\nPage 2 content"
+    assert "notes.md" in summary
+    assert "timed out" in summary
+
+
 def test_a_password_protected_pdf_is_reported_as_a_failed_file(
     sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:

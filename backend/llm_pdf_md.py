@@ -168,17 +168,27 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
             "keep_alive": OLLAMA_KEEP_ALIVE,
         },
         # Local vision models are slow, especially on CPU. A single page can take a while.
-        timeout=300,
+        timeout=900,
     )
     response.raise_for_status()
     return response.json()["message"]["content"]
+
+
+class PartialConversionError(Exception):
+    """A page failed partway through a multi-page PDF; carries the pages already transcribed
+    so the caller can save them instead of discarding a partially finished file."""
+
+    def __init__(self, partial_text: str, cause: Exception):
+        self.partial_text = partial_text
+        super().__init__(str(cause))
 
 
 def _convert_pdf_local(pdf_path: Path, model: str) -> str:
     """Render each page of the PDF to an image and transcribe it with the local Ollama model.
 
     Page by page, like the OpenAI path, since local vision models handle one image far more
-    reliably than a whole multi-page document at once.
+    reliably than a whole multi-page document at once. Raises PartialConversionError instead
+    of the original error if a page fails after at least one other page already succeeded.
     """
     doc = fitz.open(pdf_path)
     if doc.is_encrypted and not doc.authenticate(""):
@@ -187,19 +197,26 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> str:
 
     page_count = doc.page_count
     pages = []
-    for i, page in enumerate(doc, start=1):
-        # Checked before each page rather than mid-page: a page already in flight to
-        # Ollama can't be interrupted, so this is the earliest safe stopping point.
-        if should_cancel():
-            print(f"\rCancelled after page {i - 1}/{page_count}")
-            break
-        print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
-        png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
-        image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
-        pages.append(_convert_page_ollama(image_b64, model))
-    else:
-        print(f"\rConverting page {page_count}/{page_count} (100%)")  # only true once every page is actually done
-    doc.close()
+    try:
+        for i, page in enumerate(doc, start=1):
+            # Checked before each page rather than mid-page: a page already in flight to
+            # Ollama can't be interrupted, so this is the earliest safe stopping point.
+            if should_cancel():
+                print(f"\rCancelled after page {i - 1}/{page_count}")
+                break
+            print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
+            png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
+            image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
+            try:
+                pages.append(_convert_page_ollama(image_b64, model))
+            except Exception as e:
+                if pages:
+                    raise PartialConversionError("\n\n".join(pages), e) from e
+                raise
+        else:
+            print(f"\rConverting page {page_count}/{page_count} (100%)")  # only true once every page is actually done
+    finally:
+        doc.close()
 
     return "\n\n".join(pages)
 
@@ -253,26 +270,35 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
         try:
             print(f"Converting {pdf_name} to md")
             full_md = convert_one(pdf_path)
-
-            if not full_md or not full_md.strip():
-                print(f"Failed to convert {pdf_name}")
-                errors.append(f"{pdf_name}: conversion returned no content")
-                continue
-
+        except PartialConversionError as e:
             out_md = f"{pdf_path.stem}.md"
             existed_before = (output_dir / out_md).exists()
-            (output_dir / out_md).write_text(full_md, encoding="utf-8")
-
-            print(f"Converted {pdf_name} to {out_md}")
+            (output_dir / out_md).write_text(e.partial_text, encoding="utf-8")
+            print(f"Partially converted {pdf_name} to {out_md}, then failed: {e}")
             if existed_before:
                 print(f"Overwrote existing file: {out_md}")
             converted.append(out_md)
-
+            errors.append(f"{pdf_name}: {e}")
+            continue
         except Exception as e:
             print(f"Error converting {pdf_name}: {e}")
             print("Tip: If this is an image-based PDF, try converting the original JPG/PNG instead")
             errors.append(f"{pdf_name}: {e}")
             continue
+
+        if not full_md or not full_md.strip():
+            print(f"Failed to convert {pdf_name}")
+            errors.append(f"{pdf_name}: conversion returned no content")
+            continue
+
+        out_md = f"{pdf_path.stem}.md"
+        existed_before = (output_dir / out_md).exists()
+        (output_dir / out_md).write_text(full_md, encoding="utf-8")
+
+        print(f"Converted {pdf_name} to {out_md}")
+        if existed_before:
+            print(f"Overwrote existing file: {out_md}")
+        converted.append(out_md)
 
     if not converted:
         return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"

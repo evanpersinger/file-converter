@@ -120,6 +120,28 @@ def test_local_converts_multi_page_pdf_in_page_order(
     assert len(calls) == 2
 
 
+def test_local_saves_the_pages_finished_before_a_later_page_fails(
+    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = local_sandbox
+    _make_pdf(input_dir / "doc.pdf", pages=3)
+    calls: list[dict] = []
+
+    def fake_post(url, json, timeout):
+        calls.append(json)
+        if len(calls) == 3:
+            raise requests.exceptions.ReadTimeout("timed out")
+        return FakeResponse({"message": {"content": f"Page {len(calls)} content"}})
+
+    monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
+
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+
+    assert (output_dir / "doc.md").read_text(encoding="utf-8") == "Page 1 content\n\nPage 2 content"
+    assert "doc.md" in summary
+    assert "timed out" in summary
+
+
 def test_local_stops_after_the_current_page_when_cancelled(
     local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
