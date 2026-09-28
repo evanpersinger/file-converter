@@ -174,21 +174,15 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
     return response.json()["message"]["content"]
 
 
-class PartialConversionError(Exception):
-    """A page failed partway through a multi-page PDF; carries the pages already transcribed
-    so the caller can save them instead of discarding a partially finished file."""
-
-    def __init__(self, partial_text: str, cause: Exception):
-        self.partial_text = partial_text
-        super().__init__(str(cause))
-
-
-def _convert_pdf_local(pdf_path: Path, model: str) -> str:
+def _convert_pdf_local(pdf_path: Path, model: str) -> tuple[str, list[int], int]:
     """Render each page of the PDF to an image and transcribe it with the local Ollama model.
 
     Page by page, like the OpenAI path, since local vision models handle one image far more
-    reliably than a whole multi-page document at once. Raises PartialConversionError instead
-    of the original error if a page fails after at least one other page already succeeded.
+    reliably than a whole multi-page document at once. A page that fails to convert is
+    replaced with a placeholder instead of failing the whole file, and every skipped page is
+    listed at the top of the returned text.
+
+    Returns (markdown, skipped page numbers, total page count).
     """
     doc = fitz.open(pdf_path)
     if doc.is_encrypted and not doc.authenticate(""):
@@ -197,6 +191,8 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> str:
 
     page_count = doc.page_count
     pages = []
+    skipped = []
+    last_error = None
     try:
         for i, page in enumerate(doc, start=1):
             # Checked before each page rather than mid-page: a page already in flight to
@@ -210,15 +206,24 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> str:
             try:
                 pages.append(_convert_page_ollama(image_b64, model))
             except Exception as e:
-                if pages:
-                    raise PartialConversionError("\n\n".join(pages), e) from e
-                raise
+                print(f"\nSkipping page {i}/{page_count}, failed to convert: {e}")
+                pages.append(f"[page {i} could not be converted: {e}]")
+                skipped.append(i)
+                last_error = e
         else:
             print(f"\rConverting page {page_count}/{page_count} (100%)")  # only true once every page is actually done
     finally:
         doc.close()
 
-    return "\n\n".join(pages)
+    # Every page failed, a placeholder-only file would be useless, report it as a failed
+    # file instead, same as before per-page skipping existed.
+    if pages and len(skipped) == len(pages):
+        raise last_error
+
+    text = "\n\n".join(pages)
+    if skipped:
+        text = f"> Pages skipped, failed to convert: {', '.join(map(str, skipped))}\n\n" + text
+    return text, skipped, page_count
 
 
 _MODEL_SIZE = re.compile(r":(\d+(?:\.\d+)?)b\b", re.IGNORECASE)
@@ -242,10 +247,11 @@ def list_ollama_models() -> list[str]:
 
 
 # Shared folder loop
-def _convert_all(convert_one: Callable[[Path], str]) -> str:
+def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]]) -> str:
     """Run convert_one over every PDF in input_dir and write each result to output_dir.
 
-    convert_one takes a PDF path and returns the full Markdown text for that file.
+    convert_one takes a PDF path and returns (markdown, skipped page numbers, total page
+    count), page count is None when the provider doesn't convert page by page.
     Returns a summary of what was converted, suitable for showing to a caller.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -269,17 +275,7 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
 
         try:
             print(f"Converting {pdf_name} to md")
-            full_md = convert_one(pdf_path)
-        except PartialConversionError as e:
-            out_md = f"{pdf_path.stem}.md"
-            existed_before = (output_dir / out_md).exists()
-            (output_dir / out_md).write_text(e.partial_text, encoding="utf-8")
-            print(f"Partially converted {pdf_name} to {out_md}, then failed: {e}")
-            if existed_before:
-                print(f"Overwrote existing file: {out_md}")
-            converted.append(out_md)
-            errors.append(f"{pdf_name}: {e}")
-            continue
+            full_md, skipped, page_count = convert_one(pdf_path)
         except Exception as e:
             print(f"Error converting {pdf_name}: {e}")
             print("Tip: If this is an image-based PDF, try converting the original JPG/PNG instead")
@@ -295,7 +291,12 @@ def _convert_all(convert_one: Callable[[Path], str]) -> str:
         existed_before = (output_dir / out_md).exists()
         (output_dir / out_md).write_text(full_md, encoding="utf-8")
 
-        print(f"Converted {pdf_name} to {out_md}")
+        if page_count is not None:
+            print(f"Converted {pdf_name} to {out_md} ({page_count - len(skipped)}/{page_count} pages)")
+            if skipped:
+                print(f"  Pages that failed to convert: {', '.join(map(str, skipped))}")
+        else:
+            print(f"Converted {pdf_name} to {out_md}")
         if existed_before:
             print(f"Overwrote existing file: {out_md}")
         converted.append(out_md)
@@ -329,7 +330,7 @@ def convert_pdf_to_markdown_openai(model: str) -> str:
         return "Error: OPENAI_API_KEY not found. Please add OPENAI_API_KEY to your .env file"
 
     parser = _build_parser(api_key, model)
-    return _convert_all(lambda pdf_path: "\n\n".join(convert_with_retry(parser, pdf_path) or []))
+    return _convert_all(lambda pdf_path: ("\n\n".join(convert_with_retry(parser, pdf_path) or []), [], None))
 
 
 def convert_pdf_to_markdown_anthropic(model: str) -> str:
@@ -350,7 +351,7 @@ def convert_pdf_to_markdown_anthropic(model: str) -> str:
         return "Error: ANTHROPIC_API_KEY not found. Please add ANTHROPIC_API_KEY to your .env file"
 
     client = anthropic.Anthropic()
-    return _convert_all(lambda pdf_path: _convert_pdf_anthropic(client, pdf_path, model))
+    return _convert_all(lambda pdf_path: (_convert_pdf_anthropic(client, pdf_path, model), [], None))
 
 
 def convert_pdf_to_markdown_local(model: str) -> str:

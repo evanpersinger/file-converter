@@ -120,7 +120,7 @@ def test_local_converts_multi_page_pdf_in_page_order(
     assert len(calls) == 2
 
 
-def test_local_saves_the_pages_finished_before_a_later_page_fails(
+def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
     local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_dir, output_dir = local_sandbox
@@ -129,7 +129,7 @@ def test_local_saves_the_pages_finished_before_a_later_page_fails(
 
     def fake_post(url, json, timeout):
         calls.append(json)
-        if len(calls) == 3:
+        if len(calls) == 2:
             raise requests.exceptions.ReadTimeout("timed out")
         return FakeResponse({"message": {"content": f"Page {len(calls)} content"}})
 
@@ -137,9 +137,14 @@ def test_local_saves_the_pages_finished_before_a_later_page_fails(
 
     summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
 
-    assert (output_dir / "doc.md").read_text(encoding="utf-8") == "Page 1 content\n\nPage 2 content"
-    assert "doc.md" in summary
-    assert "timed out" in summary
+    markdown = (output_dir / "doc.md").read_text(encoding="utf-8")
+    assert "Pages skipped, failed to convert: 2" in markdown
+    assert "Page 1 content" in markdown
+    assert "Page 3 content" in markdown
+    assert "page 2 could not be converted" in markdown
+    assert "timed out" in markdown
+    assert len(calls) == 3
+    assert "Converted 1 file(s)" in summary
 
 
 def test_local_stops_after_the_current_page_when_cancelled(
