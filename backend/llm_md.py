@@ -198,7 +198,7 @@ def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]
         if attempted is not None:
             print(f"Converted {name} to {out_md} ({attempted - len(skipped)}/{attempted} pages succeeded)")
             if skipped:
-                print(f"  Pages that failed to convert: {', '.join(map(str, skipped))}")
+                print(f"Pages that failed to convert: {', '.join(map(str, skipped))}")
         else:
             print(f"Converted {name} to {out_md}")
         if existed_before:

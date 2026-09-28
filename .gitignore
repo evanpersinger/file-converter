@@ -32,3 +32,6 @@ backend/input/
 backend/output/
 backend/test_files/
 .webui_jobs/
+
+# Personal working notes
+LOCAL_MODEL_NOTES.md
