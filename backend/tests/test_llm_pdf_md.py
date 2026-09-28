@@ -148,7 +148,7 @@ def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
 
 
 def test_local_stops_after_the_current_page_when_cancelled(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
     input_dir, output_dir = local_sandbox
     _make_pdf(input_dir / "doc.pdf", pages=3)
@@ -164,6 +164,10 @@ def test_local_stops_after_the_current_page_when_cancelled(
     monkeypatch.setattr(llm_pdf_md, "should_cancel", lambda: len(calls) >= 1)
 
     summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+
+    # The page count reported must reflect pages actually attempted (1), not the PDF's
+    # full page count (3), a cancelled file isn't "3/3 pages" just because it has 3 pages.
+    assert "(1/1 pages succeeded)" in capsys.readouterr().out
 
     assert len(calls) == 1
     assert (output_dir / "doc.md").read_text(encoding="utf-8") == "Page 1 content"

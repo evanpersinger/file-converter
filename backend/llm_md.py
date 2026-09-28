@@ -94,7 +94,8 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
     A page that fails to convert is replaced with a placeholder instead of failing the whole
     file, and every skipped page is listed at the top of the returned text.
 
-    Returns (markdown, skipped page numbers, total page count).
+    Returns (markdown, skipped page numbers, pages attempted). Pages attempted is less than
+    the PDF's total page count when cancelled early.
     """
     doc = fitz.open(pdf_path)
     if doc.is_encrypted and not doc.authenticate(""):
@@ -135,7 +136,7 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
     text = "\n\n".join(pages)
     if skipped:
         text = f"> Pages skipped, failed to convert: {', '.join(map(str, skipped))}\n\n" + text
-    return text, skipped, page_count
+    return text, skipped, len(pages)
 
 
 def _convert_file(path: Path, convert_image: Callable[[str, str], str]) -> tuple[str, list[int], int | None]:
@@ -179,7 +180,7 @@ def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]
 
         try:
             print(f"Converting {name} to md")
-            text, skipped, page_count = convert_one(path)
+            text, skipped, attempted = convert_one(path)
         except Exception as e:
             print(f"Error converting {name}: {e}")
             errors.append(f"{name}: {e}")
@@ -194,8 +195,8 @@ def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]
         existed_before = (output_dir / out_md).exists()
         (output_dir / out_md).write_text(text, encoding="utf-8")
 
-        if page_count is not None:
-            print(f"Converted {name} to {out_md} ({page_count - len(skipped)}/{page_count} pages)")
+        if attempted is not None:
+            print(f"Converted {name} to {out_md} ({attempted - len(skipped)}/{attempted} pages succeeded)")
             if skipped:
                 print(f"  Pages that failed to convert: {', '.join(map(str, skipped))}")
         else:
