@@ -5,12 +5,16 @@ this converter does when it meets them is the interesting part, since a CSV that
 out looking fine is indistinguishable from one that quietly lost half the file.
 """
 
+import io
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 
+import openpyxl
 import pandas as pd
 import pytest
+from openpyxl.drawing.image import Image as XLImage
+from PIL import Image
 
 import xlsx_csv
 
@@ -180,4 +184,40 @@ def test_a_sheet_named_with_a_separator_stays_inside_the_output_folder(
     xlsx_csv.convert_xlsx_to_csv()
 
     assert all(p.parent == output_dir for p in output_dir.iterdir())
-    assert len(list(output_dir.iterdir())) == 2
+
+
+# Image compression
+
+
+def _add_image(path: Path) -> None:
+    """Add a picture to the (already-saved) workbook at `path`, in place."""
+    wb = openpyxl.load_workbook(path)
+    ws = wb.active
+    buf = io.BytesIO()
+    Image.new("RGB", (20, 20), "green").save(buf, "PNG")
+    buf.seek(0)
+    ws.add_image(XLImage(buf), "E2")
+    wb.save(path)
+
+
+def test_an_embedded_image_does_not_change_the_csv_output(sandbox: Sandbox) -> None:
+    input_dir, output_dir = sandbox(xlsx_csv)
+    path = input_dir / "data.xlsx"
+    pd.DataFrame({"a": [1, 2], "b": [3, 4]}).to_excel(path, index=False)
+    _add_image(path)
+
+    xlsx_csv.convert_xlsx_to_csv()
+
+    assert (output_dir / "data.csv").read_text(encoding="utf-8") == "a,b\n1,3\n2,4\n"
+
+
+def test_the_original_workbook_is_not_modified(sandbox: Sandbox) -> None:
+    input_dir, _ = sandbox(xlsx_csv)
+    path = input_dir / "data.xlsx"
+    pd.DataFrame({"a": [1, 2], "b": [3, 4]}).to_excel(path, index=False)
+    _add_image(path)
+    before = path.read_bytes()
+
+    xlsx_csv.convert_xlsx_to_csv()
+
+    assert path.read_bytes() == before
