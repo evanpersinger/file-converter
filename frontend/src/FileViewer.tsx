@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PptxViewer } from '@aiden0z/pptx-renderer'
+import 'highlight.js/styles/vs2015.css'
 import { extensionOf } from './api'
 
 interface FileViewerProps {
@@ -27,23 +28,33 @@ type PptxStatus =
   | { kind: 'ready' }
   | { kind: 'error'; message: string }
 
+type HeicStatus =
+  | { kind: 'loading' }
+  | { kind: 'ready' }
+  | { kind: 'error'; message: string }
+
 /**
  * Preview a file before it's converted. Images and PDFs render directly, pptx decks are
- * drawn slide by slide in the browser, plain-text formats (csv, txt, sql, R, md, Rmd,
- * ipynb) show as text. Anything else (docx, xlsx, heic, ...) says so rather than showing
- * nothing.
+ * drawn slide by slide in the browser, heic photos are decoded to a JPEG in the browser
+ * first (no browser renders raw HEIC in an <img>), plain-text formats (csv, txt, sql, R,
+ * md, Rmd, ipynb) show as text. Anything else (docx, xlsx, ...) says so rather than
+ * showing nothing.
  */
 export default function FileViewer({ file, onClose }: FileViewerProps) {
   const ext = extensionOf(file.name)
   const isImage = IMAGE_EXTS.includes(ext)
   const isPdf = ext === '.pdf'
   const isPptx = ext === '.pptx'
+  const isHeic = ext === '.heic'
   const isText = TEXT_EXTS.includes(ext)
   const isMarkdown = ext === '.md'
+  const isR = ext === '.r'
 
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
+  const [highlightedR, setHighlightedR] = useState<string | null>(null)
   const [pptxStatus, setPptxStatus] = useState<PptxStatus>({ kind: 'loading' })
+  const [heicStatus, setHeicStatus] = useState<HeicStatus>({ kind: 'loading' })
   const pptxRef = useRef<HTMLDivElement>(null)
   const pptxViewerRef = useRef<PptxViewer | null>(null)
   // Null until the image loads and its natural size is known.
@@ -62,6 +73,43 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
   }, [file, ext, isImage, isPdf])
 
   useEffect(() => {
+    if (!isHeic) return
+    setHeicStatus({ kind: 'loading' })
+    // Cleared up front: without this, a stale url from whatever file was previewed
+    // before this one (already revoked by its own effect's cleanup) would render as
+    // a broken image until the decode below finishes.
+    setUrl(null)
+    let active = true
+    let objectUrl: string | null = null
+
+    async function decode() {
+      try {
+        // Loaded on demand so the WASM HEIC decoder stays out of the initial bundle
+        // for everyone who never previews a heic photo.
+        const heic2any = (await import('heic2any')).default
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg' })
+        const jpeg = Array.isArray(converted) ? converted[0] : converted
+        if (!active) return
+        objectUrl = URL.createObjectURL(jpeg)
+        setUrl(objectUrl)
+        setHeicStatus({ kind: 'ready' })
+      } catch (error) {
+        if (!active) return
+        setHeicStatus({
+          kind: 'error',
+          message: error instanceof Error ? error.message : 'unknown error',
+        })
+      }
+    }
+    void decode()
+
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [file, isHeic])
+
+  useEffect(() => {
     if (!isText) return
     setText(null)
     // A stale read finishing after the file changed must not overwrite the new one.
@@ -73,6 +121,33 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
       active = false
     }
   }, [file, isText])
+
+  useEffect(() => {
+    if (!isR || text === null) {
+      setHighlightedR(null)
+      return
+    }
+    const source = text // re-bound so the closure below sees it as a definite string
+    let active = true
+
+    async function highlight() {
+      // Only the R grammar, not highlight.js's full language bundle, loaded on demand
+      // so it stays out of the initial bundle for everyone who never previews a
+      // script. Registering is cheap, so it's fine to redo on every R file opened.
+      const [{ default: hljs }, { default: r }] = await Promise.all([
+        import('highlight.js/lib/core'),
+        import('highlight.js/lib/languages/r'),
+      ])
+      hljs.registerLanguage('r', r)
+      if (!active) return
+      setHighlightedR(hljs.highlight(source, { language: 'r' }).value)
+    }
+    void highlight()
+
+    return () => {
+      active = false
+    }
+  }, [isR, text])
 
   useEffect(() => {
     const container = pptxRef.current
@@ -160,7 +235,7 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
         <div className="viewer-header">
           <span className="viewer-title" title={file.name}>{file.name}</span>
 
-          {(isImage || isPptx) && zoom !== null && (
+          {(isImage || isHeic || isPptx) && zoom !== null && (
             <div className="viewer-zoom">
               <button
                 type="button"
@@ -190,7 +265,7 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
         </div>
 
         <div className="viewer-body" ref={bodyRef}>
-          {isImage && url && (
+          {(isImage || isHeic) && url && (
             <img
               src={url}
               alt={file.name}
@@ -224,12 +299,19 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
               )}
             </div>
           )}
+          {isHeic && !url && (
+            heicStatus.kind === 'error'
+              ? <p className="muted">Could not preview this photo: {heicStatus.message}</p>
+              : <p className="muted">Loading...</p>
+          )}
           {isText && (
             text === null
               ? <p className="muted">Loading...</p>
-              : <pre className={isMarkdown ? 'markdown' : undefined}>{text}</pre>
+              : isR && highlightedR !== null
+                ? <pre><code className="hljs" dangerouslySetInnerHTML={{ __html: highlightedR }} /></pre>
+                : <pre className={isMarkdown ? 'markdown' : undefined}>{text}</pre>
           )}
-          {!isImage && !isPdf && !isPptx && !isText && (
+          {!isImage && !isPdf && !isPptx && !isHeic && !isText && (
             <p className="muted">No preview available for this file type yet.</p>
           )}
         </div>

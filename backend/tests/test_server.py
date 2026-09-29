@@ -295,7 +295,7 @@ def test_a_local_conversion_returns_partial_output_when_cancelled(
     assert len(calls) == 1
 
 
-_HANDWRITING_CAPTION = "Used for handwriting, like actual writing on paper."
+_HANDWRITING_CAPTION = "Used for converting pictures of handwriting."
 
 
 @pytest.mark.parametrize("ext", [".jpg", ".jpeg", ".pdf"])

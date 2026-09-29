@@ -371,7 +371,7 @@ REGISTRY: list[Conversion] = [
                    llm_md,
                    lambda s, model: llm_md.convert_handwriting_to_markdown_local(model)),
                requires=("ollama",), takes_model=True, group="llm",
-               caption="Used for handwriting, like actual writing on paper.",
+               caption="Used for converting pictures of handwriting.",
                note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first."),
 
     # --- office --------------------------------------------------------------

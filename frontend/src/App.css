@@ -508,6 +508,13 @@ h2 {
   padding: 1.5rem;
 }
 
+/* highlight.js's vs2015 theme (imported in FileViewer.tsx) supplies the dark
+   background and token colors on .hljs itself; this just rounds the corners to
+   match the markdown preview's box treatment. */
+.viewer-body pre:has(code.hljs) {
+  border-radius: 4px;
+}
+
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
