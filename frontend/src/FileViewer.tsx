@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { PptxViewer } from '@aiden0z/pptx-renderer'
 import 'highlight.js/styles/vs2015.css'
 import { extensionOf } from './api'
+import { highlightCode, parseNotebook } from './notebook'
+import type { ParsedNotebook } from './notebook'
 
 interface FileViewerProps {
   file: File
@@ -49,10 +51,15 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
   const isText = TEXT_EXTS.includes(ext)
   const isMarkdown = ext === '.md'
   const isR = ext === '.r'
+  const isIpynb = ext === '.ipynb'
 
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
   const [highlightedR, setHighlightedR] = useState<string | null>(null)
+  const [notebook, setNotebook] = useState<ParsedNotebook | null>(null)
+  // Highlighted HTML for a notebook's code cells, keyed by cell index. A cell missing
+  // here (unsupported language, or not code) just renders as plain text.
+  const [highlightedCells, setHighlightedCells] = useState<Record<number, string>>({})
   const [pptxStatus, setPptxStatus] = useState<PptxStatus>({ kind: 'loading' })
   const [heicStatus, setHeicStatus] = useState<HeicStatus>({ kind: 'loading' })
   const pptxRef = useRef<HTMLDivElement>(null)
@@ -129,25 +136,48 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
     }
     const source = text // re-bound so the closure below sees it as a definite string
     let active = true
-
-    async function highlight() {
-      // Only the R grammar, not highlight.js's full language bundle, loaded on demand
-      // so it stays out of the initial bundle for everyone who never previews a
-      // script. Registering is cheap, so it's fine to redo on every R file opened.
-      const [{ default: hljs }, { default: r }] = await Promise.all([
-        import('highlight.js/lib/core'),
-        import('highlight.js/lib/languages/r'),
-      ])
-      hljs.registerLanguage('r', r)
-      if (!active) return
-      setHighlightedR(hljs.highlight(source, { language: 'r' }).value)
-    }
-    void highlight()
-
+    highlightCode(source, 'r').then((html) => {
+      if (active) setHighlightedR(html)
+    })
     return () => {
       active = false
     }
   }, [isR, text])
+
+  useEffect(() => {
+    if (!isIpynb || text === null) {
+      setNotebook(null)
+      return
+    }
+    setNotebook(parseNotebook(text))
+  }, [isIpynb, text])
+
+  useEffect(() => {
+    if (!notebook) {
+      setHighlightedCells({})
+      return
+    }
+    const { cells, language } = notebook // re-bound, same reason as `source` above
+    let active = true
+
+    async function highlightCells() {
+      const entries = await Promise.all(
+        cells.map(async (cell, index) => {
+          if (cell.type !== 'code') return null
+          const html = await highlightCode(cell.source, language)
+          return html ? ([index, html] as const) : null
+        }),
+      )
+      if (!active) return
+      const found = entries.filter((entry): entry is readonly [number, string] => entry !== null)
+      setHighlightedCells(Object.fromEntries(found))
+    }
+    void highlightCells()
+
+    return () => {
+      active = false
+    }
+  }, [notebook])
 
   useEffect(() => {
     const container = pptxRef.current
@@ -307,15 +337,52 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
           {isText && (
             text === null
               ? <p className="muted">Loading...</p>
-              : isR && highlightedR !== null
-                ? <pre><code className="hljs" dangerouslySetInnerHTML={{ __html: highlightedR }} /></pre>
-                : <pre className={isMarkdown ? 'markdown' : undefined}>{text}</pre>
+              : isIpynb
+                ? (
+                  notebook
+                    ? <Notebook notebook={notebook} highlightedCells={highlightedCells} />
+                    : <pre>{text}</pre>
+                )
+                : isR && highlightedR !== null
+                  ? <pre><code className="hljs" dangerouslySetInnerHTML={{ __html: highlightedR }} /></pre>
+                  : <pre className={isMarkdown ? 'markdown' : undefined}>{text}</pre>
           )}
           {!isImage && !isPdf && !isPptx && !isHeic && !isText && (
             <p className="muted">No preview available for this file type yet</p>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function Notebook({
+  notebook,
+  highlightedCells,
+}: {
+  notebook: ParsedNotebook
+  highlightedCells: Record<number, string>
+}) {
+  return (
+    <div className="notebook">
+      {notebook.cells.map((cell, index) => (
+        // nbformat gives cells no stable id, and this list is only ever replaced
+        // wholesale (a new file parsed), never reordered in place.
+        <div key={index} className={`nb-cell nb-${cell.type}`}>
+          {cell.type === 'code' && cell.executionCount !== null && (
+            <span className="nb-label">In [{cell.executionCount}]:</span>
+          )}
+          {cell.type === 'code' && highlightedCells[index] !== undefined
+            ? <pre><code className="hljs" dangerouslySetInnerHTML={{ __html: highlightedCells[index] }} /></pre>
+            : <pre>{cell.source}</pre>}
+          {cell.outputs.map((output, outputIndex) => (
+            <div key={outputIndex} className={`nb-output nb-output-${output.kind}`}>
+              {output.kind === 'image' && output.imageUrl && <img src={output.imageUrl} alt="cell output" />}
+              {output.kind !== 'image' && output.text && <pre>{output.text}</pre>}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
