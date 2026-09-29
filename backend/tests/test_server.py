@@ -330,19 +330,6 @@ def test_a_local_conversion_reports_what_happened_to_each_page_in_plain_sentence
     ]
 
 
-def test_a_conversion_that_is_not_an_llm_route_sends_no_log(
-    client: TestClient, jobs_root: Path
-) -> None:
-    response = client.post(
-        "/api/convert",
-        data={"target": "csv->xlsx"},
-        files={"file": ("a.csv", b"a,b\n1,2\n")},
-    )
-
-    assert response.status_code == 200
-    assert "X-Conversion-Log" not in response.headers
-
-
 _HANDWRITING_CAPTION = "Used for converting pictures of handwriting"
 
 

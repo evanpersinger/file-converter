@@ -27,6 +27,8 @@ interface Result {
 interface LogEntry {
   id: string
   fileName: string
+  // The name of the format it became (Markdown, PDF), null when the conversion failed.
+  convertedTo: string | null
   lines: string[]
   // A whole-file failure, drawn like the red error block instead of a plain note.
   failed: boolean
@@ -285,12 +287,13 @@ export default function App() {
     const failures: string[] = []
     cancelledBatch.current = false
     localModelRun.current = selectedLlm !== null
-    if (selectedLlm) setConversionLog([])
+    setConversionLog([])
 
-    const addLog = (fileName: string, lines: string[], failed: boolean) => {
-      if (selectedLlm && lines.length > 0) {
-        setConversionLog((current) => [...current, { id: crypto.randomUUID(), fileName, lines, failed }])
-      }
+    const addLog = (fileName: string, convertedTo: string | null, lines: string[]) => {
+      setConversionLog((current) => [
+        ...current,
+        { id: crypto.randomUUID(), fileName, convertedTo, lines, failed: convertedTo === null },
+      ])
     }
 
     for (const [index, file] of files.entries()) {
@@ -304,12 +307,14 @@ export default function App() {
       try {
         const { blob, filename, log } = await convert(file, targetId, selectedLlm ? model : null, id, controller.signal)
         downloads.push({ url: URL.createObjectURL(blob), filename, blob })
-        addLog(file.name, log, false)
+        const outExt = extensionOf(filename)
+        const formatName = formats?.allFormats.find((f) => f.ext === outExt)?.name ?? outExt.slice(1).toUpperCase()
+        addLog(file.name, formatName || filename, log)
       } catch (e) {
         // A cancelled file is meant to disappear, not show up as a failure.
         if (!(e instanceof DOMException && e.name === 'AbortError')) {
           failures.push(`${file.name}: ${(e as Error).message}`)
-          addLog(file.name, [(e as Error).message], true)
+          addLog(file.name, null, [(e as Error).message])
         }
       }
     }
@@ -406,10 +411,10 @@ export default function App() {
             const why = route
               ? undefined
               : files.length === 0
-                ? 'Add a file to see which LLM scripts can convert it'
+                ? 'Add a file to see what file type it can be converted to'
                 : dep
                   ? blockedReason(dep)
-                  : `This script does not take ${ext || 'this kind of'} files`
+                  : `Cannot convert ${ext || 'this file'} to ${name}`
 
             return (
               <div key={r.id} className="llm-route">
@@ -679,6 +684,7 @@ export default function App() {
         {conversionLog.map((entry) => (
           <div key={entry.id} className={entry.failed ? 'log-entry failed' : 'log-entry'}>
             <p className="log-file" title={entry.fileName}>{entry.fileName}</p>
+            {entry.convertedTo && <p className="muted">Converted to {entry.convertedTo}</p>}
             {entry.lines.map((line, i) => (
               <p key={`${entry.id}-${i}`} className="muted">{line}</p>
             ))}

@@ -584,7 +584,6 @@ _PAGE_PROGRESS = re.compile(r"Converting page \d+/\d+ \((\d+)%\)")
 _SKIPPED_PAGE = re.compile(r"Skipping page (\d+)/(\d+), failed to convert: (.*)")
 _CANCELLED_AT = re.compile(r"Cancelled after page (\d+)/(\d+)")
 _PAGES_SUCCEEDED = re.compile(r"Converted .+ \((\d+)/(\d+) pages succeeded\)")
-_CONVERTED_ONE = re.compile(r"Converted \S+ to \S+$")
 
 # Longest a single reason can be in the log, so a huge exception message can't blow past
 # the size limit on a response header.
@@ -605,8 +604,6 @@ def _plain_log(output: str) -> list[str]:
             lines.append(f"Cancelled after page {match[1]} of {match[2]}.")
         elif match := _PAGES_SUCCEEDED.search(raw):
             lines.append(f"{match[1]} of {match[2]} pages converted.")
-        elif _CONVERTED_ONE.search(raw):
-            lines.append("The file was converted.")
     return lines
 
 
@@ -750,11 +747,11 @@ def convert(
             filename = f"{stem}.zip"
             media_type = "application/zip"
 
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-    if conv.takes_model:
-        # The LLM routes only: their output says which pages failed and why. JSON keeps the
-        # header plain ASCII whatever the error text contains.
-        headers["X-Conversion-Log"] = json.dumps(_plain_log(captured.getvalue()))
+    # JSON keeps the header plain ASCII whatever the error text contains.
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Conversion-Log": json.dumps(_plain_log(captured.getvalue())),
+    }
 
     return Response(content=payload, media_type=media_type, headers=headers)
 

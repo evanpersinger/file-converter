@@ -80,7 +80,13 @@
 }
 
 .log-entry {
-  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: var(--line-dashed) solid var(--border);
+}
+
+.log-entry:last-child {
+  border-bottom: none;
 }
 
 .log-entry p {
