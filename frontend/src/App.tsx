@@ -340,7 +340,7 @@ export default function App() {
                 ? 'Add a file to see what file type it can be converted to'
                 : dep
                   ? blockedReason(dep)
-                  : `Cannot convert ${ext || 'this file'} to ${f.name}.`
+                  : `Cannot convert ${ext || 'this file'} to ${f.name}`
 
             return (
               <span key={f.ext} className="tip" data-tip={why}>
@@ -358,7 +358,7 @@ export default function App() {
         </div>
 
         {files.length > 0 && targets.length === 0 && (
-          <p className="muted">Nothing can convert {ext || 'this file'} yet.</p>
+          <p className="muted">Nothing can convert {ext || 'this file'} yet</p>
         )}
 
         {variants.map((v) => (
@@ -375,7 +375,7 @@ export default function App() {
 
       <aside className="sidebar llm-panel">
         <h2>Convert to</h2>
-        <p className="muted subtitle">Scripts use LLMs for conversion.</p>
+        <p className="muted subtitle">Scripts use LLMs for conversion</p>
 
         <div className="llm-routes">
           {llmRoutes.map((r) => {
@@ -388,7 +388,7 @@ export default function App() {
                 ? 'Add a file to see which LLM scripts can convert it'
                 : dep
                   ? blockedReason(dep)
-                  : `This script does not take ${ext || 'this kind of'} files.`
+                  : `This script does not take ${ext || 'this kind of'} files`
 
             return (
               <div key={r.id} className="llm-route">
@@ -419,7 +419,7 @@ export default function App() {
             )}
 
             {localModels && localModels.length > 0 && !localModels.some((m) => m.installed) && (
-              <p className="muted">Nothing downloaded yet. Hover a model to see how to get it.</p>
+              <p className="muted">Nothing downloaded yet. Hover a model to see how to get it</p>
             )}
 
             {localModels?.map((m) => (
@@ -519,14 +519,14 @@ export default function App() {
             This file is named <code>{mismatch.named}</code> but its contents are
             actually <code>{mismatch.actual}</code>. The conversions offered are the
             ones for <code>{mismatch.named}</code>, so they will likely fail or give
-            you garbage. Renaming it to <code>{mismatch.actual}</code> will fix it.
+            you garbage. Renaming it to <code>{mismatch.actual}</code> will fix it
           </p>
         )}
 
         {mixedExtensions && (
           <p className="warning">
             Converting and combining both need every file to be the same format,
-            and these are {distinctExts.join(', ')}. Remove the odd ones out.
+            and these are {distinctExts.join(', ')}. Remove the odd ones out
           </p>
         )}
 

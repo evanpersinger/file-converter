@@ -312,7 +312,7 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
                 : <pre className={isMarkdown ? 'markdown' : undefined}>{text}</pre>
           )}
           {!isImage && !isPdf && !isPptx && !isHeic && !isText && (
-            <p className="muted">No preview available for this file type yet.</p>
+            <p className="muted">No preview available for this file type yet</p>
           )}
         </div>
       </div>

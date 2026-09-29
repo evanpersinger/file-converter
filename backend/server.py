@@ -336,7 +336,7 @@ REGISTRY: list[Conversion] = [
                via_globals(csv_xlsx, lambda s: csv_xlsx.convert_csv_to_xlsx())),
     Conversion((".xlsx",), "xlsx->csv", "CSV", ".csv",
                via_globals(xlsx_csv, lambda s: xlsx_csv.convert_xlsx_to_csv()),
-               note="One CSV per sheet. Multi-sheet workbooks come back as a zip."),
+               note="One CSV per sheet. Multi-sheet workbooks come back as a zip"),
 
     # --- PDF -----------------------------------------------------------------
     Conversion((".pdf",), "pdf->md", "Markdown", ".md",
@@ -344,35 +344,35 @@ REGISTRY: list[Conversion] = [
                requires=("tesseract",)),
     Conversion((".pdf",), "pdf->png", "PNG", ".png",
                via_globals(pdf_png, lambda s: pdf_png.convert_pdf_to_png()),
-               note="One PNG per page. Multi-page PDFs come back as a zip."),
+               note="One PNG per page. Multi-page PDFs come back as a zip"),
     Conversion((".pdf",), "pdf->md-ai", "Markdown (LLM: OpenAI, costs money)", ".md",
                via_dir_globals_model(
                    llm_pdf_md,
                    lambda s, model: llm_pdf_md.convert_pdf_to_markdown_openai(model)),
                requires=("openai_key",), takes_model=True,
                model_names=tuple(llm_pdf_md.OPENAI_MODELS), group="llm-cloud",
-               note="Sends the PDF to OpenAI's Vision API. Slower, and it bills your key."),
+               note="Sends the PDF to OpenAI's Vision API. Slower, and it bills your key"),
     Conversion((".pdf",), "pdf->md-claude", "Markdown (LLM: Claude, costs money)", ".md",
                via_dir_globals_model(
                    llm_pdf_md,
                    lambda s, model: llm_pdf_md.convert_pdf_to_markdown_anthropic(model)),
                requires=("anthropic_key",), takes_model=True,
                model_names=tuple(llm_pdf_md.ANTHROPIC_MODELS), group="llm-cloud",
-               note="Sends the PDF to Anthropic's Claude. Slower, and it bills your key."),
+               note="Sends the PDF to Anthropic's Claude. Slower, and it bills your key"),
     Conversion((".pdf",), "pdf->md-local", "Markdown (Open Source model, free)", ".md",
                via_dir_globals_model(
                    llm_pdf_md,
                    lambda s, model: llm_pdf_md.convert_pdf_to_markdown_local(model)),
                requires=("ollama",), takes_model=True, group="llm",
-               note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first."),
+               note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first"),
     # The one LLM conversion that takes more than PDFs: llm_md reads handwriting from JPGs and PDFs.
     Conversion((".jpg", ".jpeg", ".pdf"), "handwriting->md", "Markdown (handwriting, Open Source model, free)", ".md",
                via_dir_globals_model(
                    llm_md,
                    lambda s, model: llm_md.convert_handwriting_to_markdown_local(model)),
                requires=("ollama",), takes_model=True, group="llm",
-               caption="Used for converting pictures of handwriting.",
-               note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first."),
+               caption="Used for converting pictures of handwriting",
+               note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first"),
 
     # --- office --------------------------------------------------------------
     Conversion((".pptx",), "pptx->md", "Markdown", ".md",
@@ -383,7 +383,7 @@ REGISTRY: list[Conversion] = [
     Conversion((".docx",), "docx->md", "Markdown", ".md",
                via_globals(docx_md, lambda s: docx_md.convert_docx_to_markdown()),
                requires=("pandoc",),
-               note="Documents with images come back as a zip, with the images in a folder."),
+               note="Documents with images come back as a zip, with the images in a folder"),
     Conversion((".docx",), "docx->pdf", "PDF", ".pdf",
                via_params(lambda s, i, o: docx_pdf.convert_docx_to_pdf(
                    str(s), None, input_dir=str(i), output_dir=str(o)))),
@@ -425,7 +425,7 @@ REGISTRY: list[Conversion] = [
                    ss_txt,
                    lambda s: ss_txt.convert_screenshots_to_text(structured=True)),
                requires=("tesseract",),
-               note="Slower. Uses table detection, better for grids and columns."),
+               note="Slower. Uses table detection, better for grids and columns"),
 
     # --- text / markup / code ------------------------------------------------
     Conversion((".md",), "md->pdf", "PDF", ".pdf",
