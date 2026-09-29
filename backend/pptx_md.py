@@ -4,11 +4,21 @@ For each .pptx in input/, walks every slide with python-pptx, adds a `## Slide N
 heading, promotes large-font text to subheadings, and writes the text to output/.
 """
 
+import io
 import os
 import re
 import glob
+import shutil
+import tempfile
+from pathlib import Path
+
 from pptx import Presentation
 from pptx.shapes.group import GroupShape
+
+import compress
+
+# Where python-pptx keeps embedded pictures inside the .pptx zip.
+_MEDIA_PREFIX = "ppt/media/"
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -129,6 +139,26 @@ def extract_text_from_pptx(pptx_file):
     return ''.join(markdown_content)
 
 
+def _extract_with_compression(pptx_file: str) -> str:
+    """Extract text from `pptx_file`, compressing a throwaway copy first when it has
+    images worth downscaling, so a large deck is cheaper to load. The real file in
+    input/ is never modified: compression runs on a temp copy, which is discarded
+    after extraction either way.
+    """
+    path = Path(pptx_file)
+    if not compress.has_compressible_media(path, _MEDIA_PREFIX):
+        return extract_text_from_pptx(pptx_file)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        staged = Path(tmp) / path.name
+        shutil.copyfile(path, staged)
+        compress.compress_office_zip(
+            staged, _MEDIA_PREFIX,
+            sanity_check=lambda payload: Presentation(io.BytesIO(payload)),
+        )
+        return extract_text_from_pptx(str(staged))
+
+
 def convert_pptx_to_markdown() -> str:
     """Convert all PPTX files in the input folder to Markdown files in the output folder.
 
@@ -162,7 +192,7 @@ def convert_pptx_to_markdown() -> str:
             print(f"Converting {os.path.basename(pptx_file)} to md")
 
             # Extract text and format as markdown
-            markdown_content = extract_text_from_pptx(pptx_file)
+            markdown_content = _extract_with_compression(pptx_file)
 
             # Write to markdown file
             existed_before = os.path.exists(md_file)
@@ -177,6 +207,8 @@ def convert_pptx_to_markdown() -> str:
         except Exception as e:
             print(f"Error converting {pptx_file}: {str(e)}")
             errors.append(f"{os.path.basename(pptx_file)}: {e}")
+
+        print()
 
     if not converted:
         return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
