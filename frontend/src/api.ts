@@ -36,6 +36,8 @@ export async function detect(file: File): Promise<Detection> {
 export interface Converted {
   blob: Blob
   filename: string
+  // Plain sentences about what happened to the file, empty when the route sends none.
+  log: string[]
 }
 
 export async function convert(
@@ -65,6 +67,7 @@ export async function convert(
   return {
     blob: await response.blob(),
     filename: filenameFrom(response.headers.get('Content-Disposition')),
+    log: logFrom(response.headers.get('X-Conversion-Log')),
   }
 }
 
@@ -104,6 +107,7 @@ export async function combine(files: File[]): Promise<Converted> {
   return {
     blob: await response.blob(),
     filename: filenameFrom(response.headers.get('Content-Disposition')),
+    log: [],
   }
 }
 
@@ -125,6 +129,17 @@ async function errorMessage(response: Response, fallback: string): Promise<strin
 function filenameFrom(disposition: string | null): string {
   const match = disposition?.match(/filename="(.+?)"/)
   return match ? match[1] : 'converted'
+}
+
+/** The sentences in the `X-Conversion-Log` header (a JSON list), or [] when it is missing or unreadable. */
+function logFrom(header: string | null): string[] {
+  if (!header) return []
+  try {
+    const lines: unknown = JSON.parse(header)
+    return Array.isArray(lines) ? lines.filter((line): line is string => typeof line === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 /** Extension of a filename, lowercased and including the dot. "" if there is none. */

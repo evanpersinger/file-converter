@@ -181,8 +181,8 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> tuple[str, list[int], int]
 
     Page by page, like the OpenAI path, since local vision models handle one image far more
     reliably than a whole multi-page document at once. A page that fails to convert is
-    replaced with a placeholder instead of failing the whole file, and every skipped page is
-    listed at the top of the returned text.
+    left out of the returned text instead of failing the whole file, nothing about the
+    failure is written into the markdown, it's only reported through the returned list.
 
     Returns (markdown, skipped page numbers, pages attempted). Pages attempted is less than
     the PDF's total page count when cancelled early.
@@ -195,6 +195,7 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> tuple[str, list[int], int]
     page_count = doc.page_count
     pages = []
     skipped = []
+    attempted = 0
     last_error = None
     try:
         for i, page in enumerate(doc, start=1):
@@ -206,11 +207,11 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> tuple[str, list[int], int]
             print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
             png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
             image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
+            attempted += 1
             try:
                 pages.append(_convert_page_ollama(image_b64, model))
             except Exception as e:
                 print(f"\nSkipping page {i}/{page_count}, failed to convert: {e}")
-                pages.append(f"[page {i} could not be converted: {e}]")
                 skipped.append(i)
                 last_error = e
         else:
@@ -218,15 +219,11 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> tuple[str, list[int], int]
     finally:
         doc.close()
 
-    # Every page failed, a placeholder-only file would be useless, report it as a failed
-    # file instead, same as before per-page skipping existed.
-    if pages and len(skipped) == len(pages):
+    # Every page failed, an empty file would be useless, report it as a failed file instead.
+    if attempted and len(skipped) == attempted:
         raise last_error
 
-    text = "\n\n".join(pages)
-    if skipped:
-        text = f"> Pages skipped, failed to convert: {', '.join(map(str, skipped))}\n\n" + text
-    return text, skipped, len(pages)
+    return "\n\n".join(pages), skipped, attempted
 
 
 _MODEL_SIZE = re.compile(r":(\d+(?:\.\d+)?)b\b", re.IGNORECASE)

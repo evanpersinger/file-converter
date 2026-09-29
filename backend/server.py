@@ -11,6 +11,7 @@ Run: uv run uvicorn server:app --app-dir backend --reload --port 8019 --loop asy
 from __future__ import annotations
 
 import io
+import json
 import os
 import re
 import shutil
@@ -580,6 +581,34 @@ def _model_problem(conv: Conversion, model: str | None) -> JSONResponse | None:
 
 _PAGE_PROGRESS = re.compile(r"Converting page \d+/\d+ \((\d+)%\)")
 
+_SKIPPED_PAGE = re.compile(r"Skipping page (\d+)/(\d+), failed to convert: (.*)")
+_CANCELLED_AT = re.compile(r"Cancelled after page (\d+)/(\d+)")
+_PAGES_SUCCEEDED = re.compile(r"Converted .+ \((\d+)/(\d+) pages succeeded\)")
+_CONVERTED_ONE = re.compile(r"Converted \S+ to \S+$")
+
+# Longest a single reason can be in the log, so a huge exception message can't blow past
+# the size limit on a response header.
+_LOG_LINE_MAX = 200
+
+
+def _plain_log(output: str) -> list[str]:
+    """The lines of a converter's printed output that tell the user what happened to their
+    file, reworded as plain sentences: which pages failed and why, how many pages made it,
+    and where a cancel stopped. The progress lines are left out, the progress bar already
+    shows those."""
+    lines = []
+    for raw in re.split(r"[\r\n]+", output):
+        if match := _SKIPPED_PAGE.search(raw):
+            reason = match[3][:_LOG_LINE_MAX]
+            lines.append(f"Page {match[1]} of {match[2]} could not be converted: {reason}")
+        elif match := _CANCELLED_AT.search(raw):
+            lines.append(f"Cancelled after page {match[1]} of {match[2]}.")
+        elif match := _PAGES_SUCCEEDED.search(raw):
+            lines.append(f"{match[1]} of {match[2]} pages converted.")
+        elif _CONVERTED_ONE.search(raw):
+            lines.append("The file was converted.")
+    return lines
+
 
 def _latest_percent(output: str) -> int | None:
     """The last percentage a converter printed (`Converting page 3/12 (25%)`), or None."""
@@ -721,11 +750,13 @@ def convert(
             filename = f"{stem}.zip"
             media_type = "application/zip"
 
-    return Response(
-        content=payload,
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    if conv.takes_model:
+        # The LLM routes only: their output says which pages failed and why. JSON keeps the
+        # header plain ASCII whatever the error text contains.
+        headers["X-Conversion-Log"] = json.dumps(_plain_log(captured.getvalue()))
+
+    return Response(content=payload, media_type=media_type, headers=headers)
 
 
 @app.post("/api/combine")

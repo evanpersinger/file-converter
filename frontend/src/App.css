@@ -7,7 +7,7 @@
   align-items: stretch;
   gap: 2.5rem;
   min-height: 100vh;
-  max-width: 76rem;
+  max-width: 93rem;
   margin: 0 auto;
   padding: 0 2rem;
 }
@@ -63,6 +63,44 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Far-right column for the LLM scripts: what happened to each file. Mirrors the sidebars,
+   with the divider on its left instead. */
+.log-panel {
+  flex: none;
+  box-sizing: border-box;
+  width: 15rem;
+  padding: 2.5rem 0 2.5rem 1.5rem;
+  border-left: 8px solid var(--text);
+}
+
+.log-panel h2 {
+  font-size: 1.5rem;
+}
+
+.log-entry {
+  margin-bottom: 1.25rem;
+}
+
+.log-entry p {
+  margin: 0 0 0.3rem;
+  overflow-wrap: anywhere;
+}
+
+.log-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* A file that failed outright gets the same dark panel as the error block. */
+.log-entry.failed {
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.42);
+  border: var(--line-thin) solid #ffc9c0;
 }
 
 main {

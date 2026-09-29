@@ -204,11 +204,7 @@ def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
     summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
 
     markdown = (output_dir / "notes.md").read_text(encoding="utf-8")
-    assert "Pages skipped, failed to convert: 2" in markdown
-    assert "Page 1 content" in markdown
-    assert "Page 3 content" in markdown
-    assert "page 2 could not be converted" in markdown
-    assert "timed out" in markdown
+    assert markdown == "Page 1 content\n\nPage 3 content"
     assert len(calls) == 3
     assert "Converted 1 file(s)" in summary
 

@@ -23,6 +23,15 @@ interface Result {
   downloads: Download[]
 }
 
+// What the far-right panel says about one file of the latest LLM conversion.
+interface LogEntry {
+  id: string
+  fileName: string
+  lines: string[]
+  // A whole-file failure, drawn like the red error block instead of a plain note.
+  failed: boolean
+}
+
 // Different spellings of one format. Kept in step with SUFFIX_ALIASES in
 // combine_files.py, so the button enables exactly when the backend would accept.
 const EXT_ALIASES: Record<string, string> = {
@@ -72,6 +81,9 @@ export default function App() {
   // True once Cancel has been clicked for the current job, so the button can't be
   // clicked twice while the backend is still winding the job down.
   const [cancelling, setCancelling] = useState(false)
+  // The sentences about the latest LLM conversion, one entry per file. It stays up while the
+  // files sit there and is replaced when the next LLM conversion starts.
+  const [conversionLog, setConversionLog] = useState<LogEntry[]>([])
   const { percent, elapsed } = useProgress(jobId)
   // Which file the newest detect() call was for. Adding a second file while the
   // first check is in flight would otherwise let the stale answer win.
@@ -273,6 +285,13 @@ export default function App() {
     const failures: string[] = []
     cancelledBatch.current = false
     localModelRun.current = selectedLlm !== null
+    if (selectedLlm) setConversionLog([])
+
+    const addLog = (fileName: string, lines: string[], failed: boolean) => {
+      if (selectedLlm && lines.length > 0) {
+        setConversionLog((current) => [...current, { id: crypto.randomUUID(), fileName, lines, failed }])
+      }
+    }
 
     for (const [index, file] of files.entries()) {
       if (cancelledBatch.current) break
@@ -283,12 +302,14 @@ export default function App() {
       setJobId(id)
       setCancelling(false)
       try {
-        const { blob, filename } = await convert(file, targetId, selectedLlm ? model : null, id, controller.signal)
+        const { blob, filename, log } = await convert(file, targetId, selectedLlm ? model : null, id, controller.signal)
         downloads.push({ url: URL.createObjectURL(blob), filename, blob })
+        addLog(file.name, log, false)
       } catch (e) {
         // A cancelled file is meant to disappear, not show up as a failure.
         if (!(e instanceof DOMException && e.name === 'AbortError')) {
           failures.push(`${file.name}: ${(e as Error).message}`)
+          addLog(file.name, [(e as Error).message], true)
         }
       }
     }
@@ -651,6 +672,19 @@ export default function App() {
 
         {status.kind === 'error' && <pre className="error">{status.message}</pre>}
       </main>
+
+      <aside className="log-panel">
+        <h2>Result</h2>
+
+        {conversionLog.map((entry) => (
+          <div key={entry.id} className={entry.failed ? 'log-entry failed' : 'log-entry'}>
+            <p className="log-file" title={entry.fileName}>{entry.fileName}</p>
+            {entry.lines.map((line, i) => (
+              <p key={`${entry.id}-${i}`} className="muted">{line}</p>
+            ))}
+          </div>
+        ))}
+      </aside>
 
       {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
     </div>

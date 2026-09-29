@@ -91,8 +91,9 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
 
     convert_image takes a base64 image and its media type, and returns the transcription.
     Stops before the next page when should_cancel() is true, and returns the pages finished.
-    A page that fails to convert is replaced with a placeholder instead of failing the whole
-    file, and every skipped page is listed at the top of the returned text.
+    A page that fails to convert is left out of the returned text instead of failing the
+    whole file, nothing about the failure is written into the markdown, it's only reported
+    through the returned list.
 
     Returns (markdown, skipped page numbers, pages attempted). Pages attempted is less than
     the PDF's total page count when cancelled early.
@@ -105,6 +106,7 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
     page_count = doc.page_count
     pages = []
     skipped = []
+    attempted = 0
     last_error = None
     try:
         for i, page in enumerate(doc, start=1):
@@ -116,11 +118,11 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
             print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
             png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
             image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
+            attempted += 1
             try:
                 pages.append(convert_image(image_b64, "image/png"))
             except Exception as e:
                 print(f"\nSkipping page {i}/{page_count}, failed to convert: {e}")
-                pages.append(f"[page {i} could not be converted: {e}]")
                 skipped.append(i)
                 last_error = e
         else:
@@ -128,15 +130,11 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
     finally:
         doc.close()
 
-    # Every page failed, a placeholder-only file would be useless, report it as a failed
-    # file instead, same as before per-page skipping existed.
-    if pages and len(skipped) == len(pages):
+    # Every page failed, an empty file would be useless, report it as a failed file instead.
+    if attempted and len(skipped) == attempted:
         raise last_error
 
-    text = "\n\n".join(pages)
-    if skipped:
-        text = f"> Pages skipped, failed to convert: {', '.join(map(str, skipped))}\n\n" + text
-    return text, skipped, len(pages)
+    return "\n\n".join(pages), skipped, attempted
 
 
 def _convert_file(path: Path, convert_image: Callable[[str, str], str]) -> tuple[str, list[int], int | None]:

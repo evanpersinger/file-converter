@@ -7,6 +7,7 @@ should be rejected, and the ones that should work end to end.
 """
 
 import io
+import json
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -293,6 +294,53 @@ def test_a_local_conversion_returns_partial_output_when_cancelled(
     assert response.status_code == 200
     assert response.content == b"page 1"
     assert len(calls) == 1
+
+
+def test_a_local_conversion_reports_what_happened_to_each_page_in_plain_sentences(
+    client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:9b"])
+    calls: list[str] = []
+
+    def fake_convert_page(image_b64: str, model: str) -> str:
+        calls.append(model)
+        if len(calls) == 2:
+            raise requests.exceptions.ReadTimeout("timed out")
+        return f"page {len(calls)}"
+
+    monkeypatch.setattr(server.llm_pdf_md, "_convert_page_ollama", fake_convert_page)
+
+    pdf_path = tmp_path / "doc.pdf"
+    doc = fitz.open()
+    for _ in range(3):
+        doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "pdf->md-local", "model": "qwen3.5:9b"},
+        files={"file": ("doc.pdf", pdf_path.read_bytes())},
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.headers["X-Conversion-Log"]) == [
+        "Page 2 of 3 could not be converted: timed out",
+        "2 of 3 pages converted.",
+    ]
+
+
+def test_a_conversion_that_is_not_an_llm_route_sends_no_log(
+    client: TestClient, jobs_root: Path
+) -> None:
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->xlsx"},
+        files={"file": ("a.csv", b"a,b\n1,2\n")},
+    )
+
+    assert response.status_code == 200
+    assert "X-Conversion-Log" not in response.headers
 
 
 _HANDWRITING_CAPTION = "Used for converting pictures of handwriting"
