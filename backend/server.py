@@ -584,6 +584,7 @@ _PAGE_PROGRESS = re.compile(r"Converting page \d+/\d+ \((\d+)%\)")
 _SKIPPED_PAGE = re.compile(r"Skipping page (\d+)/(\d+), failed to convert: (.*)")
 _CANCELLED_AT = re.compile(r"Cancelled after page (\d+)/(\d+)")
 _PAGES_SUCCEEDED = re.compile(r"Converted .+ \((\d+)/(\d+) pages succeeded\)")
+_MODEL_NOTE = re.compile(r"Model note(?: \(page (\d+)\))?: (.*)")
 
 # Longest a single reason can be in the log, so a huge exception message can't blow past
 # the size limit on a response header.
@@ -593,11 +594,16 @@ _LOG_LINE_MAX = 200
 def _plain_log(output: str) -> list[str]:
     """The lines of a converter's printed output that tell the user what happened to their
     file, reworded as plain sentences: which pages failed and why, how many pages made it,
-    and where a cancel stopped. The progress lines are left out, the progress bar already
-    shows those."""
+    where a cancel stopped, and any note the model left about its transcription. The
+    progress lines are left out, the progress bar already shows those."""
     lines = []
     for raw in re.split(r"[\r\n]+", output):
-        if match := _SKIPPED_PAGE.search(raw):
+        # Checked first and anchored to the line start, so a note that happens to quote one
+        # of the other patterns isn't read as that line.
+        if match := _MODEL_NOTE.match(raw):
+            where = f" on page {match[1]}" if match[1] else ""
+            lines.append(f"Model note{where}: {match[2][:_LOG_LINE_MAX]}")
+        elif match := _SKIPPED_PAGE.search(raw):
             reason = match[3][:_LOG_LINE_MAX]
             lines.append(f"Page {match[1]} of {match[2]} could not be converted: {reason}")
         elif match := _CANCELLED_AT.search(raw):

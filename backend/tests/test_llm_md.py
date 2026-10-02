@@ -186,6 +186,24 @@ def test_local_transcribes_a_multi_page_pdf_in_page_order(
     assert [c["messages"][0]["content"] for c in calls] == [llm_md._HANDWRITING_PROMPT] * 2
 
 
+def test_notes_after_the_marker_are_printed_not_written_into_the_markdown(
+    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    input_dir, output_dir = sandbox
+    _make_pdf(input_dir / "notes.pdf", pages=2)
+    replies = iter(["Page 1 text\n---NOTES---\nSome words\nwere unclear", "Page 2 text"])
+
+    def fake_post(url, json, timeout):
+        return FakeResponse({"message": {"content": next(replies)}})
+
+    monkeypatch.setattr(llm_md.requests, "post", fake_post)
+
+    llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+
+    assert (output_dir / "notes.md").read_text(encoding="utf-8") == "Page 1 text\n\nPage 2 text"
+    assert "Model note (page 1): Some words were unclear" in capsys.readouterr().out
+
+
 def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
     sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:

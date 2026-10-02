@@ -29,7 +29,7 @@ should_cancel: Callable[[], bool] = lambda: False
 
 OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"]  # vision_parse only supports these two for OpenAI
 ANTHROPIC_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-5"]  # weakest first, same as the other menus
-OLLAMA_MODELS = ["qwen3.5:9b", "qwen3.5:4b"]  # vision-capable local models, must be pulled via `ollama pull <model>`
+OLLAMA_MODELS = ["qwen3.5:9b", "qwen3.5:4b", "gemma4:e4b"]  # vision-capable local models, must be pulled via `ollama pull <model>`
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script completes conversion, overrides Ollama's 5 min default
 _MODEL_DISPLAY_NAMES = {"claude-haiku-4-5-20251001": "claude-haiku-4.5"}  # friendlier label for the CLI menu, actual model id is unchanged

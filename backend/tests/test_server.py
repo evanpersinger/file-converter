@@ -330,6 +330,36 @@ def test_a_local_conversion_reports_what_happened_to_each_page_in_plain_sentence
     ]
 
 
+def test_a_model_note_from_the_handwriting_route_shows_up_in_the_log_not_the_file(
+    client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:9b"])
+    monkeypatch.setattr(
+        server.llm_md,
+        "_convert_page_ollama",
+        lambda image_b64, model, prompt: "page text\n---NOTES---\nSome words were unclear",
+    )
+
+    pdf_path = tmp_path / "doc.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "handwriting->md", "model": "qwen3.5:9b"},
+        files={"file": ("doc.pdf", pdf_path.read_bytes())},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"page text"
+    assert json.loads(response.headers["X-Conversion-Log"]) == [
+        "Model note on page 1: Some words were unclear",
+        "1 of 1 pages converted.",
+    ]
+
+
 _HANDWRITING_CAPTION = "Used for converting pictures of handwriting"
 
 

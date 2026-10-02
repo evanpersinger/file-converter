@@ -9,6 +9,7 @@ Meant for pages that are primarily handwritten. Typed text should go through pdf
 
 import base64
 import os
+import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -37,9 +38,34 @@ def should_cancel() -> bool:
     return False
 
 
+_NOTES_MARKER = "---NOTES---"
+
 _HANDWRITING_PROMPT = (
-    "Transcribe the handwriting in this image. Mark any word you cannot read as [illegible]."
+    "Transcribe the handwriting in this image exactly as written, as close to word for word as you can. "
+    "Copy it as it is: do not correct, reorder, interpret, explain, or complete anything, even if it "
+    "looks wrong, is out of order, or doesn't make sense. Mark any word you cannot read as [illegible]. "
+    f"If you have notes about the transcription, put them after a line containing only {_NOTES_MARKER}"
 )
+
+_NOTES_LINE = re.compile(rf"^[ \t]*{re.escape(_NOTES_MARKER)}[ \t]*$", re.MULTILINE)
+
+
+def _split_notes(text: str, page: int | None = None) -> str:
+    """Return the transcription from a model's reply, minus anything after the notes marker.
+
+    The notes aren't written into the markdown, they're printed as a `Model note` line
+    instead so they reach the terminal and the server's Result column. A reply with no marker
+    comes back unchanged.
+    """
+    parts = _NOTES_LINE.split(text, maxsplit=1)
+    if len(parts) == 1:
+        return text
+    transcription, notes = parts
+    notes = " ".join(notes.split())  # one line, so the server's line-by-line log parser sees all of it
+    if notes:
+        # A page note starts on its own line, the progress line before it has no newline.
+        print(f"\nModel note (page {page}): {notes}" if page else f"Model note: {notes}")
+    return transcription.rstrip()
 
 
 # OpenAI (one image per call)
@@ -120,7 +146,7 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
             image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
             attempted += 1
             try:
-                pages.append(convert_image(image_b64, "image/png"))
+                pages.append(_split_notes(convert_image(image_b64, "image/png"), i))
             except Exception as e:
                 print(f"\nSkipping page {i}/{page_count}, failed to convert: {e}")
                 skipped.append(i)
@@ -146,7 +172,7 @@ def _convert_file(path: Path, convert_image: Callable[[str, str], str]) -> tuple
     if path.suffix.lower() == ".pdf":
         return _convert_pdf_pages(path, convert_image)
     image_b64 = base64.standard_b64encode(path.read_bytes()).decode("ascii")
-    return convert_image(image_b64, "image/jpeg"), [], None
+    return _split_notes(convert_image(image_b64, "image/jpeg")), [], None
 
 
 # Shared folder loop
