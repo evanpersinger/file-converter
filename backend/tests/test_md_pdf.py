@@ -86,6 +86,21 @@ def test_a_greek_command_already_in_math_mode_is_not_wrapped_again() -> None:
     assert convert_symbols(r"$\hat{\beta}_1$ and $$\beta$$") == r"$\hat{\beta}_1$ and $$\beta$$"
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("√(MSE / Sxx)", r"$\sqrt{MSE / Sxx}$"),
+        ("√((a + b) / c)", r"$\sqrt{(a + b) / c}$"),
+        ("√(σ²)", r"$\sqrt{\sigma^{2}}$"),
+        ("√2", r"$\sqrt{2}$"),
+        ("$√(x)$", r"$\sqrt{x}$"),
+    ],
+)
+def test_a_square_root_wraps_its_argument(source: str, expected: str) -> None:
+    """A lone \\surd sits below the baseline with no bar, so √ has to become \\sqrt{..}."""
+    assert convert_symbols(source) == expected
+
+
 def test_adjacent_math_blocks_are_merged() -> None:
     """Converting symbols one at a time leaves a run of separate $..$ blocks, which
     xelatex sets with visible gaps. They get folded back into one."""

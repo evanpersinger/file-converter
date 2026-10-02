@@ -62,7 +62,7 @@ GREEK_TO_LATEX = {
 # unicode under xelatex, so we wrap them in a LaTeX command inside math mode.
 OPERATOR_TO_LATEX = {
     "∑": r"\sum", "∏": r"\prod", "∫": r"\int", "∮": r"\oint",
-    "∂": r"\partial", "∇": r"\nabla", "∞": r"\infty", "√": r"\surd",
+    "∂": r"\partial", "∇": r"\nabla", "∞": r"\infty",
     "∓": r"\mp", "×": r"\times", "÷": r"\div", "·": r"\cdot", "∗": r"\ast",
     "≠": r"\neq", "≡": r"\equiv", "∝": r"\propto", "∼": r"\sim",
     "∈": r"\in", "∉": r"\notin", "⊂": r"\subset", "⊆": r"\subseteq",
@@ -474,6 +474,54 @@ def _combine_adjacent_math(md):
     return md
 
 
+def _convert_sqrt(md):
+    r"""Turn √(...) and √x into \sqrt{...} so the radical sits on the line with a bar.
+
+    A bare \surd glyph hangs below the baseline and draws no bar, so √ needs its
+    argument. Runs after the other symbol passes: any $..$ already wrapped inside the
+    argument is unwrapped, since the whole \sqrt is one math span.
+    """
+    out = []
+    i = 0
+    while True:
+        start = md.find("√", i)
+        if start == -1:
+            out.append(md[i:])
+            break
+        out.append(md[i:start])
+        # inside an existing $..$ already? then no new delimiters
+        wrap = "" if "".join(out).count("$") % 2 else "$"
+        j = start + 1
+        arg_end = None
+        if md[j:j + 1] == "(":
+            depth = 0
+            for k in range(j, len(md)):
+                depth += (md[k] == "(") - (md[k] == ")")
+                if depth == 0:
+                    arg_end = k
+                    break
+            arg = md[j + 1:arg_end] if arg_end is not None else None
+            end = (arg_end or 0) + 1
+        else:
+            m = re.match(r"[A-Za-z0-9.]+", md[j:])
+            arg = m.group(0) if m else None
+            end = j + (m.end() if m else 0)
+        if arg is None:
+            out.append(rf"{wrap}\surd{wrap}")
+            i = j
+        else:
+            arg = arg.replace("$", "")
+            # a superscript after ")" is skipped by _convert_scripts, so catch it here
+            arg = re.sub(
+                "[" + "".join(map(re.escape, SUPERSCRIPT_TO_LATEX)) + "]+",
+                lambda m: "^{" + "".join(SUPERSCRIPT_TO_LATEX[c] for c in m.group(0)) + "}",
+                arg,
+            )
+            out.append(rf"{wrap}\sqrt{{{arg}}}{wrap}")
+            i = end
+    return "".join(out)
+
+
 def convert_symbols(md):
     """Convert unicode math notation to LaTeX so xelatex renders it.
 
@@ -551,6 +599,8 @@ def convert_symbols(md):
     # Trim whitespace inside $...$ (tex_math_dollars wants no padding)
     md = re.sub(r"(?<!\$)\$([^$]+?)\$(?!\$)",
                 lambda m: f"${m.group(1).strip()}$", md)
+
+    md = _convert_sqrt(md)
 
     # Restore protected code (loop in case a span nested another placeholder)
     for _ in range(5):
