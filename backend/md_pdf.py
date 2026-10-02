@@ -474,6 +474,11 @@ def _combine_adjacent_math(md):
     return md
 
 
+def _in_math(text, pos):
+    """True if pos sits inside a $..$ or $$..$$ span: an odd number of delimiters before it."""
+    return len(re.findall(r"\$\$?", text[:pos])) % 2 == 1
+
+
 def _merge_touching_math(md):
     r"""Merge "$a$$b$" into "$ab$" so two inline spans never form a "$$".
 
@@ -483,8 +488,11 @@ def _merge_touching_math(md):
     touching spans, so real $$...$$ blocks and a closing $ are never mistaken for the
     start of one.
     """
-    return re.sub(r"(?<!\$)(?:\$[^$\n]+\$){2,}(?!\$)",
-                  lambda m: m.group(0).replace("$$", ""), md)
+    # A join after a letter keeps a space so "\Sigma" + "e" doesn't become "\Sigmae".
+    def join(m):
+        return re.sub(r"(?<=[A-Za-z])\$\$", " ", m.group(0)).replace("$$", "")
+
+    return re.sub(r"(?<!\$)(?:\$[^$\n]+\$){2,}(?!\$)", join, md)
 
 
 def _convert_sqrt(md):
@@ -595,14 +603,20 @@ def convert_symbols(md):
         md,
     )
 
-    # Greek + operators -> $\command$ (plain, and when butted against closing $)
+    # Greek + operators -> $\command$, but only outside existing math spans. Checking
+    # position, not the neighboring character, because the script step above puts a
+    # $ right after a symbol (∑xᵢ -> ∑$x_{i}$) that is not wrapping the symbol.
     for sym, cmd in SYMBOL_TO_LATEX.items():
-        md = re.sub(r"(?<!\$)" + re.escape(sym) + r"(?!\$)",
-                    lambda m, c=cmd: f"${c}$", md)
+        md = re.sub(re.escape(sym),
+                    lambda m, c=cmd: m.group(0) if _in_math(m.string, m.start()) else f"${c}$",
+                    md)
+        # a touching "$$" would throw off the next _in_math count
+        md = _merge_touching_math(md)
         md = re.sub(r"(\$[^$]+\$)\s*" + re.escape(sym) + r"(?!\$)",
                     lambda m, c=cmd: f"{m.group(1)} ${c}$", md)
 
     # Merge adjacent math blocks created above
+    md = _merge_touching_math(md)
     md = _combine_adjacent_math(md)
 
     # Symbols that render best as unicode kept in math mode

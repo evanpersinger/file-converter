@@ -105,6 +105,32 @@ def test_touching_symbols_become_one_span_not_a_double_dollar() -> None:
     assert convert_symbols("aᵢbⱼ") == "$a_{i}b_{j}$"
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("∑xᵢ", r"$\sum x_{i}$"),
+        ("∫xᵢ", r"$\int x_{i}$"),
+        ("αxᵢ", r"$\alpha x_{i}$"),
+        ("Σeᵢxᵢ", r"$\Sigma e_{i}x_{i}$"),
+    ],
+)
+def test_a_symbol_right_before_a_script_is_still_converted(source: str, expected: str) -> None:
+    """The script step puts a $ right after the symbol, which used to make the symbol
+    pass skip it and leave a raw character the font cannot draw."""
+    assert convert_symbols(source) == expected
+
+
+def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> None:
+    """Wrapping the Σ next to $e_{i}$ makes a touching "$$" for a moment. If it survives,
+    the math count flips and every symbol after it is left raw."""
+    assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
+
+
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$"])
+def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
+    assert convert_symbols(source) == source
+
+
 def test_touching_symbols_do_not_strip_spaces_on_later_lines() -> None:
     """eᵢxᵢ used to leave "$e_{i}$$x_{i}$", the "$$" shifted the $-pairing, and every
     later span lost the spaces (and blank lines) around it."""
