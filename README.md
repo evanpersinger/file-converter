@@ -336,6 +336,7 @@ python backend/md_pdf.py file.md [output.pdf]
 **System requirements:**
 - Pandoc (macOS: `brew install pandoc`)
 - LaTeX engine (XeLaTeX recommended) for PDF generation (macOS: `brew install --cask mactex`)
+- Menlo font (ships with macOS). Code blocks are set in it because LaTeX's default monospace font has no Greek letters, subscripts or `≈`, and they print as `�` without it. The render fails on a machine without Menlo, so on Linux change `\setmonofont{Menlo}` in `LATEX_HEADER` (`backend/md_pdf.py`) to an installed font that has them, such as DejaVu Sans Mono
 - mermaid-filter for Mermaid diagram support (requires Node.js/pnpm):
   ```bash
   pnpm add -g mermaid-filter

@@ -101,6 +101,21 @@ def test_a_square_root_wraps_its_argument(source: str, expected: str) -> None:
     assert convert_symbols(source) == expected
 
 
+def test_touching_symbols_become_one_span_not_a_double_dollar() -> None:
+    assert convert_symbols("aᵢbⱼ") == "$a_{i}b_{j}$"
+
+
+def test_touching_symbols_do_not_strip_spaces_on_later_lines() -> None:
+    """eᵢxᵢ used to leave "$e_{i}$$x_{i}$", the "$$" shifted the $-pairing, and every
+    later span lost the spaces (and blank lines) around it."""
+    result = convert_symbols("eᵢxᵢ = 0\n\nthe slope \\beta is $\\gamma$ and $\\delta$ too.\n\n$x^2$ $x_n$")
+    assert "the slope $\\beta$ is $\\gamma$ and $\\delta$ too.\n\n$x^2$" in result
+
+
+def test_a_display_math_block_is_not_merged_with_inline_math() -> None:
+    assert convert_symbols("$$y = x$$ and $a$ and $b$") == "$$y = x$$ and $a$ and $b$"
+
+
 def test_adjacent_math_blocks_are_merged() -> None:
     """Converting symbols one at a time leaves a run of separate $..$ blocks, which
     xelatex sets with visible gaps. They get folded back into one."""

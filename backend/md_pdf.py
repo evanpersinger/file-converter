@@ -474,6 +474,19 @@ def _combine_adjacent_math(md):
     return md
 
 
+def _merge_touching_math(md):
+    r"""Merge "$a$$b$" into "$ab$" so two inline spans never form a "$$".
+
+    A "$$" in the middle of the text looks like a display-math delimiter to the later
+    $-pairing passes, which then pair every following span one off and strip the
+    spaces (and paragraph breaks) between spans. Matches a whole run of two or more
+    touching spans, so real $$...$$ blocks and a closing $ are never mistaken for the
+    start of one.
+    """
+    return re.sub(r"(?<!\$)(?:\$[^$\n]+\$){2,}(?!\$)",
+                  lambda m: m.group(0).replace("$$", ""), md)
+
+
 def _convert_sqrt(md):
     r"""Turn √(...) and √x into \sqrt{...} so the radical sits on the line with a bar.
 
@@ -568,6 +581,7 @@ def convert_symbols(md):
 
     # Unicode super/subscripts -> LaTeX (θ₀ -> $\theta_{0}$, x² -> $x^{2}$)
     md = _convert_scripts(md)
+    md = _merge_touching_math(md)
 
     # Underscore subscripts inside existing math blocks
     md = re.sub(
