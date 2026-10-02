@@ -66,6 +66,26 @@ def test_a_barred_variable_becomes_a_bar_command() -> None:
     assert convert_symbols("x̄") == r"$\bar{x}$"
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("β̂₁", r"$\hat{\beta}_{1}$"),
+        ("β̂₀", r"$\hat{\beta}_{0}$"),
+        ("β̂", r"$\hat{\beta}$"),
+    ],
+)
+def test_a_hatted_variable_keeps_its_hat_and_subscript(source: str, expected: str) -> None:
+    assert convert_symbols(source) == expected
+
+
+def test_a_bare_greek_command_in_prose_is_wrapped_in_math_mode() -> None:
+    assert convert_symbols(r"the slope \beta is estimated") == r"the slope $\beta$ is estimated"
+
+
+def test_a_greek_command_already_in_math_mode_is_not_wrapped_again() -> None:
+    assert convert_symbols(r"$\hat{\beta}_1$ and $$\beta$$") == r"$\hat{\beta}_1$ and $$\beta$$"
+
+
 def test_adjacent_math_blocks_are_merged() -> None:
     """Converting symbols one at a time leaves a run of separate $..$ blocks, which
     xelatex sets with visible gaps. They get folded back into one."""

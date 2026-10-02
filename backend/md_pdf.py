@@ -95,6 +95,8 @@ _SCRIPT_BASE = r"A-Za-z0-9" + _GREEK_CLASS + r"\)\]"
 LATEX_HEADER = """\\usepackage{amsmath}
 \\usepackage{amssymb}
 \\usepackage{fontspec}
+% Default mono font lacks greek, subscripts and ≈, so code blocks print "?" for them
+\\setmonofont{Menlo}
 % Ensure horizontal rules render properly
 \\usepackage{booktabs}
 \\usepackage{array}
@@ -490,10 +492,31 @@ def convert_symbols(md):
     # Horizontal rules -> paragraph break (spacing)
     md = re.sub(r"^---\s*$", r"\n\n", md, flags=re.MULTILINE)
 
+    # Bare \greek commands in prose (the slope \beta is...) -> $\beta$. Existing math
+    # spans are matched first so a command already inside $..$ / $$..$$ is left alone.
+    greek_cmds = "|".join(cmd[1:] for cmd in GREEK_TO_LATEX.values())
+    md = re.sub(
+        rf"(\$\$[^$]*\$\$|\$[^$\n]*\$)|\\({greek_cmds})(?![A-Za-z])",
+        lambda m: m.group(1) or f"$\\{m.group(2)}$",
+        md,
+    )
+
     # Barred variables: combining macron form, then precomposed characters
     md = re.sub(r"([a-zA-Z])̄", r"$\\bar{\1}$", md)
     for var, latex in BAR_VARIABLES.items():
         md = re.sub(r"(?<!\$)" + re.escape(var) + r"(?!\$)", latex, md)
+
+    # Hatted variables: base + combining hat + optional subscript run
+    # (β̂₁ -> $\hat{\beta}_{1}$). Must run before _convert_scripts, which can't see
+    # past the hat to the subscript.
+    sub = "".join(re.escape(c) for c in SUBSCRIPT_TO_LATEX)
+
+    def hat_repl(m):
+        base = GREEK_TO_LATEX.get(m.group(1), m.group(1))
+        idx = "".join(SUBSCRIPT_TO_LATEX[c] for c in m.group(2))
+        return rf"$\hat{{{base}}}_{{{idx}}}$" if idx else rf"$\hat{{{base}}}$"
+
+    md = re.sub(rf"([A-Za-z{_GREEK_CLASS}])̂([{sub}]*)", hat_repl, md)
 
     # Unicode super/subscripts -> LaTeX (θ₀ -> $\theta_{0}$, x² -> $x^{2}$)
     md = _convert_scripts(md)
