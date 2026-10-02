@@ -90,6 +90,10 @@ BAR_VARIABLES = {
 # Character classes reused across the script regexes.
 _GREEK_CLASS = "α-ωΑ-Ωθε"
 _SCRIPT_BASE = r"A-Za-z0-9" + _GREEK_CLASS + r"\)\]"
+# A subscript run. There is no unicode subscript "." or ",", so one between subscript
+# characters stays inside the run (t₀.₉₇₅,₁₀ -> t_{0.975,10}); a trailing one does not.
+_SUB_CHARS = "".join(re.escape(c) for c in SUBSCRIPT_TO_LATEX)
+_SUB_RUN = rf"[{_SUB_CHARS}]+(?:[.,][{_SUB_CHARS}]+)*"
 
 # Config: LaTeX preamble injected into every render
 LATEX_HEADER = """\\usepackage{amsmath}
@@ -426,7 +430,6 @@ def normalize_tables(md):
 def _convert_scripts(md):
     """Convert unicode super/subscript runs to LaTeX, e.g. x² -> $x^{2}$, xᵢ -> $x_{i}$."""
     sup = "".join(re.escape(c) for c in SUPERSCRIPT_TO_LATEX)
-    sub = "".join(re.escape(c) for c in SUBSCRIPT_TO_LATEX)
 
     def sup_repl(m):
         base = GREEK_TO_LATEX.get(m.group(1), m.group(1))
@@ -435,11 +438,11 @@ def _convert_scripts(md):
 
     def sub_repl(m):
         base = GREEK_TO_LATEX.get(m.group(1), m.group(1))
-        idx = "".join(SUBSCRIPT_TO_LATEX[c] for c in m.group(2))
+        idx = "".join(SUBSCRIPT_TO_LATEX.get(c, c) for c in m.group(2))
         return f"${base}_{{{idx}}}$"
 
     md = re.sub(rf"(?<!\$)([{_SCRIPT_BASE}])((?:[{sup}])+)(?!\$)", sup_repl, md)
-    md = re.sub(rf"(?<!\$)([{_SCRIPT_BASE}])((?:[{sub}])+)(?!\$)", sub_repl, md)
+    md = re.sub(rf"(?<!\$)([{_SCRIPT_BASE}])({_SUB_RUN})(?!\$)", sub_repl, md)
     return md
 
 
@@ -561,12 +564,18 @@ def convert_symbols(md):
     # Horizontal rules -> paragraph break (spacing)
     md = re.sub(r"^---\s*$", r"\n\n", md, flags=re.MULTILINE)
 
-    # Bare \greek commands in prose (the slope \beta is...) -> $\beta$. Existing math
-    # spans are matched first so a command already inside $..$ / $$..$$ is left alone.
+    # Typed LaTeX in prose, wrapped whole so its script goes with it: \beta -> $\beta$,
+    # \beta_1 -> $\beta_1$, \hat\beta_{0} -> $\hat\beta_{0}$ (\hat outside math is a LaTeX
+    # error), and t_{0.975,10} -> $t_{0.975,10}$. Existing math spans are matched first
+    # so anything already inside $..$ / $$..$$ is left alone.
     greek_cmds = "|".join(cmd[1:] for cmd in GREEK_TO_LATEX.values())
+    core = rf"\\(?:{greek_cmds})(?![A-Za-z])"
+    hatted = rf"\\(?:hat|bar|tilde|vec)(?:{core}|\{{{core}\}})"
+    script = r"(?:[_^](?:\{[^{}\n]*\}|[A-Za-z0-9]))*"
+    braced = r"\b[A-Za-z][A-Za-z0-9]*_\{[^{}\n]+\}"
     md = re.sub(
-        rf"(\$\$[^$]*\$\$|\$[^$\n]*\$)|\\({greek_cmds})(?![A-Za-z])",
-        lambda m: m.group(1) or f"$\\{m.group(2)}$",
+        rf"(\$\$[^$]*\$\$|\$[^$\n]*\$)|((?:{hatted}|{core}){script}|{braced})",
+        lambda m: m.group(1) or f"${m.group(2)}$",
         md,
     )
 
@@ -578,14 +587,12 @@ def convert_symbols(md):
     # Hatted variables: base + combining hat + optional subscript run
     # (β̂₁ -> $\hat{\beta}_{1}$). Must run before _convert_scripts, which can't see
     # past the hat to the subscript.
-    sub = "".join(re.escape(c) for c in SUBSCRIPT_TO_LATEX)
-
     def hat_repl(m):
         base = GREEK_TO_LATEX.get(m.group(1), m.group(1))
-        idx = "".join(SUBSCRIPT_TO_LATEX[c] for c in m.group(2))
+        idx = "".join(SUBSCRIPT_TO_LATEX.get(c, c) for c in m.group(2))
         return rf"$\hat{{{base}}}_{{{idx}}}$" if idx else rf"$\hat{{{base}}}$"
 
-    md = re.sub(rf"([A-Za-z{_GREEK_CLASS}])̂([{sub}]*)", hat_repl, md)
+    md = re.sub(rf"([A-Za-z{_GREEK_CLASS}])̂((?:{_SUB_RUN})?)", hat_repl, md)
 
     # Unicode super/subscripts -> LaTeX (θ₀ -> $\theta_{0}$, x² -> $x^{2}$)
     md = _convert_scripts(md)

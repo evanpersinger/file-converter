@@ -56,6 +56,33 @@ def test_unicode_scripts_become_latex_scripts(source: str, expected: str) -> Non
     assert convert_symbols(source) == expected
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("t₀.₉₇₅,₁₀", r"$t_{0.975,10}$"),
+        ("F₀.₀₅,₁,₁₀", r"$F_{0.05,1,10}$"),
+        ("x₁,₂", r"$x_{1,2}$"),
+        ("β̂₀.₅", r"$\hat{\beta}_{0.5}$"),
+    ],
+)
+def test_a_subscript_can_contain_a_decimal_point_or_comma(source: str, expected: str) -> None:
+    """There is no unicode subscript "." or ",", so the run used to stop after the first
+    digit and the rest was left as raw characters the font cannot draw."""
+    assert convert_symbols(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("x₁, x₂", r"$x_{1}$, $x_{2}$"),
+        ("H₀.", r"$H_{0}$."),
+        ("a₁.b", r"$a_{1}$.b"),
+    ],
+)
+def test_punctuation_next_to_a_subscript_stays_outside_it(source: str, expected: str) -> None:
+    assert convert_symbols(source) == expected
+
+
 def test_a_greek_base_keeps_its_command_under_a_subscript() -> None:
     """The base is looked up in GREEK_TO_LATEX before the script is attached, so this
     must not come out as a literal theta character wrapped in math mode."""
@@ -80,6 +107,27 @@ def test_a_hatted_variable_keeps_its_hat_and_subscript(source: str, expected: st
 
 def test_a_bare_greek_command_in_prose_is_wrapped_in_math_mode() -> None:
     assert convert_symbols(r"the slope \beta is estimated") == r"the slope $\beta$ is estimated"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (r"\beta_1", r"$\beta_1$"),
+        (r"\beta_{10}", r"$\beta_{10}$"),
+        (r"\hat\beta_1", r"$\hat\beta_1$"),
+        (r"\hat{\beta}_1", r"$\hat{\beta}_1$"),
+        (r"t_{0.975,10}", r"$t_{0.975,10}$"),
+    ],
+)
+def test_a_typed_command_or_braced_subscript_is_wrapped_with_its_script(source: str, expected: str) -> None:
+    """\\hat outside math is a LaTeX error that sends the whole document to safe mode, and
+    a script left outside the $..$ prints as literal text."""
+    assert convert_symbols(source) == expected
+
+
+@pytest.mark.parametrize("source", ["snake_case_name", "file_1.txt", "x_1"])
+def test_underscores_in_ordinary_text_are_left_alone(source: str) -> None:
+    assert convert_symbols(source) == source
 
 
 def test_a_greek_command_already_in_math_mode_is_not_wrapped_again() -> None:
