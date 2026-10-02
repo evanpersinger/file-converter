@@ -409,10 +409,12 @@ def _prompt_for_provider() -> tuple[str, str]:
 
     Returns (provider, model).
     """
+    ollama_unreachable = False
     try:
         local_models = list_ollama_models()
     except requests.exceptions.RequestException:
         local_models = []
+        ollama_unreachable = True
 
     entries: list[tuple[str, str]] = (
         [("openai", name) for name in OPENAI_MODELS]
@@ -435,7 +437,7 @@ def _prompt_for_provider() -> tuple[str, str]:
             print(f"  {i}) {name}")
             i += 1
     else:
-        print("  (none installed)")
+        print("  (Ollama not reachable)" if ollama_unreachable else "  (none installed)")
 
     while True:
         choice = input("Select a model: ").strip()
