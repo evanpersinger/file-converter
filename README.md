@@ -203,8 +203,16 @@ do instead.
 Converts handwritten JPGs and PDFs to Markdown using an LLM (OpenAI, Anthropic's Claude, or a
 local Ollama vision model). It only takes JPG/JPEG and PDF files, and only converts them to
 Markdown. It exists because the Tesseract scripts (`jpg_md.py`, `pdf_md.py`) can't read
-handwriting. The prompt asks the model to transcribe the handwriting and mark any word it
-can't read as `[illegible]`.
+handwriting. The prompt asks the model to transcribe the handwriting exactly as written (no
+correcting or interpreting), mark any word it can't read as `[illegible]`, and start straight
+with the transcription. If the model has notes about its transcription, they're kept out of the
+Markdown file and shown as `Model note` lines instead, in the Result column of the web UI or
+in the terminal. Small models don't always follow the prompt, so a note or an intro can still
+end up in the file.
+
+**Scans read better than photos.** A scan from a scanner app usually transcribes more
+accurately than a phone photo of the same page, since photos pick up shadows, tilt, and a busy
+background.
 
 **Usage:**
 ```bash

@@ -226,12 +226,13 @@ def _convert_pdf_local(pdf_path: Path, model: str) -> tuple[str, list[int], int]
     return "\n\n".join(pages), skipped, attempted
 
 
-_MODEL_SIZE = re.compile(r":(\d+(?:\.\d+)?)b\b", re.IGNORECASE)
+_MODEL_SIZE = re.compile(r":e?(\d+(?:\.\d+)?)b\b", re.IGNORECASE)
 
 
 def model_size(name: str) -> float:
-    """Parameter count in billions read off the tag (`qwen3.5:9b` is 9.0), used as a
-    stand-in for how strong a model is. Infinity when the tag doesn't say."""
+    """Parameter count in billions read off the tag (`qwen3.5:9b` is 9.0, and Gemma's
+    "effective" `gemma4:e4b` is 4.0), used as a stand-in for how strong a model is.
+    Infinity when the tag doesn't say."""
     match = _MODEL_SIZE.search(name)
     return float(match.group(1)) if match else float("inf")
 

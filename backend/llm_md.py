@@ -44,6 +44,7 @@ _HANDWRITING_PROMPT = (
     "Transcribe the handwriting in this image exactly as written, as close to word for word as you can. "
     "Copy it as it is: do not correct, reorder, interpret, explain, or complete anything, even if it "
     "looks wrong, is out of order, or doesn't make sense. Mark any word you cannot read as [illegible]. "
+    "Begin directly with the transcription, with no introduction, and do not wrap it in a code block. "
     f"If you have notes about the transcription, put them after a line containing only {_NOTES_MARKER}"
 )
 
