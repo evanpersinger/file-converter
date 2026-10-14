@@ -521,6 +521,34 @@ animate inside a PDF, so frame timing is lost, and a long GIF gives a long PDF: 
 frames is 100 pages. Each page is the frame's pixel size at 100 dpi, the same as
 `png_pdf.py`.
 
+### gif_svg.py
+Converts GIF images to SVG by tracing them into vector paths. Same tracing as
+`png_svg.py`, run once per frame.
+
+**Usage:**
+```bash
+python backend/gif_svg.py
+```
+
+**Python packages:**
+- vtracer>=0.6.15
+- pillow>=11.3.0
+
+**How it works:**
+1. Automatically processes ALL GIF files in the `input/` folder
+2. Decodes every frame with Pillow and traces each into filled SVG paths, in color
+3. Saves SVG files to the `output/` folder: `name.svg` for a static GIF, and
+   `name_frame1.svg`, `name_frame2.svg` and so on for an animated one
+
+The animation is not kept, only the frames, and a GIF with 100 frames gives 100 SVGs
+(the web UI returns those as a zip). Transparent areas stay transparent. GIFs are
+usually flat-color art, which traces well. A photographic GIF has no flat regions, so it
+traces slowly into a huge SVG per frame.
+
+A GIF's 256-color palette and its dithering trace as many small shapes. Pass a higher
+`filter_speckle` to the `convert_raw_image_to_svg` call in the script to merge them: on a
+test gradient saved as a GIF, 112 paths at `filter_speckle=4` dropped to 8 at 64.
+
 ### png_svg.py
 Converts PNG images to SVG by tracing them into vector paths. This is real
 vectorization, not the source PNG wrapped in an `<svg>` tag, so the result scales to
@@ -1028,6 +1056,7 @@ converter/
 │   ├── pdf_png.py          # PDF pages to PNG images
 │   ├── png_pdf.py          # PNG to PDF converter
 │   ├── gif_pdf.py          # GIF to PDF converter (one page per frame)
+│   ├── gif_svg.py          # GIF to SVG converter (vector tracing, one SVG per frame)
 │   ├── png_svg.py          # PNG to SVG converter (vector tracing)
 │   ├── webp_svg.py         # WebP to SVG converter (vector tracing)
 │   ├── combine_files.py    # File combiner (PDFs, images, text)
@@ -1155,6 +1184,7 @@ This means you can update your source file and convert it again to get an update
 | JPG/JPEG images | SVG (traced) | `jpg_svg.py` |
 | PNG images | PDF | `png_pdf.py` |
 | GIF images | PDF (one page per frame) | `gif_pdf.py` |
+| GIF images | SVG (traced, one per frame) | `gif_svg.py` |
 | PNG images | SVG (traced) | `png_svg.py` |
 | WebP images | SVG (traced) | `webp_svg.py` |
 | PDF | PNG (one per page) | `pdf_png.py` |

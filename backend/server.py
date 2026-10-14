@@ -39,6 +39,7 @@ import csv_xlsx
 import docx_md
 import docx_pdf
 import gif_pdf
+import gif_svg
 import heic_jpg
 import heic_md
 import heic_pdf
@@ -98,6 +99,7 @@ _CONVERTER_MODULES = [
     ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, md_pdf, pdf_md, pdf_png,
     png_pdf, png_svg, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt, txt_pdf,
     xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md, webp_svg, html_svg, gif_pdf,
+    gif_svg,
 ]
 _stray = [m.__name__ for m in _CONVERTER_MODULES
           if Path(m.__file__).resolve().parent != BACKEND]
@@ -424,6 +426,8 @@ REGISTRY: list[Conversion] = [
                via_globals(webp_svg, lambda s: webp_svg.convert_webp_to_svg())),
     Conversion((".gif",), "gif->pdf", "PDF", ".pdf",
                via_globals(gif_pdf, lambda s: gif_pdf.convert_gif_to_pdf())),
+    Conversion((".gif",), "gif->svg", "SVG", ".svg",
+               via_globals(gif_svg, lambda s: gif_svg.convert_gif_to_svg())),
 
     # ss_txt is the only OCR route for these formats (jpg/jpeg are served by jpg_txt,
     # so registering ss_txt for them too would just be a duplicate "Text" option).
