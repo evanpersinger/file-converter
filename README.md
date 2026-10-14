@@ -498,6 +498,29 @@ python backend/png_pdf.py
 3. Saves PDF files to the `output/` folder
 4. Shows summary of successful/failed conversions
 
+### gif_pdf.py
+Converts GIF images to PDF files, one page per frame.
+
+**Usage:**
+```bash
+python backend/gif_pdf.py
+```
+
+**Python packages:**
+- pillow>=11.3.0
+
+**How it works:**
+1. Automatically processes ALL GIF files in the `input/` folder
+2. Writes every frame of each GIF as a page of one PDF, so a static GIF gives a
+   single page
+3. Saves PDF files to the `output/` folder
+
+Transparent areas come out white. Converting a GIF straight to RGB turns them black, so
+each frame is pasted onto a white background first. An animated GIF has no way to
+animate inside a PDF, so frame timing is lost, and a long GIF gives a long PDF: 100
+frames is 100 pages. Each page is the frame's pixel size at 100 dpi, the same as
+`png_pdf.py`.
+
 ### png_svg.py
 Converts PNG images to SVG by tracing them into vector paths. This is real
 vectorization, not the source PNG wrapped in an `<svg>` tag, so the result scales to
@@ -1004,6 +1027,7 @@ converter/
 │   ├── heic_png.py         # HEIC to PNG converter
 │   ├── pdf_png.py          # PDF pages to PNG images
 │   ├── png_pdf.py          # PNG to PDF converter
+│   ├── gif_pdf.py          # GIF to PDF converter (one page per frame)
 │   ├── png_svg.py          # PNG to SVG converter (vector tracing)
 │   ├── webp_svg.py         # WebP to SVG converter (vector tracing)
 │   ├── combine_files.py    # File combiner (PDFs, images, text)
@@ -1130,6 +1154,7 @@ This means you can update your source file and convert it again to get an update
 | JPG/JPEG images | PNG | `jpg_png.py` |
 | JPG/JPEG images | SVG (traced) | `jpg_svg.py` |
 | PNG images | PDF | `png_pdf.py` |
+| GIF images | PDF (one page per frame) | `gif_pdf.py` |
 | PNG images | SVG (traced) | `png_svg.py` |
 | WebP images | SVG (traced) | `webp_svg.py` |
 | PDF | PNG (one per page) | `pdf_png.py` |
