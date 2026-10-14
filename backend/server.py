@@ -63,6 +63,7 @@ import Rmd_pdf
 import sql_pdf
 import ss_txt
 import txt_pdf
+import webp_svg
 import xlsx_csv
 
 BACKEND = Path(__file__).resolve().parent
@@ -94,7 +95,7 @@ _CONVERTER_MODULES = [
     csv_md, csv_xlsx, docx_md, docx_pdf, heic_jpg, heic_md, heic_png, html_pdf,
     ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, md_pdf, pdf_md, pdf_png,
     png_pdf, png_svg, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt, txt_pdf,
-    xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md,
+    xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md, webp_svg,
 ]
 _stray = [m.__name__ for m in _CONVERTER_MODULES
           if Path(m.__file__).resolve().parent != BACKEND]
@@ -415,6 +416,8 @@ REGISTRY: list[Conversion] = [
                via_globals(png_pdf, lambda s: png_pdf.convert_png_to_pdf())),
     Conversion((".png",), "png->svg", "SVG", ".svg",
                via_globals(png_svg, lambda s: png_svg.convert_png_to_svg())),
+    Conversion((".webp",), "webp->svg", "SVG", ".svg",
+               via_globals(webp_svg, lambda s: webp_svg.convert_webp_to_svg())),
 
     # ss_txt is the only OCR route for these formats (jpg/jpeg are served by jpg_txt,
     # so registering ss_txt for them too would just be a duplicate "Text" option).

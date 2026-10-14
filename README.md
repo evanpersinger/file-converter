@@ -556,6 +556,34 @@ photographs arrive in, and a photo has no flat regions to trace, so it comes bac
 tens of thousands of paths, slower to produce and larger than the source. For a photo,
 use `jpg_pdf.py` or `jpg_png.py` and keep it a raster.
 
+### webp_svg.py
+Converts WebP images to SVG by tracing them into vector paths. Same tracing as
+`png_svg.py`, but reading a source that is often lossy.
+
+**Usage:**
+```bash
+python backend/webp_svg.py
+```
+
+**Python packages:**
+- vtracer>=0.6.15
+- pillow>=11.3.0
+
+**How it works:**
+1. Automatically processes ALL WebP files in the `input/` folder
+2. Traces each bitmap into filled SVG paths, in color, fitting spline curves
+3. Saves SVG files to the `output/` folder
+
+A lossy WebP has the same problem as a JPG: compression artifacts get traced as real
+color regions, so trace a PNG if you have one. Pass a higher `filter_speckle` to the
+`convert_image_to_svg_py` call if the output is littered with tiny stray shapes. A
+photo has no flat regions to trace either, so it comes back as a huge SVG.
+
+The script decodes each file with Pillow and hands vtracer a PNG, rather than letting
+vtracer read the WebP itself. vtracer's own WebP decoder fails on lossless and
+transparent files, and reads lossy ones as greyscale. An animated WebP traces its first
+frame.
+
 ### heic_png.py
 Converts HEIC images (typically from iPhone/iPad) to PNG.
 
@@ -940,6 +968,7 @@ converter/
 │   ├── pdf_png.py          # PDF pages to PNG images
 │   ├── png_pdf.py          # PNG to PDF converter
 │   ├── png_svg.py          # PNG to SVG converter (vector tracing)
+│   ├── webp_svg.py         # WebP to SVG converter (vector tracing)
 │   ├── combine_files.py    # File combiner (PDFs, images, text)
 │   ├── pptx_pdf.py         # PowerPoint to PDF converter (LibreOffice)
 │   ├── pptx_md.py          # PowerPoint to Markdown converter
@@ -1064,6 +1093,7 @@ This means you can update your source file and convert it again to get an update
 | JPG/JPEG images | SVG (traced) | `jpg_svg.py` |
 | PNG images | PDF | `png_pdf.py` |
 | PNG images | SVG (traced) | `png_svg.py` |
+| WebP images | SVG (traced) | `webp_svg.py` |
 | PDF | PNG (one per page) | `pdf_png.py` |
 | JPG/JPEG images | Markdown (.md) | `jpg_md.py` |
 | JPG/JPEG images | Text (.txt) | `jpg_txt.py` |
