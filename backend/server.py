@@ -43,6 +43,7 @@ import heic_md
 import heic_pdf
 import heic_png
 import html_pdf
+import html_svg
 import ipynb_pdf
 import jpg_md
 import jpg_pdf
@@ -95,7 +96,7 @@ _CONVERTER_MODULES = [
     csv_md, csv_xlsx, docx_md, docx_pdf, heic_jpg, heic_md, heic_png, html_pdf,
     ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, md_pdf, pdf_md, pdf_png,
     png_pdf, png_svg, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt, txt_pdf,
-    xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md, webp_svg,
+    xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md, webp_svg, html_svg,
 ]
 _stray = [m.__name__ for m in _CONVERTER_MODULES
           if Path(m.__file__).resolve().parent != BACKEND]
@@ -243,6 +244,7 @@ DEPS: dict[str, Callable[[], bool]] = {
     "libreoffice": lambda: bool(
         which("soffice") or which("libreoffice") or _LIBREOFFICE_APP.exists()
     ),
+    "chrome": lambda: Path(html_svg.CHROME_PATH).exists(),
     "openai_key": lambda: bool(os.environ.get("OPENAI_API_KEY")),
     "anthropic_key": lambda: bool(os.environ.get("ANTHROPIC_API_KEY")),
     "ollama": _ollama_reachable,
@@ -253,6 +255,7 @@ DEP_LABELS = {
     "pandoc": ("Pandoc is not installed", "brew install pandoc"),
     "latex": ("No LaTeX engine found", "brew install --cask mactex"),
     "libreoffice": ("LibreOffice is not installed", "brew install --cask libreoffice"),
+    "chrome": ("Google Chrome is not installed", "brew install --cask google-chrome"),
     "openai_key": ("OPENAI_API_KEY is not set", "add OPENAI_API_KEY to the .env file"),
     "anthropic_key": ("ANTHROPIC_API_KEY is not set", "add ANTHROPIC_API_KEY to the .env file"),
     "ollama": ("Ollama is not running", "open the Ollama app or run `ollama serve`"),
@@ -444,6 +447,9 @@ REGISTRY: list[Conversion] = [
                note=(None if which("wkhtmltopdf") else
                      "wkhtmltopdf is not installed, so this falls back to Pandoc and "
                      "CSS/layout will not be preserved. brew install wkhtmltopdf")),
+    Conversion((".html", ".htm"), "html->svg", "SVG", ".svg",
+               via_globals(html_svg, lambda s: html_svg.convert_html_to_svg()),
+               requires=("chrome",)),
     Conversion((".sql",), "sql->pdf", "PDF", ".pdf",
                via_setup_dirs(sql_pdf, lambda s: sql_pdf.convert_sql_files())),
     Conversion((".ipynb",), "ipynb->pdf", "PDF", ".pdf",

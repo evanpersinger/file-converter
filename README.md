@@ -393,6 +393,42 @@ python backend/html_pdf.py file.html [output.pdf]
 - wkhtmltopdf (recommended for best HTML rendering) — macOS: `brew install wkhtmltopdf`
 - or Pandoc with LaTeX engine (fallback) — macOS: `brew install pandoc` and `brew install --cask mactex`
 
+### html_svg.py
+Converts HTML files to SVG. This is real vector output: pages are drawn as filled paths
+and shapes, so the result scales to any size and opens in Illustrator or Inkscape.
+
+**Usage:**
+```bash
+python backend/html_svg.py
+```
+
+**Python packages:**
+- pymupdf (already a dependency)
+
+**System requirements:**
+- Google Chrome — macOS: `brew install --cask google-chrome`
+
+**How it works:**
+1. Automatically processes ALL HTML files in the `input/` folder
+2. Prints each file to a PDF with headless Chrome, in a temp folder that is deleted
+   afterward, so CSS and layout render the way they do in the browser
+3. Turns each PDF page into an SVG with pymupdf and saves it to the `output/` folder
+
+The pages are Letter size with Chrome's default margins, so the SVG is a whole page, not
+cropped to the content. A long HTML file splits across pages and gives `name_page1.svg`,
+`name_page2.svg` and so on, while a one-page file gives `name.svg`.
+
+Text is converted to outlines, so the SVG looks the same on a machine without the page's
+fonts, but the text cannot be selected or edited. Set `TEXT_AS_PATH = False` in the script
+to keep real `<text>` elements instead, which came out about an eighth the size on a small
+test page but use whatever fonts the viewer has. Linked CSS and images are found only if they sit next to the HTML in
+`input/`, and the web UI uploads one file at a time, so it will not find them. Chrome runs
+the page's scripts, but the page is printed as soon as it loads, so content a script adds
+later may be missing.
+
+This does not use `html_pdf.py`. Without `wkhtmltopdf` that script falls back to Pandoc,
+which drops CSS and layout.
+
 ### heic_jpg.py
 Converts HEIC images (typically from iPhone/iPad) to JPG files.
 
@@ -956,6 +992,7 @@ converter/
 │   ├── ipynb_pdf.py        # Jupyter notebook to PDF converter
 │   ├── md_pdf.py           # Markdown to PDF converter (Pandoc, enhanced)
 │   ├── html_pdf.py         # HTML to PDF converter (wkhtmltopdf/Pandoc)
+│   ├── html_svg.py         # HTML to SVG converter (headless Chrome, vector)
 │   ├── heic_jpg.py         # HEIC to JPG converter
 │   ├── heic_md.py          # HEIC to Markdown converter (OCR)
 │   ├── heic_pdf.py         # HEIC to PDF converter
@@ -1081,6 +1118,7 @@ This means you can update your source file and convert it again to get an update
 | CSV (.csv) | Excel (.xlsx) | `csv_xlsx.py` |
 | CSV (.csv) | Markdown (.md) | `csv_md.py` |
 | HTML | PDF | `html_pdf.py` |
+| HTML | SVG (one per page) | `html_svg.py` |
 | Text (.txt) | PDF | `txt_pdf.py` |
 | SQL | PDF | `sql_pdf.py` |
 | Jupyter Notebook (.ipynb) | PDF | `ipynb_pdf.py` |
