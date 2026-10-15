@@ -377,7 +377,7 @@ def test_the_handwriting_conversion_is_offered_for_jpg_jpeg_and_pdf(
     assert route["caption"] == _HANDWRITING_CAPTION
 
 
-def test_only_the_handwriting_conversion_has_a_caption(
+def test_the_local_pdf_conversion_has_no_caption_or_model_list(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["gemma4:12b"])
@@ -385,7 +385,25 @@ def test_only_the_handwriting_conversion_has_a_caption(
     pdf_routes = {t["id"]: t for t in client.get("/api/formats").json()["byExtension"][".pdf"]}
 
     assert "caption" not in pdf_routes["pdf->md-local"]
+    assert "models" not in pdf_routes["pdf->md-local"]
     assert pdf_routes["handwriting->md"]["caption"] == _HANDWRITING_CAPTION
+
+
+@pytest.mark.parametrize(("target_id", "key_var", "_func", "_model"), _CLOUD_ROUTES)
+def test_a_cloud_route_is_in_the_llm_column_with_its_models_and_a_caption(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+    target_id: str, key_var: str, _func: str, _model: str,
+) -> None:
+    """The LLM column tells a cloud route from a local one by `models`, and tells the four
+    Markdown buttons apart by caption."""
+    monkeypatch.setenv(key_var, "test-key")
+
+    pdf_routes = {t["id"]: t for t in client.get("/api/formats").json()["byExtension"][".pdf"]}
+
+    route = pdf_routes[target_id]
+    assert route["group"] == "llm"
+    assert route["models"] == list(server.BY_TARGET_ID[target_id].model_names)
+    assert route["caption"]
 
 
 def test_the_caption_is_still_sent_when_the_conversion_is_unavailable(

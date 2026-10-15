@@ -329,8 +329,8 @@ class Conversion:
     # models are whatever Ollama has downloaded.
     model_names: tuple[str, ...] = ()
     # Which part of the UI owns this conversion. None means the regular "Convert to" list,
-    # "llm" the LLM column. "llm-cloud" belongs there too, but that column has no cloud
-    # models yet, so the UI shows those conversions nowhere.
+    # "llm" the LLM column. A cloud conversion is told apart from a local one by its
+    # model_names, which /api/formats sends as `models`.
     group: str | None = None
 
 
@@ -358,14 +358,16 @@ REGISTRY: list[Conversion] = [
                    llm_pdf_md,
                    lambda s, model: llm_pdf_md.convert_pdf_to_markdown_openai(model)),
                requires=("openai_key",), takes_model=True,
-               model_names=tuple(llm_pdf_md.OPENAI_MODELS), group="llm-cloud",
+               model_names=tuple(llm_pdf_md.OPENAI_MODELS), group="llm",
+               caption="Typed PDFs, OpenAI, costs money",
                note="Sends the PDF to OpenAI's Vision API. Slower, and it bills your key"),
     Conversion((".pdf",), "pdf->md-claude", "Markdown (LLM: Claude, costs money)", ".md",
                via_dir_globals_model(
                    llm_pdf_md,
                    lambda s, model: llm_pdf_md.convert_pdf_to_markdown_anthropic(model)),
                requires=("anthropic_key",), takes_model=True,
-               model_names=tuple(llm_pdf_md.ANTHROPIC_MODELS), group="llm-cloud",
+               model_names=tuple(llm_pdf_md.ANTHROPIC_MODELS), group="llm",
+               caption="Typed PDFs, Claude, costs money",
                note="Sends the PDF to Anthropic's Claude. Slower, and it bills your key"),
     Conversion((".pdf",), "pdf->md-local", "Markdown (Open Source model, free)", ".md",
                via_dir_globals_model(
@@ -525,6 +527,8 @@ def formats() -> dict:
             }
             if conv.caption:
                 entry["caption"] = conv.caption
+            if conv.model_names:
+                entry["models"] = list(conv.model_names)
             if missing:
                 reason, hint = DEP_LABELS[missing[0]]
                 unavailable.setdefault(ext, []).append({**entry, "reason": reason, "hint": hint})
