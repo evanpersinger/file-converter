@@ -541,9 +541,8 @@ python backend/gif_svg.py
    `name_frame1.svg`, `name_frame2.svg` and so on for an animated one
 
 The animation is not kept, only the frames, and a GIF with 100 frames gives 100 SVGs
-(the web UI returns those as a zip). Transparent areas stay transparent. GIFs are
-usually flat-color art, which traces well. A photographic GIF has no flat regions, so it
-traces slowly into a huge SVG per frame.
+(the web UI returns those as a zip). Transparent areas stay transparent. A photographic
+GIF has no flat regions, so it traces slowly into a huge SVG per frame.
 
 A GIF's 256-color palette and its dithering trace as many small shapes. Pass a higher
 `filter_speckle` to the `convert_raw_image_to_svg` call in the script to merge them: on a

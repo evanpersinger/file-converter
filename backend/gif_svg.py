@@ -1,12 +1,7 @@
-"""Trace GIF images in input/ into vector SVG paths in output/ with vtracer.
+"""Trace each frame of the GIFs in input/ into a vector SVG in output/ with vtracer.
 
-Every frame is traced into its own SVG: name.svg for a static GIF, name_frame1.svg,
-name_frame2.svg and so on for an animated one. The animation itself is not kept.
-Pillow decodes each frame and vtracer is handed a PNG of it, since a GIF's later frames
-only exist once Pillow has composited them onto the ones before.
-
-Suits flat-color art, which is what most GIFs are. A photographic GIF traces slowly and
-comes back as a huge SVG per frame.
+A static GIF gives name.svg, an animated one name_frame1.svg, name_frame2.svg and so on.
+Pillow decodes the frames and vtracer is handed a PNG of each. Suits flat-color art.
 """
 
 import io

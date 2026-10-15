@@ -98,8 +98,8 @@ _CONVERTER_MODULES = [
     csv_md, csv_xlsx, docx_md, docx_pdf, heic_jpg, heic_md, heic_png, html_pdf,
     ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, md_pdf, pdf_md, pdf_png,
     png_pdf, png_svg, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt, txt_pdf,
-    xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md, webp_svg, html_svg, gif_pdf,
-    gif_svg,
+    xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md,
+    webp_svg, html_svg, gif_pdf, gif_svg,
 ]
 _stray = [m.__name__ for m in _CONVERTER_MODULES
           if Path(m.__file__).resolve().parent != BACKEND]

@@ -47,7 +47,6 @@ def convert_gif_to_pdf() -> str:
     })
 
     if not gif_files:
-        # If there are only PDFs present, notify the user those are already in target format
         pdf_present = glob.glob(os.path.join(input_folder, '*.pdf'))
         if pdf_present:
             return "That file is already in pdf format"
