@@ -1,15 +1,44 @@
+/* The tab bar on top, the layout filling the rest of the screen under it. The 100vh
+   floor is here rather than on .layout, so the bar doesn't push the page past one screen. */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* The Convert Files / Convert Files (LLM) switch. The buttons are plain .format buttons, so they share
+   the format grid's look and its selected state. */
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 97rem;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 0;
+}
+
+.tabs .format {
+  width: auto;
+  padding: 0.8rem 1.5rem;
+  font-size: 1.3rem;
+}
+
 /* Format list on the left, main column beside it. The whole pair is centred rather
    than pinned to the viewport edge. align-items: stretch is what lets the divider
-   run the full height of the taller column, and the 100vh floor keeps it running to
-   the bottom of the screen when the content is shorter than the viewport. */
+   run the full height of the taller column, and flex: 1 keeps it running to the
+   bottom of the screen when the content is shorter than the viewport. The max-width
+   counts the 2rem of padding on each side, so the content is still 93rem wide. */
 .layout {
   display: flex;
   align-items: stretch;
   gap: 2.5rem;
-  min-height: 100vh;
-  max-width: 93rem;
+  flex: 1;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 97rem;
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 1rem 2rem 0;
 }
 
 .sidebar {
@@ -20,13 +49,10 @@
   border-right: 8px solid var(--text);
 }
 
-/* Tighter under the title, so the subtitle reads as part of it. */
-.llm-panel h2 {
-  margin-bottom: 0.4rem;
-}
-
-.subtitle {
-  margin: 0 0 1rem;
+/* Wider than the format column: it holds model names, which are far longer than
+   three-letter format buttons. */
+.model-panel {
+  width: 16rem;
 }
 
 /* One script per row, not two to a row like the format grid, so each caption has the
@@ -47,19 +73,25 @@
   margin: 0;
 }
 
-.model-list {
+/* The model groups, one per provider, stacked. */
+.model-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.model-group {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  margin-top: 1.25rem;
 }
 
-.model-list p {
+.model-group p {
   margin: 0;
 }
 
 /* Model names vary in length, so a long one is cut off rather than wrapped. */
-.model-list .format {
+.model-group .format {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

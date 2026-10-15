@@ -1,4 +1,4 @@
-import type { ApiError, Detection, FormatMap, LocalModel } from './types'
+import type { ApiError, CloudProvider, Detection, FormatMap, LocalModel } from './types'
 
 export async function getFormats(): Promise<FormatMap> {
   const response = await fetch('/api/formats')
@@ -16,6 +16,15 @@ export async function getLocalModels(): Promise<LocalModel[]> {
   }
   const payload: { models: LocalModel[] } = await response.json()
   return payload.models
+}
+
+/** The models each cloud provider offers, by provider name. */
+export async function getCloudModels(): Promise<Record<string, CloudProvider>> {
+  const response = await fetch('/api/cloud-models')
+  if (!response.ok) {
+    throw new Error('Could not load the cloud models.')
+  }
+  return response.json()
 }
 
 /**

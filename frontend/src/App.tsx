@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { cancelConversion, combine, convert, detect, extensionOf, getFormats, getLocalModels } from './api'
-import type { FormatMap, LocalModel, Mismatch, Target, Unavailable } from './types'
+import {
+  cancelConversion, combine, convert, detect, extensionOf, getCloudModels, getFormats, getLocalModels,
+} from './api'
+import type {
+  CloudProvider, FormatMap, LocalModel, Mismatch, ModelGroupData, PickedModel,
+} from './types'
 import FileViewer from './FileViewer'
+import ModelGroup from './ModelGroup'
 import ProgressBar from './ProgressBar'
 import { useProgress } from './useProgress'
 import './App.css'
@@ -48,7 +53,7 @@ const canonical = (ext: string) => EXT_ALIASES[ext] ?? ext
 // back to back, so each one waits its turn.
 const DOWNLOAD_GAP_MS = 300
 
-const blockedReason = (dep: Unavailable) =>
+const blockedReason = (dep: { reason: string; hint?: string }) =>
   dep.hint ? `${dep.reason}. ${dep.hint}` : dep.reason
 
 const formatDuration = (seconds: number) =>
@@ -62,7 +67,100 @@ function mergeDownloads(existing: Download[], added: Download[]): Download[] {
   return [...existing.filter((d) => !replaced.has(d.filename)), ...added]
 }
 
+// The Markdown formats in the LLM tab, one per script, in registry order. A format has a
+// route for each provider, and the model picked decides which one runs, so it is listed
+// once however many routes it has. Read off the map rather than hardcoded, so the buttons
+// show before a file is chosen and a new script adds its own. The caption comes from
+// whichever of its routes has one.
+function llmScriptsIn(formats: FormatMap | null): { script: string; caption?: string }[] {
+  const routes = formats
+    ? [...Object.values(formats.byExtension), ...Object.values(formats.unavailable)].flat()
+    : []
+  const captions = new Map<string, string | undefined>()
+  for (const route of routes) {
+    if (route.group === 'llm' && route.script) {
+      captions.set(route.script, captions.get(route.script) ?? route.caption)
+    }
+  }
+  return [...captions].map(([script, caption]) => ({ script, caption }))
+}
+
+function localGroup(models: LocalModel[] | null): ModelGroupData {
+  const message =
+    models === null ? 'Loading models...'
+      : models.length === 0 ? 'No models found. Is Ollama running?'
+        : models.some((m) => m.installed) ? undefined
+          : 'Nothing downloaded yet. Hover a model to see how to get it'
+
+  return {
+    provider: 'local',
+    title: 'Open Source models',
+    message,
+    models: (models ?? []).map((m) => ({
+      name: m.name,
+      blocked: m.installed ? undefined : `Not downloaded. Run: ollama pull ${m.name}`,
+    })),
+  }
+}
+
+// What a cloud model's button says when the provider's name for it reads badly. The real
+// name is still what gets sent, and it shows on hover.
+const MODEL_LABELS: Record<string, string> = {
+  'claude-haiku-4-5-20251001': 'haiku 4-5',
+  'claude-sonnet-5': 'sonnet 5',
+}
+
+function cloudGroup(
+  provider: string,
+  title: string,
+  providers: Record<string, CloudProvider> | null,
+): ModelGroupData {
+  const entry = providers?.[provider]
+  const blocked = entry?.reason ? blockedReason({ reason: entry.reason, hint: entry.hint }) : undefined
+
+  return {
+    provider,
+    title,
+    message: providers === null ? 'Loading models...' : entry ? undefined : 'Could not load models',
+    models: (entry?.models ?? []).map((name) => ({ name, label: MODEL_LABELS[name], blocked })),
+  }
+}
+
+type Tab = 'convert' | 'llm'
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'convert', label: 'Convert Files' },
+  { id: 'llm', label: 'Convert Files (LLM)' },
+]
+
+// The tab bar and the converter under it. The converter stays mounted across tabs, so the
+// picked files and the Result column carry over, only the format column changes.
 export default function App() {
+  const [tab, setTab] = useState<Tab>('convert')
+
+  return (
+    <div className="app">
+      <div className="tabs" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className={tab === t.id ? 'format selected' : 'format'}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <Converter tab={tab} />
+    </div>
+  )
+}
+
+function Converter({ tab }: { tab: Tab }) {
   const [formats, setFormats] = useState<FormatMap | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
@@ -76,8 +174,22 @@ export default function App() {
   // null while loading. An empty list is the answer when Ollama is off, and the reason
   // for that comes from the formats map.
   const [localModels, setLocalModels] = useState<LocalModel[] | null>(null)
-  // The model picked from the LLM script's list.
-  const [model, setModel] = useState<string | null>(null)
+  // Same idea for the cloud providers' models, by provider name.
+  const [cloudModels, setCloudModels] = useState<Record<string, CloudProvider> | null>(null)
+  // The two picks in the LLM tab. They are independent, and together decide the route: the
+  // Markdown format names the script, the model's provider names which of its routes runs.
+  const [script, setScript] = useState<string | null>(null)
+  const [model, setModel] = useState<PickedModel | null>(null)
+  // Switching tabs drops the pick made in the other one, so a format chosen under Convert
+  // can't be run from the LLM tab, or the reverse. Adjusted during render rather than in
+  // an effect, so the old pick never gets a frame on screen.
+  const [shownTab, setShownTab] = useState(tab)
+  if (tab !== shownTab) {
+    setShownTab(tab)
+    setTarget(null)
+    setScript(null)
+    setModel(null)
+  }
   // Set while a conversion is running, so the backend can be asked how far along it is.
   const [jobId, setJobId] = useState<string | null>(null)
   // True once Cancel has been clicked for the current job, so the button can't be
@@ -104,6 +216,7 @@ export default function App() {
   useEffect(() => {
     getFormats().then(setFormats).catch((e: Error) => setLoadError(e.message))
     getLocalModels().then(setLocalModels).catch(() => setLocalModels([]))
+    getCloudModels().then(setCloudModels).catch(() => setCloudModels({}))
   }, [])
 
   // Release a blob URL once it is no longer in `result`, whether a new conversion
@@ -140,7 +253,7 @@ export default function App() {
   const ext = primary ? extensionOf(primary.name) : ''
   const forFile = (ext && formats?.byExtension[ext]) || []
   const blockedForFile = (ext && formats?.unavailable[ext]) || []
-  // LLM scripts have their own column, so "Convert to" only sees the ungrouped ones.
+  // LLM routes have their own tab, so "Convert to" only sees the ungrouped ones.
   const targets = forFile.filter((t) => !t.group)
   const blocked = blockedForFile.filter((u) => !u.group)
   const llmTargets = forFile.filter((t) => t.group === 'llm')
@@ -157,27 +270,29 @@ export default function App() {
   const routesFor = (formatExt: string) => targets.filter((t) => t.ext === formatExt)
 
   const selected = targets.find((t) => t.id === target) ?? null
-  const selectedLlm = llmTargets.find((t) => t.id === target) ?? null
   const variants = selected ? routesFor(selected.ext).slice(1) : []
 
-  // One button per LLM script, not per output format: two scripts can make the same
-  // format (the typed and handwriting Markdown ones), and each one's caption tells them
-  // apart. Read off the map rather than hardcoded, so it shows before a file is chosen
-  // and a new script adds its own. A script is listed once however many file types it takes.
-  const llmRoutes = formats
-    ? [
-        ...new Map(
-          [...Object.values(formats.byExtension), ...Object.values(formats.unavailable)]
-            .flat()
-            .filter((t) => t.group === 'llm')
-            .map((t) => [t.id, t] as const),
-        ).values(),
-      ]
-    : []
+  // The LLM tab's route, once both a Markdown format and a model are picked.
+  const llmRoute = llmTargets.find((t) => t.script === script && t.provider === model?.provider) ?? null
+  const llmScripts = llmScriptsIn(formats)
+  const modelGroups = [
+    localGroup(localModels),
+    cloudGroup('openai', 'OpenAI models (costs money)', cloudModels),
+    cloudGroup('anthropic', 'Anthropic models (costs money)', cloudModels),
+  ]
+
+  // What Convert runs, and what is still missing when it can't.
+  const runTarget = tab === 'llm' ? (llmRoute?.id ?? null) : target
+  const missingPick =
+    tab !== 'llm' ? 'Pick a format to convert with'
+      : script && model ? 'That model cannot run this format on this file'
+        : script ? 'Pick a model to convert with'
+          : model ? 'Pick a Markdown format to convert with'
+            : 'Pick a Markdown format and a model to convert with'
 
   // The target borrows the registry's display name so both boxes read the same way.
   const sourceName = ext ? ext.slice(1).toUpperCase() : null
-  const shownTarget = selected ?? selectedLlm
+  const shownTarget = selected ?? llmRoute ?? llmTargets.find((t) => t.script === script) ?? null
   const targetName = formats?.allFormats.find((f) => f.ext === shownTarget?.ext)?.name ?? null
 
   function runDetect(file: File) {
@@ -200,7 +315,7 @@ export default function App() {
     // Appending rather than replacing is what makes the order first-come-first-served
     // across several picks. The backend merges in exactly this order.
     if (files.length === 0) {
-      setTarget(null)
+      clearFormatPicks()
       setMismatch(null)
       runDetect(added[0])
     }
@@ -210,7 +325,7 @@ export default function App() {
   function clearFiles() {
     setFiles([])
     setStatus({ kind: 'idle' })
-    setTarget(null)
+    clearFormatPicks()
     setMismatch(null)
     latestPick.current = null
   }
@@ -246,18 +361,23 @@ export default function App() {
     if (index === 0) {
       // The first file drives everything, so dropping it invalidates the target and
       // the mismatch answer.
-      setTarget(null)
+      clearFormatPicks()
       setMismatch(null)
       runDetect(next[0])
     }
   }
 
-  // Clicking an LLM script selects it, which puts its format in the To box, clears any
-  // "Convert to" selection, and opens its model list. Clicking it again deselects it.
-  // Either way the model starts over, so a script is never run with an old pick.
-  function toggleLlm(route: Target) {
-    setTarget(selectedLlm?.id === route.id ? null : route.id)
-    setModel(null)
+  // The format picks belong to the first file, so they go when it does. The model stays,
+  // it doesn't depend on the file.
+  function clearFormatPicks() {
+    setTarget(null)
+    setScript(null)
+  }
+
+  // Clicking a picked model again deselects it.
+  function pickModel(provider: string, name: string) {
+    const same = model?.provider === provider && model.name === name
+    setModel(same ? null : { provider, name })
   }
 
   async function run(action: (jobId: string) => Promise<{ blob: Blob; filename: string }>,
@@ -286,7 +406,8 @@ export default function App() {
     const downloads: Download[] = []
     const failures: string[] = []
     cancelledBatch.current = false
-    localModelRun.current = selectedLlm !== null
+    localModelRun.current = llmRoute?.provider === 'local'
+    const modelName = llmRoute ? (model?.name ?? null) : null
     setConversionLog([])
 
     const addLog = (fileName: string, convertedTo: string | null, lines: string[]) => {
@@ -305,7 +426,7 @@ export default function App() {
       setJobId(id)
       setCancelling(false)
       try {
-        const { blob, filename, log } = await convert(file, targetId, selectedLlm ? model : null, id, controller.signal)
+        const { blob, filename, log } = await convert(file, targetId, modelName, id, controller.signal)
         downloads.push({ url: URL.createObjectURL(blob), filename, blob })
         const outExt = extensionOf(filename)
         const formatName = formats?.allFormats.find((f) => f.ext === outExt)?.name ?? outExt.slice(1).toUpperCase()
@@ -351,7 +472,7 @@ export default function App() {
 
   return (
     <div className="layout">
-      <aside className="sidebar">
+      <aside className="sidebar" hidden={tab !== 'convert'}>
         <h2>Convert to</h2>
 
         <div className="formats">
@@ -399,76 +520,55 @@ export default function App() {
         ))}
       </aside>
 
-      <aside className="sidebar llm-panel">
-        <h2>Convert to</h2>
-        <p className="muted subtitle">Scripts use LLMs for conversion</p>
+      <aside className="sidebar model-panel" hidden={tab !== 'llm'}>
+        <h2>Model</h2>
+
+        <div className="model-groups">
+          {modelGroups.map((g) => (
+            <ModelGroup
+              key={g.provider}
+              group={g}
+              picked={model?.provider === g.provider ? model.name : null}
+              onPick={(name) => pickModel(g.provider, name)}
+            />
+          ))}
+        </div>
+
+        {llmRoute?.note && <p className="muted note">{llmRoute.note}</p>}
+      </aside>
+
+      <aside className="sidebar" hidden={tab !== 'llm'}>
+        <h2>Markdown format</h2>
 
         <div className="llm-routes">
-          {llmRoutes.map((r) => {
-            const route = llmTargets.find((t) => t.id === r.id)
-            const dep = llmBlocked.find((u) => u.id === r.id)
-            const name = formats?.allFormats.find((f) => f.ext === r.ext)?.name ?? r.ext
-            const why = route
+          {llmScripts.map(({ script: name, caption }) => {
+            const available = llmTargets.some((t) => t.script === name)
+            const dep = llmBlocked.find((u) => u.script === name)
+            const why = available
               ? undefined
               : files.length === 0
                 ? 'Add a file to see what file type it can be converted to'
                 : dep
                   ? blockedReason(dep)
-                  : `Cannot convert ${ext || 'this file'} to ${name}`
+                  : `${name} does not take ${ext || 'this file'}`
 
             return (
-              <div key={r.id} className="llm-route">
+              <div key={name} className="llm-route">
                 <span className="tip" data-tip={why}>
                   <button
                     type="button"
-                    className={selectedLlm?.id === r.id ? 'format selected' : 'format'}
-                    disabled={!route}
-                    onClick={() => route && toggleLlm(route)}
+                    className={script === name ? 'format selected' : 'format'}
+                    disabled={!available}
+                    onClick={() => setScript(script === name ? null : name)}
                   >
                     {name}
                   </button>
                 </span>
-                {r.caption && <p className="muted note">{r.caption}</p>}
+                {caption && <p className="muted note">{caption}</p>}
               </div>
             )
           })}
         </div>
-
-        {selectedLlm && (
-          <div className="model-list">
-            <p className="muted">Open Source models</p>
-
-            {localModels === null && <p className="muted">Loading models...</p>}
-
-            {localModels?.length === 0 && (
-              <p className="muted">No models found. Is Ollama running?</p>
-            )}
-
-            {localModels && localModels.length > 0 && !localModels.some((m) => m.installed) && (
-              <p className="muted">Nothing downloaded yet. Hover a model to see how to get it</p>
-            )}
-
-            {localModels?.map((m) => (
-              <span
-                key={m.name}
-                className="tip"
-                data-tip={m.installed ? undefined : `Not downloaded. Run: ollama pull ${m.name}`}
-              >
-                <button
-                  type="button"
-                  className={model === m.name ? 'format selected' : 'format'}
-                  disabled={!m.installed}
-                  title={m.name}
-                  onClick={() => setModel(model === m.name ? null : m.name)}
-                >
-                  {m.name}
-                </button>
-              </span>
-            ))}
-
-            {selectedLlm.note && <p className="muted note">{selectedLlm.note}</p>}
-          </div>
-        )}
       </aside>
 
       <main>
@@ -579,20 +679,15 @@ export default function App() {
                 ? 'Add files to convert'
                 : mixedExtensions
                   ? 'Every file has to be the same format'
-                  : !target
-                    ? 'Pick a format, or an LLM script, to convert with'
-                    : selectedLlm && !model
-                      ? 'Pick a model to convert with'
-                      : undefined
+                  : !runTarget
+                    ? missingPick
+                    : undefined
             }
           >
             <button
               className="action"
-              onClick={() => target && convertAll(target)}
-              disabled={
-                files.length === 0 || mixedExtensions || !target
-                || (selectedLlm !== null && !model) || busy
-              }
+              onClick={() => runTarget && convertAll(runTarget)}
+              disabled={files.length === 0 || mixedExtensions || !runTarget || busy}
             >
               {status.kind === 'converting' ? 'Converting...' : 'Convert Files'}
             </button>

@@ -91,6 +91,15 @@ def test_all_formats_matches_the_distinct_target_extensions() -> None:
     assert {f["ext"] for f in server.ALL_FORMATS} == {c.target_ext for c in server.REGISTRY}
 
 
+def test_every_llm_route_has_its_own_script_and_provider() -> None:
+    """The LLM tab finds the route for a pair of picks (a Markdown format and a model's
+    provider) by matching these two, so each needs both and no two routes can share a pair."""
+    pairs = [(c.script, c.provider) for c in server.REGISTRY if c.group == "llm"]
+
+    assert all(script and provider for script, provider in pairs)
+    assert len(pairs) == len(set(pairs))
+
+
 # Endpoints
 
 
@@ -228,6 +237,30 @@ def test_a_cloud_conversion_uses_the_model_the_user_chose(
         "/api/convert",
         data={"target": target_id, "model": model},
         files={"file": ("a.pdf", b"%PDF-1.4\n")},
+    )
+
+    assert calls == [model]
+
+
+_CLOUD_HANDWRITING_ROUTES = [
+    ("handwriting->md-ai", "OPENAI_API_KEY", "convert_handwriting_to_markdown_openai", "gpt-4o"),
+    ("handwriting->md-claude", "ANTHROPIC_API_KEY", "convert_handwriting_to_markdown_anthropic", "claude-sonnet-5"),
+]
+
+
+@pytest.mark.parametrize(("target_id", "key_var", "func", "model"), _CLOUD_HANDWRITING_ROUTES)
+def test_a_cloud_handwriting_conversion_uses_the_model_the_user_chose(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch,
+    target_id: str, key_var: str, func: str, model: str,
+) -> None:
+    monkeypatch.setenv(key_var, "test-key")
+    calls: list[str] = []
+    monkeypatch.setattr(server.llm_md, func, lambda chosen: calls.append(chosen) or "done")
+
+    client.post(
+        "/api/convert",
+        data={"target": target_id, "model": model},
+        files={"file": ("a.jpg", b"not really a jpg")},
     )
 
     assert calls == [model]
@@ -377,7 +410,7 @@ def test_the_handwriting_conversion_is_offered_for_jpg_jpeg_and_pdf(
     assert route["caption"] == _HANDWRITING_CAPTION
 
 
-def test_the_local_pdf_conversion_has_no_caption_or_model_list(
+def test_only_the_handwriting_conversion_has_a_caption(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["gemma4:12b"])
@@ -385,25 +418,7 @@ def test_the_local_pdf_conversion_has_no_caption_or_model_list(
     pdf_routes = {t["id"]: t for t in client.get("/api/formats").json()["byExtension"][".pdf"]}
 
     assert "caption" not in pdf_routes["pdf->md-local"]
-    assert "models" not in pdf_routes["pdf->md-local"]
     assert pdf_routes["handwriting->md"]["caption"] == _HANDWRITING_CAPTION
-
-
-@pytest.mark.parametrize(("target_id", "key_var", "_func", "_model"), _CLOUD_ROUTES)
-def test_a_cloud_route_is_in_the_llm_column_with_its_models_and_a_caption(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch,
-    target_id: str, key_var: str, _func: str, _model: str,
-) -> None:
-    """The LLM column tells a cloud route from a local one by `models`, and tells the four
-    Markdown buttons apart by caption."""
-    monkeypatch.setenv(key_var, "test-key")
-
-    pdf_routes = {t["id"]: t for t in client.get("/api/formats").json()["byExtension"][".pdf"]}
-
-    route = pdf_routes[target_id]
-    assert route["group"] == "llm"
-    assert route["models"] == list(server.BY_TARGET_ID[target_id].model_names)
-    assert route["caption"]
 
 
 def test_the_caption_is_still_sent_when_the_conversion_is_unavailable(
@@ -542,6 +557,34 @@ def test_local_models_are_sorted_weakest_to_strongest(
     names = [m["name"] for m in client.get("/api/local-models").json()["models"]]
 
     assert names == ["tiny:1.8b", "small:4b", "big:9b", "huge:12b", "unsized:latest"]
+
+
+def test_cloud_models_lists_each_providers_models(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    body = client.get("/api/cloud-models").json()
+
+    assert body == {
+        "openai": {"models": list(server.llm_pdf_md.OPENAI_MODELS)},
+        "anthropic": {"models": list(server.llm_pdf_md.ANTHROPIC_MODELS)},
+    }
+
+
+def test_a_provider_without_a_key_still_lists_its_models_with_the_reason(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The picker greys these out and says why, so the models can't be dropped."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    body = client.get("/api/cloud-models").json()
+
+    assert body["openai"]["models"] == list(server.llm_pdf_md.OPENAI_MODELS)
+    assert body["openai"]["reason"] == "OPENAI_API_KEY is not set"
+    assert "reason" not in body["anthropic"]
 
 
 def test_the_latest_percent_is_the_last_progress_line_printed() -> None:

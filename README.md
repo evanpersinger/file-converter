@@ -30,16 +30,23 @@ Each picked file and each converted result has a **View** button that opens it i
 with zoom controls, so you can check a file before converting it or before downloading the
 result. PowerPoint files get their own slide renderer.
 
-The second **Convert to** column ("Scripts use LLMs for conversion.") is for conversions
-that run on a local model, one button per script. It has two **MD** buttons. The first is
-for typed PDFs (`llm_pdf_md.py`). The second, captioned "Used for handwriting, like actual
-writing on paper.", is `llm_md.py`, and it takes JPGs and PDFs. Pick a file, click the
-**MD** button that fits it, then pick one of your Open Source models, listed weakest to
-strongest. Convert stays disabled until you pick one. A model has to be downloaded first
-(`ollama pull <model>`), and models that aren't are greyed out with the pull command on
-hover. Ollama itself has to be running (open the Ollama app or run `ollama serve`). The
-OpenAI and Claude versions of these conversions are CLI only for now, see `llm_pdf_md.py`
-and `llm_md.py` below.
+The **Convert Files (LLM)** tab (next to **Convert Files**, in the bar at the top) swaps
+the format column for two columns that run a conversion on an LLM. Picked files and the
+Result column carry over between the two tabs, but the picks are cleared when you switch.
+
+- **Markdown format** picks the script: **Typed PDF** (`llm_pdf_md.py`) or **Handwriting**
+  (`llm_md.py`, captioned "Used for converting pictures of handwriting", takes JPGs and
+  PDFs).
+- **Model** picks who runs it, in three groups: Open Source (Ollama), OpenAI, and
+  Anthropic. The model's group decides which of the format's routes runs, so every pair
+  works. The OpenAI and Anthropic groups cost money and bill your key.
+
+Pick a file, a Markdown format and a model, in any order. Convert stays disabled until you
+have picked both. Open Source models are listed weakest to strongest, a model has to be
+downloaded first (`ollama pull <model>`), and models that aren't are greyed out with the
+pull command on hover. Ollama itself has to be running (open the Ollama app or run
+`ollama serve`). A cloud group is greyed out, with the reason on hover, when its API key
+(`OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env`) isn't set.
 
 `--app-dir backend` and `--loop asyncio` are both required, the backend won't start
 without them.

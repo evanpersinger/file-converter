@@ -320,8 +320,8 @@ class Conversion:
     invoke: Callable
     requires: tuple[str, ...] = ()
     note: str | None = None
-    # A short sentence shown under the conversion's button, for telling apart two buttons
-    # that make the same format (the two LLM Markdown scripts).
+    # A short sentence shown under the conversion's button in the LLM tab, saying what its
+    # Markdown format is for. One route per script needs it, the UI shares it across the rest.
     caption: str | None = None
     # True when the user picks a model to run this with. `invoke` then also takes it.
     takes_model: bool = False
@@ -329,12 +329,23 @@ class Conversion:
     # models are whatever Ollama has downloaded.
     model_names: tuple[str, ...] = ()
     # Which part of the UI owns this conversion. None means the regular "Convert to" list,
-    # "llm" the LLM column. A cloud conversion is told apart from a local one by its
-    # model_names, which /api/formats sends as `models`.
+    # "llm" the Converter (LLM) tab.
     group: str | None = None
+    # What the user picks in the LLM tab: which Markdown format ("Typed PDF", "Handwriting")
+    # and which provider runs it ("local", "openai", "anthropic"). The UI finds the
+    # conversion for a pair of picks by matching these two.
+    script: str | None = None
+    provider: str | None = None
 
 
 IMAGE_ONLY_OCR = (".png", ".gif", ".bmp", ".tiff", ".webp")
+
+# The models the UI offers for each cloud provider. One place, shared by the routes below
+# (which refuse any other model) and by /api/cloud-models (which lists them).
+CLOUD_MODELS = {
+    "openai": tuple(llm_pdf_md.OPENAI_MODELS),
+    "anthropic": tuple(llm_pdf_md.ANTHROPIC_MODELS),
+}
 
 REGISTRY: list[Conversion] = [
     # --- spreadsheets / data -------------------------------------------------
@@ -353,36 +364,56 @@ REGISTRY: list[Conversion] = [
     Conversion((".pdf",), "pdf->png", "PNG", ".png",
                via_globals(pdf_png, lambda s: pdf_png.convert_pdf_to_png()),
                note="One PNG per page. Multi-page PDFs come back as a zip"),
+    # The LLM conversions: two scripts (typed PDFs, handwriting) times three providers.
+    # Local first within each script, so the free route is the one listed first.
+    Conversion((".pdf",), "pdf->md-local", "Markdown (Open Source model, free)", ".md",
+               via_dir_globals_model(
+                   llm_pdf_md,
+                   lambda s, model: llm_pdf_md.convert_pdf_to_markdown_local(model)),
+               requires=("ollama",), takes_model=True, group="llm",
+               script="Typed PDF", provider="local",
+               note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first"),
     Conversion((".pdf",), "pdf->md-ai", "Markdown (LLM: OpenAI, costs money)", ".md",
                via_dir_globals_model(
                    llm_pdf_md,
                    lambda s, model: llm_pdf_md.convert_pdf_to_markdown_openai(model)),
                requires=("openai_key",), takes_model=True,
-               model_names=tuple(llm_pdf_md.OPENAI_MODELS), group="llm",
-               caption="Typed PDFs, OpenAI, costs money",
+               model_names=CLOUD_MODELS["openai"], group="llm",
+               script="Typed PDF", provider="openai",
                note="Sends the PDF to OpenAI's Vision API. Slower, and it bills your key"),
     Conversion((".pdf",), "pdf->md-claude", "Markdown (LLM: Claude, costs money)", ".md",
                via_dir_globals_model(
                    llm_pdf_md,
                    lambda s, model: llm_pdf_md.convert_pdf_to_markdown_anthropic(model)),
                requires=("anthropic_key",), takes_model=True,
-               model_names=tuple(llm_pdf_md.ANTHROPIC_MODELS), group="llm",
-               caption="Typed PDFs, Claude, costs money",
+               model_names=CLOUD_MODELS["anthropic"], group="llm",
+               script="Typed PDF", provider="anthropic",
                note="Sends the PDF to Anthropic's Claude. Slower, and it bills your key"),
-    Conversion((".pdf",), "pdf->md-local", "Markdown (Open Source model, free)", ".md",
-               via_dir_globals_model(
-                   llm_pdf_md,
-                   lambda s, model: llm_pdf_md.convert_pdf_to_markdown_local(model)),
-               requires=("ollama",), takes_model=True, group="llm",
-               note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first"),
-    # The one LLM conversion that takes more than PDFs: llm_md reads handwriting from JPGs and PDFs.
+    # llm_md takes more than PDFs: it reads handwriting from JPGs and PDFs.
     Conversion((".jpg", ".jpeg", ".pdf"), "handwriting->md", "Markdown (handwriting, Open Source model, free)", ".md",
                via_dir_globals_model(
                    llm_md,
                    lambda s, model: llm_md.convert_handwriting_to_markdown_local(model)),
                requires=("ollama",), takes_model=True, group="llm",
+               script="Handwriting", provider="local",
                caption="Used for converting pictures of handwriting",
                note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first"),
+    Conversion((".jpg", ".jpeg", ".pdf"), "handwriting->md-ai", "Markdown (handwriting, OpenAI, costs money)", ".md",
+               via_dir_globals_model(
+                   llm_md,
+                   lambda s, model: llm_md.convert_handwriting_to_markdown_openai(model)),
+               requires=("openai_key",), takes_model=True,
+               model_names=CLOUD_MODELS["openai"], group="llm",
+               script="Handwriting", provider="openai",
+               note="Sends the file to OpenAI's Vision API. Slower, and it bills your key"),
+    Conversion((".jpg", ".jpeg", ".pdf"), "handwriting->md-claude", "Markdown (handwriting, Claude, costs money)", ".md",
+               via_dir_globals_model(
+                   llm_md,
+                   lambda s, model: llm_md.convert_handwriting_to_markdown_anthropic(model)),
+               requires=("anthropic_key",), takes_model=True,
+               model_names=CLOUD_MODELS["anthropic"], group="llm",
+               script="Handwriting", provider="anthropic",
+               note="Sends the file to Anthropic's Claude. Slower, and it bills your key"),
 
     # --- office --------------------------------------------------------------
     Conversion((".pptx",), "pptx->md", "Markdown", ".md",
@@ -524,11 +555,11 @@ def formats() -> dict:
                 "label": conv.label,
                 "ext": conv.target_ext,
                 "group": conv.group,
+                "script": conv.script,
+                "provider": conv.provider,
             }
             if conv.caption:
                 entry["caption"] = conv.caption
-            if conv.model_names:
-                entry["models"] = list(conv.model_names)
             if missing:
                 reason, hint = DEP_LABELS[missing[0]]
                 unavailable.setdefault(ext, []).append({**entry, "reason": reason, "hint": hint})
@@ -562,6 +593,23 @@ def local_models() -> dict:
     models = [{"name": name, "installed": name in installed} for name in curated]
     models += [{"name": name, "installed": True} for name in others]
     return {"models": sorted(models, key=lambda m: (llm_pdf_md.model_size(m["name"]), m["name"]))}
+
+
+@app.get("/api/cloud-models")
+def cloud_models() -> dict:
+    """The fixed models each cloud provider offers, for the picker in the LLM tab.
+
+    A provider whose API key is missing still lists its models, with the reason and hint, so
+    the UI can grey them out and say why, the same way /api/formats does for a route.
+    """
+    key_deps = {"openai": "openai_key", "anthropic": "anthropic_key"}
+    result: dict[str, dict] = {}
+    for provider, models in CLOUD_MODELS.items():
+        entry: dict = {"models": list(models)}
+        if missing_deps((key_deps[provider],)):
+            entry["reason"], entry["hint"] = DEP_LABELS[key_deps[provider]]
+        result[provider] = entry
+    return result
 
 
 def _error(message: str, hint: str | None = None, status: int = 400) -> JSONResponse:
