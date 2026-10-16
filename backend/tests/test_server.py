@@ -11,6 +11,7 @@ import json
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import fitz
 import pandas as pd
@@ -38,6 +39,17 @@ def jobs_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def client() -> Iterator[TestClient]:
     with TestClient(server.app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def ollama_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the converters' /api/version reachability check pass, so a test that mocks the
+    page conversion doesn't also need an Ollama server running."""
+    monkeypatch.setattr(
+        server.llm_pdf_md.requests,
+        "get",
+        lambda *args, **kwargs: SimpleNamespace(raise_for_status=lambda: None),
+    )
 
 
 # Registry invariants
@@ -266,6 +278,7 @@ def test_a_cloud_handwriting_conversion_uses_the_model_the_user_chose(
     assert calls == [model]
 
 
+@pytest.mark.usefixtures("ollama_reachable")
 def test_a_local_conversion_uses_the_model_the_user_chose(
     client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -295,6 +308,7 @@ def test_a_local_conversion_uses_the_model_the_user_chose(
     assert calls == ["qwen3.5:9b"]
 
 
+@pytest.mark.usefixtures("ollama_reachable")
 def test_a_local_conversion_returns_partial_output_when_cancelled(
     client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -329,6 +343,7 @@ def test_a_local_conversion_returns_partial_output_when_cancelled(
     assert len(calls) == 1
 
 
+@pytest.mark.usefixtures("ollama_reachable")
 def test_a_local_conversion_reports_what_happened_to_each_page_in_plain_sentences(
     client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -363,6 +378,7 @@ def test_a_local_conversion_reports_what_happened_to_each_page_in_plain_sentence
     ]
 
 
+@pytest.mark.usefixtures("ollama_reachable")
 def test_a_model_note_from_the_handwriting_route_shows_up_in_the_log_not_the_file(
     client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -472,6 +488,7 @@ def test_a_handwriting_conversion_uses_the_model_the_user_chose(
     assert calls == ["gemma4:12b"]
 
 
+@pytest.mark.usefixtures("ollama_reachable")
 def test_cancelling_a_handwriting_conversion_returns_the_pages_finished(
     client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -828,7 +845,12 @@ def test_a_conversion_does_not_touch_the_real_input_folder(
 ) -> None:
     """The whole point of the sandbox: the batch converters process everything in
     their input folder, so a request must never point them at backend/input."""
-    before = sorted(p.name for p in (server.BACKEND / "input").iterdir())
+    input_dir = server.BACKEND / "input"  # gitignored, so absent on a fresh clone
+
+    def names() -> list[str]:
+        return sorted(p.name for p in input_dir.iterdir()) if input_dir.is_dir() else []
+
+    before = names()
 
     client.post(
         "/api/convert",
@@ -836,4 +858,4 @@ def test_a_conversion_does_not_touch_the_real_input_folder(
         files={"file": ("data.csv", b"a\n1\n")},
     )
 
-    assert sorted(p.name for p in (server.BACKEND / "input").iterdir()) == before
+    assert names() == before
