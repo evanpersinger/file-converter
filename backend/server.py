@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
 from typing import Callable, Iterator
+from urllib.parse import quote
 from uuid import uuid4
 
 import magic
@@ -616,6 +617,19 @@ def _error(message: str, hint: str | None = None, status: int = 400) -> JSONResp
     return JSONResponse({"error": message, "hint": hint}, status_code=status)
 
 
+def _content_disposition(filename: str) -> str:
+    """The download header for `filename`, which can hold any character the upload did.
+
+    Header values go out as latin-1, so a name with anything outside it (the narrow
+    no-break space in a macOS screenshot name, Japanese) would crash the response. The
+    plain `filename` is an ASCII fallback, with those characters as `_` and quotes escaped,
+    and `filename*` (RFC 5987) carries the real name percent-encoded for the clients that
+    read it.
+    """
+    fallback = re.sub(r"[^\x20-\x7e]", "_", filename).replace("\\", "\\\\").replace('"', '\\"')
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
+
+
 def _model_problem(conv: Conversion, model: str | None) -> JSONResponse | None:
     """The error to send back if `model` can't be used for `conv`, or None if it can.
 
@@ -823,7 +837,7 @@ def convert(
 
     # JSON keeps the header plain ASCII whatever the error text contains.
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Disposition": _content_disposition(filename),
         "X-Conversion-Log": json.dumps(_plain_log(captured.getvalue())),
     }
 
@@ -903,7 +917,7 @@ def combine(files: list[UploadFile] = File(...)):
     return Response(
         content=payload,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _content_disposition(filename)},
     )
 
 

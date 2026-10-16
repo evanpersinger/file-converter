@@ -724,6 +724,39 @@ def test_directory_components_are_stripped_from_the_filename(
     assert ".." not in response.headers["content-disposition"]
 
 
+@pytest.mark.parametrize(
+    ("upload_name", "encoded_name"),
+    [
+        ("Screenshot 7.52.32 PM.csv", "Screenshot%207.52.32%E2%80%AFPM.xlsx"),
+        ("画像.csv", "%E7%94%BB%E5%83%8F.xlsx"),
+    ],
+    ids=["macos-screenshot-narrow-space", "japanese"],
+)
+def test_a_filename_outside_latin_1_is_converted_and_kept(
+    client: TestClient, jobs_root: Path, upload_name: str, encoded_name: str
+) -> None:
+    """Header values go out as latin-1, so the raw name used to crash the response with a
+    500. The real name now travels percent-encoded in `filename*`, next to an ASCII fallback."""
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->xlsx"},
+        files={"file": (upload_name, b"a\n1\n")},
+    )
+
+    assert response.status_code == 200
+    disposition = response.headers["content-disposition"]
+    assert 'filename="' in disposition
+    assert f"filename*=UTF-8''{encoded_name}" in disposition
+
+
+def test_the_download_header_escapes_quotes_and_stays_ascii() -> None:
+    header = server._content_disposition('a "b"\\c; d .pdf')
+
+    assert header.isascii()
+    assert 'filename="a \\"b\\"\\\\c; d_.pdf"' in header
+    assert "filename*=UTF-8''a%20%22b%22%5Cc%3B%20d%E2%80%AF.pdf" in header
+
+
 def test_several_output_files_come_back_as_a_zip(
     client: TestClient, jobs_root: Path
 ) -> None:

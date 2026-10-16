@@ -134,10 +134,18 @@ async function errorMessage(response: Response, fallback: string): Promise<strin
   return hint ? `${message}\n\n${hint}` : message
 }
 
-/** Pull the download name out of `attachment; filename="report.pdf"`. */
+/**
+ * Pull the download name out of the `Content-Disposition` header. The backend sends the
+ * real name percent-encoded as `filename*=UTF-8''report.pdf`, which can hold any character,
+ * next to a plain `filename="report.pdf"` fallback with the odd ones swapped for `_`. The
+ * encoded one is read first.
+ */
 function filenameFrom(disposition: string | null): string {
-  const match = disposition?.match(/filename="(.+?)"/)
-  return match ? match[1] : 'converted'
+  const encoded = disposition?.match(/filename\*=UTF-8''([^;]+)/i)
+  if (encoded) return decodeURIComponent(encoded[1])
+
+  const plain = disposition?.match(/filename="(.+?)"/)
+  return plain ? plain[1] : 'converted'
 }
 
 /** The sentences in the `X-Conversion-Log` header (a JSON list), or [] when it is missing or unreadable. */
