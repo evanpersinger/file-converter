@@ -8,25 +8,8 @@ import sys
 import re
 from pathlib import Path
 
-
-
-# test if user has correct packages installed
-try:
-    from PIL import Image
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
-
-try:
-    from pypdf import PdfWriter, PdfReader
-    HAS_PDF = True
-except ImportError:
-    try:
-        from PyPDF2 import PdfFileWriter, PdfFileReader
-        HAS_PDF = True
-        PDF_LIB = 'pypdf2'
-    except ImportError:
-        HAS_PDF = False
+from PIL import Image
+from pypdf import PdfReader, PdfWriter
         
         
 
@@ -164,9 +147,6 @@ def combine_files(file_paths: list[str], output_path: str | None = None) -> bool
                 print("Error: Cannot create image output from non-image files")
                 return False
             
-            if not HAS_PIL:
-                print("Error: Pillow (PIL) is required to combine images. Install with: pip install pillow")
-                return False
             
             images = []
             max_width = 0
@@ -199,28 +179,14 @@ def combine_files(file_paths: list[str], output_path: str | None = None) -> bool
                 print("Error: Cannot create PDF output from non-PDF files")
                 return False
             
-            if not HAS_PDF:
-                print("Error: pypdf or PyPDF2 is required to combine PDFs. Install with: pip install pypdf")
-                return False
             
-            # Try using pypdf (newer)
-            try:
-                writer = PdfWriter()
-                for pdf_path in file_types['pdf']:
-                    reader = PdfReader(pdf_path)
-                    for page in reader.pages:
-                        writer.add_page(page)
-                with open(full_output_path, 'wb') as outfile:
-                    writer.write(outfile)
-            except NameError:
-                # Fall back to PyPDF2 (older)
-                writer = PdfFileWriter()
-                for pdf_path in file_types['pdf']:
-                    reader = PdfFileReader(pdf_path)
-                    for page_num in range(reader.numPages):
-                        writer.addPage(reader.getPage(page_num))
-                with open(full_output_path, 'wb') as outfile:
-                    writer.write(outfile)
+            writer = PdfWriter()
+            for pdf_path in file_types['pdf']:
+                reader = PdfReader(pdf_path)
+                for page in reader.pages:
+                    writer.add_page(page)
+            with open(full_output_path, 'wb') as outfile:
+                writer.write(outfile)
         
         else:
             # Combine text files

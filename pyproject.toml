@@ -50,7 +50,6 @@ dependencies = [
     "pdfminer-six>=20250506",
     "pymupdf>=1.26.4",
     "pymupdf4llm>=0.0.17",
-    "pypdf2>=3.0.1",
     "pypdfium2>=4.30.0",
     
     # Document Processing
