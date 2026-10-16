@@ -4,11 +4,12 @@ English only (lang='eng'): other languages come back as garbled English, not an 
 """
 
 import os
-import glob
 import re
 import pytesseract
 import pillow_heif
 from PIL import Image, ImageEnhance, ImageFilter
+
+from find_files import find_files
 
 pillow_heif.register_heif_opener()
 
@@ -101,11 +102,10 @@ def convert_heic_to_markdown() -> str:
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    heic_files = glob.glob(os.path.join(input_folder, '*.heic')) + \
-                 glob.glob(os.path.join(input_folder, '*.HEIC'))
+    heic_files = find_files(input_folder, '.heic')
 
     if not heic_files:
-        md_present = glob.glob(os.path.join(input_folder, '*.md'))
+        md_present = find_files(input_folder, '.md')
         if md_present:
             return "That file is already in markdown format"
         return "No HEIC files found in input folder"

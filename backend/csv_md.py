@@ -5,8 +5,9 @@ writes a pipe-delimited Markdown table to output/.
 """
 
 import csv
-import glob
 import os
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -52,10 +53,10 @@ def convert_csv_to_markdown() -> str:
 
     os.makedirs(output_folder, exist_ok=True)
 
-    csv_files = glob.glob(os.path.join(input_folder, '*.csv'))
+    csv_files = find_files(input_folder, '.csv')
 
     if not csv_files:
-        md_present = glob.glob(os.path.join(input_folder, '*.md'))
+        md_present = find_files(input_folder, '.md')
         if md_present:
             return "File is already in markdown format"
         return "No CSV files found in input folder"

@@ -3,10 +3,11 @@
 Images are saved to output/<name>_images/ and linked from the Markdown with relative paths.
 """
 
-import glob
 import os
 import subprocess
 from shutil import which
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,11 +32,11 @@ def convert_docx_to_markdown() -> str:
     # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
 
-    docx_files = sorted(glob.glob(os.path.join(input_folder, '*.docx')))
+    docx_files = find_files(input_folder, '.docx')
 
     if not docx_files:
         # If there are only markdown files present, notify the user
-        md_present = glob.glob(os.path.join(input_folder, '*.md'))
+        md_present = find_files(input_folder, '.md')
         if md_present:
             return "That file is already in markdown format"
         return "No DOCX files found in input folder"

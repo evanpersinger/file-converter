@@ -14,6 +14,8 @@ from shutil import which
 from datetime import date
 import re
 
+from find_files import find_files
+
 # Default folders live next to this script, so `python backend/Rmd_pdf.py` finds
 # backend/input regardless of the shell's working directory.
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -317,7 +319,7 @@ def main():
             sys.exit(1)
     else:
         # convert all .Rmd files in input/
-        rmd_files = sorted(p for p in input_dir.glob("*.Rmd"))
+        rmd_files = [Path(p) for p in find_files(input_dir, ".Rmd")]
         if not rmd_files:
             print(f"No .Rmd files found in {input_dir} folder")
             print("Usage: python Rmd_pdf.py <file.Rmd> [output.pdf] [--input-dir DIR] [--output-dir DIR]")

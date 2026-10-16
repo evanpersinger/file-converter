@@ -1,9 +1,10 @@
 """Convert HEIC images in input/ to PNG in output/. Keeps the alpha channel, unlike the JPG route."""
 
 import os
-import glob
 from PIL import Image
 import pillow_heif
+
+from find_files import find_files
 
 # Register HEIF opener with Pillow so it can read .heic files
 pillow_heif.register_heif_opener()
@@ -27,18 +28,10 @@ def convert_heic_to_png() -> str:
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Both cases are globbed because glob matches with fnmatch, which is case-sensitive
-    # on macOS and Linux whatever the filesystem does, so '*.heic' alone would miss
-    # IMG_1.HEIC, which is how the camera names them. A set rather than a concatenated
-    # list so that a file matching two patterns is still converted once.
-    heic_files = sorted({
-        path
-        for pattern in ('*.heic', '*.HEIC')
-        for path in glob.glob(os.path.join(input_folder, pattern))
-    })
+    heic_files = find_files(input_folder, '.heic')
 
     if not heic_files:
-        png_present = glob.glob(os.path.join(input_folder, '*.png'))
+        png_present = find_files(input_folder, '.png')
         if png_present:
             return "That file is already in png format"
         return "No HEIC files found in input folder"

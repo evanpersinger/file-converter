@@ -4,10 +4,11 @@ English only (lang='eng'): other languages come back as garbled English, not an 
 """
 
 import os
-import glob
 import pytesseract
 import shutil
 from PIL import Image
+
+from find_files import find_files
 
 # Dynamically find tesseract executable
 tesseract_path = shutil.which('tesseract')
@@ -36,12 +37,11 @@ def convert_jpg_to_txt() -> str:
         os.makedirs(output_folder)
 
     # Find all JPG/JPEG files
-    jpg_files = glob.glob(os.path.join(input_folder, '*.jpg')) + \
-                glob.glob(os.path.join(input_folder, '*.jpeg'))
+    jpg_files = find_files(input_folder, '.jpg', '.jpeg')
 
     if not jpg_files:
         # If there are only text files present, notify the user those are already in target format
-        txt_present = glob.glob(os.path.join(input_folder, '*.txt'))
+        txt_present = find_files(input_folder, '.txt')
         if txt_present:
             return "That file is already in text format"
         return "No JPG/JPEG files found in input folder"

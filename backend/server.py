@@ -795,9 +795,8 @@ def convert(
     captured = io.StringIO()
 
     with _LOCK, job_workspace() as (job_dir, job_in, job_out):
-        # Lowercase the extension on the way in. Most batch converters glob
-        # lowercase-only patterns (png_pdf globs '*.png'), and APFS being
-        # case-insensitive by default is a filesystem accident, not a guarantee.
+        # ext was lowercased above, so the staged name is lowercase whatever the upload
+        # was called.
         staged = job_in / f"{stem}{ext}"
         staged.write_bytes(data)
 

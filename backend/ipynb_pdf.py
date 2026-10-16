@@ -9,6 +9,8 @@ import sys
 import subprocess
 from pathlib import Path
 
+from find_files import find_files
+
 
 def convert_notebook_to_pdf(notebook_path: str, output_path: str | None = None) -> bool:
     """
@@ -91,7 +93,7 @@ def main():
         # No args: convert all .ipynb files in input/
         script_dir = Path(__file__).resolve().parent
         input_dir = script_dir / "input"
-        notebooks = sorted(p for p in input_dir.glob("*.ipynb"))
+        notebooks = [Path(p) for p in find_files(input_dir, ".ipynb")]
         if not notebooks:
             print("No .ipynb files found in input folder")
             print("Usage: python ipynb_pdf.py <notebook_file> [output_file]")

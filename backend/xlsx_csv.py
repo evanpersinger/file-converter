@@ -5,7 +5,6 @@ For each .xlsx in input/, reads it with pandas and writes a .csv to output/.
 
 import io
 import pandas as pd
-import glob
 import os
 import re
 import shutil
@@ -15,6 +14,7 @@ from pathlib import Path
 import openpyxl
 
 import compress
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -67,11 +67,11 @@ def convert_xlsx_to_csv() -> str:
     os.makedirs(output_folder, exist_ok=True)
 
     # Find all .xlsx files in the folder
-    excel_files = glob.glob(os.path.join(input_folder, '*.xlsx'))
+    excel_files = find_files(input_folder, '.xlsx')
 
     if not excel_files:
         # If only CSVs are present, notify they're already CSV
-        csv_present = glob.glob(os.path.join(input_folder, '*.csv'))
+        csv_present = find_files(input_folder, '.csv')
         if csv_present:
             return "That file is already in csv format"
         return "No Excel files found in input folder"

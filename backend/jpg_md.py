@@ -4,10 +4,11 @@ English only (lang='eng'): other languages come back as garbled English, not an 
 """
 
 import os
-import glob
 import pytesseract
 from PIL import Image, ImageEnhance, ImageFilter
 import re
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -108,12 +109,11 @@ def convert_jpg_to_markdown() -> str:
         os.makedirs(output_folder)
 
     # Find all JPG files
-    jpg_files = glob.glob(os.path.join(input_folder, '*.jpg')) + \
-                glob.glob(os.path.join(input_folder, '*.jpeg'))
+    jpg_files = find_files(input_folder, '.jpg', '.jpeg')
 
     if not jpg_files:
         # If there are only markdown files present, notify the user
-        md_present = glob.glob(os.path.join(input_folder, '*.md'))
+        md_present = find_files(input_folder, '.md')
         if md_present:
             return "That file is already in markdown format"
         return "No JPG files found in input folder"

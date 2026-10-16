@@ -8,9 +8,10 @@ WebPs trace their first frame.
 
 import io
 import os
-import glob
 import vtracer
 from PIL import Image
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,18 +32,10 @@ def convert_webp_to_svg() -> str:
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Both cases are globbed because glob matches with fnmatch, which is case-sensitive
-    # on macOS and Linux whatever the filesystem does, so '*.webp' alone would miss
-    # photo.WEBP. A set rather than a concatenated list so that a file matching two
-    # patterns is still converted once.
-    webp_files = sorted({
-        path
-        for pattern in ('*.webp', '*.WEBP')
-        for path in glob.glob(os.path.join(input_folder, pattern))
-    })
+    webp_files = find_files(input_folder, '.webp')
 
     if not webp_files:
-        svg_present = glob.glob(os.path.join(input_folder, '*.svg'))
+        svg_present = find_files(input_folder, '.svg')
         if svg_present:
             return "That file is already in svg format"
         return "No WEBP files found in input folder"

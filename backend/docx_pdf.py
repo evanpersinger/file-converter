@@ -18,6 +18,8 @@ from docx.oxml.ns import qn
 from docx.text.hyperlink import Hyperlink
 import io
 
+from find_files import find_files
+
 # Default folders live next to this script, so `python backend/docx_pdf.py` finds
 # backend/input regardless of the shell's working directory.
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -303,7 +305,7 @@ def main():
             sys.exit(1)
     else:
         # No args: convert all .docx files in input/
-        docx_files = sorted(p for p in input_dir.glob("*.docx"))
+        docx_files = [Path(p) for p in find_files(input_dir, ".docx")]
         if not docx_files:
             print(f"No .docx files found in {input_dir} folder")
             print("Usage: python docx_pdf.py <file.docx> [output.pdf] [--input-dir DIR] [--output-dir DIR]")

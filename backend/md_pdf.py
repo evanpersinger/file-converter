@@ -12,6 +12,8 @@ import traceback
 from pathlib import Path
 from shutil import which
 
+from find_files import find_files
+
 # Config: paths (absolute, based on this script's location so it runs anywhere)
 script_dir = os.path.dirname(os.path.abspath(__file__))
 input_folder = os.path.join(script_dir, "input")
@@ -800,7 +802,7 @@ def convert_md_to_pdf(md_path: str, output_path: str | None = None) -> bool:
 def main():
     if len(sys.argv) < 2:
         # No args: convert all .md files in input/
-        md_files = sorted(Path(input_folder).glob("*.md")) if os.path.isdir(input_folder) else []
+        md_files = [Path(p) for p in find_files(input_folder, ".md")]
         if not md_files:
             print("No .md files found in input folder")
             print("Usage: python md_pdf.py <file.md> [output.pdf]")

@@ -5,9 +5,10 @@ converts to RGB, and saves a .jpg to output/.
 """
 
 import os
-import glob
 from PIL import Image
 import pillow_heif
+
+from find_files import find_files
 
 # Register HEIF opener with Pillow so it can read .heic files
 pillow_heif.register_heif_opener()
@@ -31,14 +32,12 @@ def convert_heic_to_jpg() -> str:
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Find all HEIC files (case-insensitive by checking both cases)
-    heic_files = glob.glob(os.path.join(input_folder, '*.heic')) + \
-                 glob.glob(os.path.join(input_folder, '*.HEIC'))
+    # Find all HEIC files
+    heic_files = find_files(input_folder, '.heic')
 
     # check for heic files
     if not heic_files:
-        jpg_present = glob.glob(os.path.join(input_folder, '*.jpg')) + \
-                      glob.glob(os.path.join(input_folder, '*.jpeg'))
+        jpg_present = find_files(input_folder, '.jpg', '.jpeg')
         if jpg_present:
             return "That file is already in jpg format"
         return "No HEIC files found in input folder"

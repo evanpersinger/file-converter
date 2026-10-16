@@ -7,7 +7,6 @@ heading, promotes large-font text to subheadings, and writes the text to output/
 import io
 import os
 import re
-import glob
 import shutil
 import tempfile
 from pathlib import Path
@@ -16,6 +15,7 @@ from pptx import Presentation
 from pptx.shapes.group import GroupShape
 
 import compress
+from find_files import find_files
 
 # Where python-pptx keeps embedded pictures inside the .pptx zip.
 _MEDIA_PREFIX = "ppt/media/"
@@ -171,11 +171,11 @@ def convert_pptx_to_markdown() -> str:
         os.makedirs(output_folder)
 
     # Find all PPTX files
-    pptx_files = glob.glob(os.path.join(input_folder, '*.pptx'))
+    pptx_files = find_files(input_folder, '.pptx')
 
     if not pptx_files:
         # If there are only markdown files present, notify the user
-        md_present = glob.glob(os.path.join(input_folder, '*.md'))
+        md_present = find_files(input_folder, '.md')
         if md_present:
             return "That file is already in markdown format"
         return "No PPTX files found in input folder"

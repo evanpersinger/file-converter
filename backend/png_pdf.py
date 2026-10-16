@@ -5,8 +5,9 @@ transparency), and saves it as a single-page PDF in output/.
 """
 
 import os
-import glob
 from PIL import Image
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,11 +29,11 @@ def convert_png_to_pdf() -> str:
         os.makedirs(output_folder)
 
     # Find all PNG files
-    png_files = glob.glob(os.path.join(input_folder, '*.png'))
+    png_files = find_files(input_folder, '.png')
 
     if not png_files:
         # If there are only PDFs present, notify the user those are already in target format
-        pdf_present = glob.glob(os.path.join(input_folder, '*.pdf'))
+        pdf_present = find_files(input_folder, '.pdf')
         if pdf_present:
             return "That file is already in pdf format"
         return "No PNG files found in input folder"

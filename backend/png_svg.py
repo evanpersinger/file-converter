@@ -4,8 +4,9 @@ Suits flat-color art. Photos come back as huge, slow SVGs. Tuning knobs are in t
 """
 
 import os
-import glob
 import vtracer
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -26,18 +27,10 @@ def convert_png_to_svg() -> str:
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Both cases are globbed because glob matches with fnmatch, which is case-sensitive
-    # on macOS and Linux whatever the filesystem does, so '*.png' alone would miss
-    # logo.PNG. A set rather than a concatenated list so that a file matching two
-    # patterns is still converted once.
-    png_files = sorted({
-        path
-        for pattern in ('*.png', '*.PNG')
-        for path in glob.glob(os.path.join(input_folder, pattern))
-    })
+    png_files = find_files(input_folder, '.png')
 
     if not png_files:
-        svg_present = glob.glob(os.path.join(input_folder, '*.svg'))
+        svg_present = find_files(input_folder, '.svg')
         if svg_present:
             return "That file is already in svg format"
         return "No PNG files found in input folder"

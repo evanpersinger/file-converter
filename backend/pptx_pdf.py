@@ -5,8 +5,9 @@ the slides to PDF in output/. Requires LibreOffice to be installed.
 """
 
 import os
-import glob
 import subprocess
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,11 +30,11 @@ def convert_pptx_to_pdf() -> str:
         os.makedirs(output_folder)
 
     # Find all PPTX files
-    pptx_files = glob.glob(os.path.join(input_folder, '*.pptx'))
+    pptx_files = find_files(input_folder, '.pptx')
 
     if not pptx_files:
         # If only PDFs are present, notify the file(s) are already PDF
-        pdf_present = glob.glob(os.path.join(input_folder, '*.pdf'))
+        pdf_present = find_files(input_folder, '.pdf')
         if pdf_present:
             return "That file is already in pdf format"
         return "No PPTX files found in input folder"

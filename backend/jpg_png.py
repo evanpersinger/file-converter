@@ -5,8 +5,9 @@ output/. JPEG carries no transparency, so nothing is lost on the way across.
 """
 
 import os
-import glob
 from PIL import Image
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,18 +28,10 @@ def convert_jpg_to_png() -> str:
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Both cases are globbed because glob matches with fnmatch, which is case-sensitive
-    # on macOS and Linux whatever the filesystem does, so '*.jpg' alone would miss
-    # photo.JPG. A set rather than a concatenated list so that a file matching two
-    # patterns is still converted once.
-    jpg_files = sorted({
-        path
-        for pattern in ('*.jpg', '*.jpeg', '*.JPG', '*.JPEG')
-        for path in glob.glob(os.path.join(input_folder, pattern))
-    })
+    jpg_files = find_files(input_folder, '.jpg', '.jpeg')
 
     if not jpg_files:
-        png_present = glob.glob(os.path.join(input_folder, '*.png'))
+        png_present = find_files(input_folder, '.png')
         if png_present:
             return "That file is already in png format"
         return "No JPG files found in input folder"

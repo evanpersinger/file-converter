@@ -12,6 +12,8 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
+from find_files import find_files
+
 
 # Create input and output directories if they don't exist.
 # Resolved relative to this script, not the caller's working directory, so the
@@ -135,7 +137,7 @@ def main():
     if len(sys.argv) < 2:
         # No args: convert all .txt files in input/
         input_dir, output_dir = setup_directories()
-        txt_files = sorted(p for p in input_dir.glob("*.txt"))
+        txt_files = [Path(p) for p in find_files(input_dir, ".txt")]
         if not txt_files:
             print("No .txt files found in input folder")
             print("Usage: python txt_pdf.py <file.txt> [output.pdf]")

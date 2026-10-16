@@ -6,8 +6,9 @@ is flattened onto white, because converting straight to RGB turns transparent ar
 """
 
 import os
-import glob
 from PIL import Image, ImageSequence
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -36,18 +37,10 @@ def convert_gif_to_pdf() -> str:
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Both cases are globbed because glob matches with fnmatch, which is case-sensitive
-    # on macOS and Linux whatever the filesystem does, so '*.gif' alone would miss
-    # logo.GIF. A set rather than a concatenated list so that a file matching two
-    # patterns is still converted once.
-    gif_files = sorted({
-        path
-        for pattern in ('*.gif', '*.GIF')
-        for path in glob.glob(os.path.join(input_folder, pattern))
-    })
+    gif_files = find_files(input_folder, '.gif')
 
     if not gif_files:
-        pdf_present = glob.glob(os.path.join(input_folder, '*.pdf'))
+        pdf_present = find_files(input_folder, '.pdf')
         if pdf_present:
             return "That file is already in pdf format"
         return "No GIF files found in input folder"

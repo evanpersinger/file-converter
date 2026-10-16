@@ -8,6 +8,8 @@ import os
 import sys
 from pathlib import Path
 
+from find_files import find_files
+
 # Default folders live next to this script, so `python backend/R_Rmd.py` finds
 # backend/input regardless of the shell's working directory.
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -62,7 +64,7 @@ def convert_r_to_rmd(r_path: str, output_path: str | None = None,
         rmd_name = f"{full_input_path.stem}.Rmd"
     else:
         rmd_name = Path(output_path).name
-        if not rmd_name.endswith('.Rmd') and not rmd_name.endswith('.rmd'):
+        if not rmd_name.lower().endswith('.rmd'):
             rmd_name += '.Rmd'
     full_output_path = output_dir / rmd_name
     
@@ -295,7 +297,7 @@ def main():
                 sys.exit(1)
         else:
             # Convert all .R files in input/
-            r_files = sorted(p for p in input_dir.glob("*.R"))
+            r_files = [Path(p) for p in find_files(input_dir, ".R")]
             if not r_files:
                 print(f"No .R files found in {input_dir} folder")
                 print("Usage: python R_Rmd.py <file.R> [output.Rmd] [--input-dir DIR] [--output-dir DIR]")
@@ -317,7 +319,7 @@ def main():
             input_dir = script_dir / "input"
             output_dir = script_dir / "output"
             output_dir.mkdir(exist_ok=True)
-            r_files = sorted(p for p in input_dir.glob("*.R"))
+            r_files = [Path(p) for p in find_files(input_dir, ".R")]
             if not r_files:
                 print("No .R files found in input folder")
                 print("Usage: python R_Rmd.py <file.R> [output.Rmd]")

@@ -1,8 +1,9 @@
 """Render each page of the PDFs in input/ to a PNG in output/ (name.png, or name_pageN.png for multi-page)."""
 
 import os
-import glob
 import fitz  # PyMuPDF
+
+from find_files import find_files
 
 # Get the directory where this script is located
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,14 +29,10 @@ def convert_pdf_to_png() -> str:
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    pdf_files = sorted({
-        path
-        for pattern in ('*.pdf', '*.PDF')
-        for path in glob.glob(os.path.join(input_folder, pattern))
-    })
+    pdf_files = find_files(input_folder, '.pdf')
 
     if not pdf_files:
-        png_present = glob.glob(os.path.join(input_folder, '*.png'))
+        png_present = find_files(input_folder, '.png')
         if png_present:
             return "That file is already in png format"
         return "No PDF files found in input folder"
