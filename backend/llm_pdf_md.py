@@ -69,7 +69,7 @@ def convert_with_retry(parser, pdf_path, max_retries=3, retry_delay=5):
                     retry_delay *= 2  # Exponential backoff
                     continue
                 else:
-                    raise Exception(f"Connection failed after {max_retries} attempts: {e}")
+                    raise Exception(f"Connection failed after {max_retries} attempts: {e}") from e
             else:
                 # Not a connection error, don't retry
                 raise e
