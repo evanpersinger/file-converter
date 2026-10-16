@@ -578,9 +578,10 @@ def formats() -> dict:
 
 @app.get("/api/local-models")
 def local_models() -> dict:
-    """Ollama models the UI can offer: the curated vision models, downloaded or not (so
-    a missing one can say how to get it), plus anything else already installed. Sorted
-    weakest to strongest by the size in the tag, models with no size last.
+    """Ollama models the UI can offer: only the curated vision models, downloaded or not
+    (so a missing one can say how to get it). Other installed models are left out, add
+    one to `OLLAMA_MODELS` to offer it. Sorted weakest to strongest by the size in the
+    tag, models with no size last.
 
     Empty when Ollama isn't reachable, /api/formats already carries the reason.
     """
@@ -589,10 +590,7 @@ def local_models() -> dict:
     except requests.exceptions.RequestException:
         return {"models": []}
 
-    curated = llm_pdf_md.OLLAMA_MODELS
-    others = [name for name in installed if name not in curated]
-    models = [{"name": name, "installed": name in installed} for name in curated]
-    models += [{"name": name, "installed": True} for name in others]
+    models = [{"name": name, "installed": name in installed} for name in llm_pdf_md.OLLAMA_MODELS]
     return {"models": sorted(models, key=lambda m: (llm_pdf_md.model_size(m["name"]), m["name"]))}
 
 

@@ -535,7 +535,6 @@ def test_local_models_flags_which_curated_models_are_downloaded(
     assert models == [
         {"name": "curated:1b", "installed": False},
         {"name": "curated:2b", "installed": True},
-        {"name": "other:3b", "installed": True},
     ]
 
 
@@ -547,12 +546,9 @@ def test_llm_conversions_are_grouped_so_convert_to_does_not_list_them(target_id:
 def test_local_models_are_sorted_weakest_to_strongest(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(server.llm_pdf_md, "OLLAMA_MODELS", ["big:9b", "small:4b"])
-    monkeypatch.setattr(
-        server.llm_pdf_md,
-        "list_ollama_models",
-        lambda: ["big:9b", "huge:12b", "unsized:latest", "tiny:1.8b"],
-    )
+    curated = ["big:9b", "small:4b", "huge:12b", "unsized:latest", "tiny:1.8b"]
+    monkeypatch.setattr(server.llm_pdf_md, "OLLAMA_MODELS", curated)
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: curated)
 
     names = [m["name"] for m in client.get("/api/local-models").json()["models"]]
 
