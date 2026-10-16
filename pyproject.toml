@@ -35,7 +35,7 @@ dependencies = [
     # Web UI (local FastAPI server behind the TypeScript frontend)
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.9",  # FastAPI needs it for file uploads, nothing imports it
 
     # LLM providers
     "openai>=2.7.1",
@@ -46,17 +46,12 @@ dependencies = [
     # PDF Generation & Manipulation
     "reportlab>=4.4.4",
     "pypdf>=6.0.0",
-    "pdfplumber>=0.11.7",
-    "pdfminer-six>=20250506",
     "pymupdf>=1.26.4",
     "pymupdf4llm>=0.0.17",
-    "pypdfium2>=4.30.0",
     
     # Document Processing
     "python-docx>=1.1.2",
     "python-pptx>=1.0.2",
-    "docx2txt>=0.9",
-    "extract-msg>=0.29.0",
     
     # Image Processing
     "pillow>=11.3.0",
@@ -69,48 +64,20 @@ dependencies = [
     "pandas>=2.2.3",
     "numpy>=2.2.5",
     "openpyxl>=3.1.5",
-    "xlrd>=2.0.2",
-    "xlsxwriter>=3.2.5",
+    "xlsxwriter>=3.2.5",  # csv_xlsx.py picks it as the pandas engine, nothing imports it
     
     # Jupyter Notebooks
-    "jupyter>=1.1.1",
-    "jupyterlab>=4.4.9",
-    "nbconvert>=7.16.6",
-    "nbclient>=0.10.2",
-    "nbformat>=5.10.4",
-    "ipykernel>=7.0.1",
-    "ipython>=9.6.0",
-    
-    # Plotting
-    "matplotlib>=3.10.3",
-    
-    # Database
-    "sqlalchemy>=2.0.41",
-    "sqlmodel>=0.0.24",
-    "sqlparse>=0.5.3",
-    
-    # Web & HTML Processing
-    "beautifulsoup4>=4.13.4",
-    "html2text>=2025.4.15",
-    "markdownify>=1.2.0",
-    "lxml>=6.0.0",
-    
-    # Audio
-    "speechrecognition>=3.14.3",
+    "nbconvert>=7.16.6",  # ipynb_pdf.py runs `jupyter nbconvert`, nothing imports it
     
     # Utilities
     "python-magic>=0.4.27",
-    "pyyaml>=6.0.2",
     "requests>=2.32.3",
     "tqdm>=4.67.1",
-    "rich>=14.0.0",
-    "click>=8.1.8",
-    "typer>=0.15.4",
 ]
 
 [project.urls]
-Homepage = "https://github.com/evan/converter"
-Repository = "https://github.com/evan/converter"
+Homepage = "https://github.com/evanpersinger/file-converter"
+Repository = "https://github.com/evanpersinger/file-converter"
 
 [tool.hatch.build.targets.wheel]
 packages = []

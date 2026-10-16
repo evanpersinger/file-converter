@@ -39,6 +39,7 @@ Every script is in `backend/<from>_<to>.py`. Each runs on its own: drop files in
 Only the conversion you use needs its tool:
 
 ```bash
+brew install libmagic                   # web UI server, always needed
 brew install tesseract                  # OCR
 brew install pandoc                     # Word and Markdown conversions
 brew install --cask mactex              # Markdown and Jupyter to PDF
