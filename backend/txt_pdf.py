@@ -5,6 +5,7 @@ reportlab, one paragraph per line. Writes to output/.
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 from reportlab.lib.pagesizes import letter
@@ -55,9 +56,13 @@ def convert_txt_to_pdf(txt_path: str, output_path: str | None = None) -> bool:
     full_output_path = output_dir / pdf_name
 
     try:
-        # Read text file
-        with open(full_input_path, 'r', encoding='utf-8') as file:
-            text_content = file.read()
+        # Read text file, falling back to Windows-1252 for legacy (non-UTF-8) files
+        try:
+            with open(full_input_path, 'r', encoding='utf-8') as file:
+                text_content = file.read()
+        except UnicodeDecodeError:
+            with open(full_input_path, 'r', encoding='cp1252', errors='replace') as file:
+                text_content = file.read()
 
         # Create PDF document
         doc = SimpleDocTemplate(str(full_output_path), pagesize=letter)
@@ -72,14 +77,16 @@ def convert_txt_to_pdf(txt_path: str, output_path: str | None = None) -> bool:
             alignment=1  # Center alignment
         )
 
+        # Monospace with no gap between lines, so indentation and aligned columns survive
         normal_style = ParagraphStyle(
             'TextStyle',
             parent=styles['Normal'],
-            fontSize=11,
-            leading=14,
+            fontName='Courier',
+            fontSize=9,
+            leading=11,
             leftIndent=0,
             rightIndent=0,
-            spaceAfter=6
+            spaceAfter=0
         )
 
         # Build PDF content
@@ -96,11 +103,14 @@ def convert_txt_to_pdf(txt_path: str, output_path: str | None = None) -> bool:
         for line in lines:
             if line.strip():
                 # Escape special characters for reportlab
-                escaped_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                para = Paragraph(escaped_line, normal_style)
+                escaped_line = line.expandtabs(4).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                # Paragraph collapses spaces, so leading spaces and runs of 2+ become non-breaking.
+                # Single spaces stay normal so long lines still wrap at word boundaries.
+                preserved_line = re.sub(r'^ +| {2,}', lambda m: '&nbsp;' * len(m.group()), escaped_line)
+                para = Paragraph(preserved_line, normal_style)
                 story.append(para)
             else:
-                story.append(Spacer(1, 6))  # Empty line spacing
+                story.append(Spacer(1, 11))  # Empty line spacing, one line tall
 
         # Build PDF
         existed_before = full_output_path.exists()
