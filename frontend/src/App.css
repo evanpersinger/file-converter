@@ -4,6 +4,9 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  /* The layout rearranges itself by this box's width (see the container queries at the
+     bottom of the file). Zooming in or shrinking the window narrows it. */
+  container-type: inline-size;
 }
 
 /* The Convert Files / Convert Files (LLM) switch. The buttons are plain .format buttons, so they share
@@ -13,9 +16,11 @@
   gap: 0.4rem;
   box-sizing: border-box;
   width: 100%;
-  max-width: 97rem;
-  margin: 0 auto;
-  padding: 1.5rem 2rem 0;
+  /* Full width, so the line under it reaches both edges of the page, and the column
+     dividers below hang from it. The side padding is the 2rem gutter, or more once the
+     window is wider than the 97rem column, so the tabs still line up with the content. */
+  padding: 1.5rem max(2rem, calc((100% - 93rem) / 2)) 1rem;
+  border-bottom: 8px solid var(--text); /* same 8px as the column dividers */
 }
 
 .tabs .format {
@@ -38,7 +43,7 @@
   width: 100%;
   max-width: 97rem;
   margin: 0 auto;
-  padding: 1rem 2rem 0;
+  padding: 0 2rem;
 }
 
 .sidebar {
@@ -147,6 +152,42 @@ main {
   max-width: 56rem;
   margin: 2.5rem 0;
   text-align: left;
+}
+
+/* Convert Files tab only: tighter heights and gaps, so the Convert and Combine buttons
+   sit closer to the top and need less scrolling. The LLM tab shares this markup and
+   keeps the sizes set on the plain rules below. */
+main.compact {
+  margin-top: 1.5rem;
+}
+
+main.compact .filepicker {
+  height: 4rem;
+  font-size: 1.5rem;
+}
+
+main.compact .clear {
+  height: 4rem;
+}
+
+main.compact .transfer {
+  margin-top: 1rem;
+}
+
+main.compact .box {
+  height: 4.5rem;
+}
+
+main.compact .box-value {
+  font-size: 1.9rem;
+}
+
+main.compact .actions {
+  margin-top: 1.5rem;
+}
+
+main.compact .action {
+  height: 3.2rem;
 }
 
 h2 {
@@ -852,4 +893,116 @@ button:disabled {
   font-size: 0.85rem;
   text-align: left;
   font-family: var(--mono);
+}
+
+/* Rearranging when space gets tight, by the width of .app: the window, or the window as
+   it lays out when zoomed in. Widths are in rem, so they hold at any base font size.
+   They sit at the end of the file so they beat the plain rules above.
+
+   Each tab has its own limits, because the LLM tab has four columns and the Convert tab
+   three. Every limit is the width its columns need plus about 19.5rem for the middle
+   column, which is what its buttons take. First the Result column drops to a row of its
+   own under the rest, then everything stacks into one column and the vertical dividers
+   become lines across the page. */
+
+/* LLM tab: Result drops under the rest. */
+@container (max-width: 74rem) {
+  .layout[data-tab='llm'] {
+    flex-wrap: wrap;
+    align-content: flex-start;
+    /* No gap between rows, so the dividers above run straight into the line below. */
+    row-gap: 0;
+  }
+
+  /* The line above it runs to both edges of the page: the negative margins cancel the
+     layout's 2rem side padding. */
+  .layout[data-tab='llm'] .log-panel {
+    flex: 1 0 calc(100% + 4rem);
+    width: auto;
+    margin: 0 -2rem;
+    padding: 2.5rem 2rem;
+    border-left: none;
+    border-top: 8px solid var(--text);
+  }
+}
+
+/* Convert tab: Result drops under the rest. */
+@container (max-width: 56rem) {
+  .layout[data-tab='convert'] {
+    flex-wrap: wrap;
+    align-content: flex-start;
+    /* No gap between rows, so the dividers above run straight into the line below. */
+    row-gap: 0;
+  }
+
+  /* The line above it runs to both edges of the page: the negative margins cancel the
+     layout's 2rem side padding. */
+  .layout[data-tab='convert'] .log-panel {
+    flex: 1 0 calc(100% + 4rem);
+    width: auto;
+    margin: 0 -2rem;
+    padding: 2.5rem 2rem;
+    border-left: none;
+    border-top: 8px solid var(--text);
+  }
+}
+
+/* LLM tab: everything stacks. */
+@container (max-width: 57rem) {
+  .layout[data-tab='llm'] {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .layout[data-tab='llm'] .sidebar {
+    width: auto;
+    margin: 0 -2rem;
+    padding: 2.5rem 2rem;
+    border-right: none;
+    border-bottom: 8px solid var(--text);
+  }
+
+  .layout[data-tab='llm'] main {
+    max-width: none;
+  }
+
+  .layout[data-tab='llm'] .formats {
+    grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  }
+
+  /* Full-width model and script buttons would stretch across the whole page. */
+  .layout[data-tab='llm'] .model-groups,
+  .layout[data-tab='llm'] .llm-routes {
+    max-width: 24rem;
+  }
+}
+
+/* Convert tab: everything stacks. */
+@container (max-width: 38.5rem) {
+  .layout[data-tab='convert'] {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .layout[data-tab='convert'] .sidebar {
+    width: auto;
+    margin: 0 -2rem;
+    padding: 2.5rem 2rem;
+    border-right: none;
+    border-bottom: 8px solid var(--text);
+  }
+
+  .layout[data-tab='convert'] main {
+    max-width: none;
+  }
+
+  .layout[data-tab='convert'] .formats {
+    grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  }
+
+  /* Full-width model and script buttons would stretch across the whole page. */
+  .layout[data-tab='convert'] .model-groups,
+  .layout[data-tab='convert'] .llm-routes {
+    max-width: 24rem;
+  }
 }

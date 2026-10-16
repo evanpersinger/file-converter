@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   cancelConversion, combine, convert, detect, extensionOf, getCloudModels, getFormats, getLocalModels,
 } from './api'
@@ -471,7 +472,7 @@ function Converter({ tab }: { tab: Tab }) {
         : `${files.length} files`
 
   return (
-    <div className="layout">
+    <div className="layout" data-tab={tab}>
       <aside className="sidebar" hidden={tab !== 'convert'}>
         <h2>Convert to</h2>
 
@@ -571,7 +572,7 @@ function Converter({ tab }: { tab: Tab }) {
         </div>
       </aside>
 
-      <main>
+      <main className={tab === 'convert' ? 'compact' : undefined}>
         {loadError && <p className="error">{loadError}</p>}
 
         <div className="picker-row">
@@ -787,7 +788,9 @@ function Converter({ tab }: { tab: Tab }) {
         ))}
       </aside>
 
-      {viewing && <FileViewer file={viewing} onClose={() => setViewing(null)} />}
+      {/* In a portal, so the layout's container query below can't pin the overlay to the
+          layout instead of the window. */}
+      {viewing && createPortal(<FileViewer file={viewing} onClose={() => setViewing(null)} />, document.body)}
     </div>
   )
 }
