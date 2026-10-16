@@ -498,7 +498,7 @@ def _merge_touching_math(md):
     return re.sub(r"(?<!\$)(?:\$[^$\n]+\$){2,}(?!\$)", join, md)
 
 
-def _convert_sqrt(md):
+def _convert_sqrt(md, bare=False):
     r"""Turn √(...) and √x into \sqrt{...} so the radical sits on the line with a bar.
 
     A bare \surd glyph hangs below the baseline and draws no bar, so √ needs its
@@ -514,7 +514,7 @@ def _convert_sqrt(md):
             break
         out.append(md[i:start])
         # inside an existing $..$ already? then no new delimiters
-        wrap = "" if "".join(out).count("$") % 2 else "$"
+        wrap = "" if bare or "".join(out).count("$") % 2 else "$"
         j = start + 1
         arg_end = None
         if md[j:j + 1] == "(":
@@ -534,7 +534,7 @@ def _convert_sqrt(md):
             out.append(rf"{wrap}\surd{wrap}")
             i = j
         else:
-            arg = arg.replace("$", "")
+            arg = _convert_sqrt(arg.replace("$", ""), bare=True)
             # a superscript after ")" is skipped by _convert_scripts, so catch it here
             arg = re.sub(
                 "[" + "".join(map(re.escape, SUPERSCRIPT_TO_LATEX)) + "]+",
