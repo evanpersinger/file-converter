@@ -173,7 +173,18 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
         timeout=OLLAMA_PAGE_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    return response.json()["message"]["content"]
+    return _strip_markdown_fence(response.json()["message"]["content"])
+
+
+def _strip_markdown_fence(text: str) -> str:
+    """Drop a ```markdown (or ```md) fence the model wrapped around the whole page."""
+    lines = text.strip().split("\n")
+    if lines[0].strip().lower() not in ("```markdown", "```md"):
+        return text
+    lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines)
 
 
 def _convert_pdf_local(pdf_path: Path, model: str) -> tuple[str, list[int], int]:
