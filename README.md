@@ -57,6 +57,7 @@ HTML to SVG needs Google Chrome. Mermaid diagrams in Markdown to PDF need
 - Long PDFs on the LLM tab: the Claude path caps at about 100 pages (32 MB), and the
   OpenAI path can hit a rate limit and fail with no output. Use Claude for long ones.
 - Local models are slow, often over a minute per page.
+- OCR is English-only on purpose. Other languages come back as garbled English, not an error.
 - Handwriting reads better from a scan than from a phone photo.
 - `md_pdf.py` uses the Menlo font (ships with macOS). On Linux, change `\setmonofont` in the script.
 
