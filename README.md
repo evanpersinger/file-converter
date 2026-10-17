@@ -55,6 +55,9 @@ HTML to SVG needs Google Chrome. Mermaid diagrams in Markdown to PDF need
 
 - Converting a file again overwrites the old output, and the script prints a message when it does.
 - Combine only works on files that share one extension, and keeps the order you added them.
+- Uploads are capped at 500 MB per request.
+- The web UI runs one conversion at a time. A second one (another tab, say) waits for the
+  first to finish, and the progress bar says "Waiting for another conversion...".
 - Long PDFs on the LLM tab: the Claude path caps at about 100 pages (32 MB), and the
   OpenAI path can hit a rate limit and fail with no output. Use Claude for long ones.
 - Local models are slow, often over a minute per page.

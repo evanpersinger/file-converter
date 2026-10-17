@@ -199,7 +199,7 @@ function Converter({ tab }: { tab: Tab }) {
   // The sentences about the latest LLM conversion, one entry per file. It stays up while the
   // files sit there and is replaced when the next LLM conversion starts.
   const [conversionLog, setConversionLog] = useState<LogEntry[]>([])
-  const { percent, elapsed } = useProgress(jobId)
+  const { percent, queued, elapsed } = useProgress(jobId)
   // Which file the newest detect() call was for. Adding a second file while the
   // first check is in flight would otherwise let the stale answer win.
   const latestPick = useRef<File | null>(null)
@@ -743,7 +743,7 @@ function Converter({ tab }: { tab: Tab }) {
               Converting {status.total > 1 && `${status.position} of ${status.total}: `}
               {status.fileName}.
             </p>
-            <ProgressBar percent={percent} />
+            <ProgressBar percent={percent} queued={queued} />
             <p className="muted progress-time">{formatDuration(elapsed)}</p>
           </div>
         )}

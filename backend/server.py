@@ -16,13 +16,14 @@ import os
 import re
 import shutil
 import threading
+import time
 import traceback
 import zipfile
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from contextlib import asynccontextmanager, contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
-from typing import Callable, Iterator
+from typing import AsyncIterator, Callable, Iterator
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -31,6 +32,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse, Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 # Converter modules. Imported as plain top-level modules, which works because this
 # file lives alongside them in backend/ and uvicorn is started with --app-dir backend.
@@ -73,7 +75,11 @@ import xlsx_csv
 BACKEND = Path(__file__).resolve().parent
 REPO = BACKEND.parent
 JOBS_ROOT = (REPO / ".webui_jobs").resolve()
-MAX_UPLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+# Room above MAX_UPLOAD_BYTES for the multipart framing and form fields around the files.
+MULTIPART_OVERHEAD_BYTES = 1024 * 1024
+STALE_JOB_SECONDS = 24 * 60 * 60
 
 # The .env lives at the repo root, one level up from this file.
 load_dotenv(REPO / ".env")
@@ -88,6 +94,10 @@ _JOB_OUTPUT: dict[str, io.StringIO] = {}
 # Cancel flags for the conversions currently running, by the same job_id.
 # /api/convert/{job_id}/cancel sets one; a running job's should_cancel checks it.
 _JOB_CANCEL: dict[str, threading.Event] = {}
+
+# Jobs whose upload is staged and that are waiting on _LOCK behind another conversion.
+# /api/progress reports them as queued.
+_JOB_QUEUED: set[str] = set()
 
 
 # Import sanity check
@@ -130,6 +140,21 @@ def job_workspace() -> Iterator[tuple[Path, Path, Path]]:
         yield job_dir, job_in, job_out
     finally:
         shutil.rmtree(job_dir, ignore_errors=True)
+
+
+def _remove_stale_jobs() -> None:
+    """Delete scratch dirs that a killed server never got to clean up.
+
+    Only dirs older than STALE_JOB_SECONDS go. Another process can share this folder (the
+    test suite starts the app too), and it must not pull the dir out from under a
+    conversion that is still running.
+    """
+    if not JOBS_ROOT.is_dir():
+        return
+    cutoff = time.time() - STALE_JOB_SECONDS
+    for job_dir in JOBS_ROOT.iterdir():
+        if job_dir.is_dir() and job_dir.stat().st_mtime < cutoff:
+            shutil.rmtree(job_dir, ignore_errors=True)
 
 
 @contextmanager
@@ -526,7 +551,13 @@ ALL_FORMATS = [
 
 
 # App
-app = FastAPI(title="File Converter")
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    _remove_stale_jobs()
+    yield
+
+
+app = FastAPI(title="File Converter", lifespan=lifespan)
 
 
 @app.get("/api/health")
@@ -615,6 +646,38 @@ def _error(message: str, hint: str | None = None, status: int = 400) -> JSONResp
     return JSONResponse({"error": message, "hint": hint}, status_code=status)
 
 
+class RejectOversizeBody:
+    """Refuse a POST whose declared Content-Length is over the upload limit.
+
+    Runs before the multipart parser, which would otherwise write the whole body to a
+    temp file before any handler could object. The body is read and discarded before the
+    413 goes out, because answering while the client is still sending makes proxies and
+    browsers report a dropped connection (a bare 502) instead of the message. A client
+    that declares no Content-Length (chunked) gets past this, and is still stopped by
+    _stage_upload once it sends too much.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["method"] == "POST":
+            declared = dict(scope["headers"]).get(b"content-length", b"")
+            if declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES:
+                while (message := await receive()).get("more_body"):
+                    pass
+                response = _error(
+                    f"The upload is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
+                    status=413,
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(RejectOversizeBody)
+
+
 def _content_disposition(filename: str) -> str:
     """The download header for `filename`, which can hold any character the upload did.
 
@@ -701,14 +764,18 @@ def _latest_percent(output: str) -> int | None:
 
 @app.get("/api/progress/{job_id}")
 def progress(job_id: str) -> dict:
-    """How far along a running conversion is.
+    """How far along a running conversion is, and whether it is still waiting its turn.
 
     The percent is None when the job isn't running (not started yet, still waiting on
     the lock, or finished) or its converter prints no percentage, which is every
-    converter except the local-model one.
+    converter except the local-model one. `queued` is True while the job waits on the
+    lock behind another conversion.
     """
     output = _JOB_OUTPUT.get(job_id)
-    return {"percent": None if output is None else _latest_percent(output.getvalue())}
+    return {
+        "percent": None if output is None else _latest_percent(output.getvalue()),
+        "queued": job_id in _JOB_QUEUED,
+    }
 
 
 @app.post("/api/convert/{job_id}/cancel")
@@ -720,6 +787,31 @@ def cancel_convert(job_id: str):
         return _error("No conversion is running for that job.", status=404)
     event.set()
     return {"ok": True}
+
+
+def _stage_upload(upload: UploadFile, dest: Path, limit: int) -> int:
+    """Copy an upload to `dest` in chunks so it never sits in memory whole.
+
+    Stops once it has copied one byte more than `limit`, so a result above `limit`
+    means the upload was too big. Returns the number of bytes copied.
+    """
+    copied = 0
+    with dest.open("wb") as out:
+        while chunk := upload.file.read(min(UPLOAD_CHUNK_BYTES, limit + 1 - copied)):
+            out.write(chunk)
+            copied += len(chunk)
+            if copied > limit:
+                break
+    return copied
+
+
+def _upload_size_problem(size: int) -> JSONResponse | None:
+    """The error response for a single upload that is too big or empty, else None."""
+    if size > MAX_UPLOAD_BYTES:
+        return _error(f"File is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.")
+    if not size:
+        return _error("The uploaded file is empty.")
+    return None
 
 
 @app.post("/api/detect")
@@ -734,16 +826,11 @@ def detect(file: UploadFile = File(...)):
     if not raw_name:
         return _error("No filename on the upload.")
 
-    data = file.file.read(MAX_UPLOAD_BYTES + 1)
-    if len(data) > MAX_UPLOAD_BYTES:
-        return _error(f"File is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.")
-    if not data:
-        return _error("The uploaded file is empty.")
-
     # Staged to disk because libmagic needs a real file to identify these formats.
     with job_workspace() as (_job_dir, job_in, _job_out):
         staged = job_in / raw_name
-        staged.write_bytes(data)
+        if problem := _upload_size_problem(_stage_upload(file, staged, MAX_UPLOAD_BYTES)):
+            return problem
         mismatch = sniff_mismatch(staged)
 
     return {"mismatch": mismatch}
@@ -786,51 +873,53 @@ def convert(
         if problem:
             return problem
 
-    data = file.file.read(MAX_UPLOAD_BYTES + 1)
-    if len(data) > MAX_UPLOAD_BYTES:
-        return _error(f"File is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.")
-    if not data:
-        return _error("The uploaded file is empty.")
-
     captured = io.StringIO()
 
-    with _LOCK, job_workspace() as (job_dir, job_in, job_out):
+    # The upload is staged before taking _LOCK, so copying it (or rejecting it) never
+    # waits behind a running conversion. Staging touches no patched converter state.
+    with job_workspace() as (job_dir, job_in, job_out):
         # ext was lowercased above, so the staged name is lowercase whatever the upload
         # was called.
         staged = job_in / f"{stem}{ext}"
-        staged.write_bytes(data)
+        if problem := _upload_size_problem(_stage_upload(file, staged, MAX_UPLOAD_BYTES)):
+            return problem
 
-        try:
-            with tracked(job_id, captured) as cancel_event, redirect_stdout(captured), redirect_stderr(captured):
-                extra = (model, cancel_event.is_set) if conv.takes_model else ()
-                result = conv.invoke(job_dir, job_in, job_out, staged, *extra)
-        except Exception as exc:
-            traceback.print_exc()
-            return _error(
-                f"{conv.label} conversion failed.",
-                f"{exc!r}\n{_tail(captured.getvalue())}",
-                status=500,
-            )
+        if job_id:
+            _JOB_QUEUED.add(job_id)
+        with _LOCK:
+            if job_id:
+                _JOB_QUEUED.discard(job_id)
+            try:
+                with tracked(job_id, captured) as cancel_event, redirect_stdout(captured), redirect_stderr(captured):
+                    extra = (model, cancel_event.is_set) if conv.takes_model else ()
+                    result = conv.invoke(job_dir, job_in, job_out, staged, *extra)
+            except Exception as exc:
+                traceback.print_exc()
+                return _error(
+                    f"{conv.label} conversion failed.",
+                    f"{exc!r}\n{_tail(captured.getvalue())}",
+                    status=500,
+                )
 
-        produced = sorted(p for p in job_out.rglob("*") if p.is_file())
-        if not produced:
-            # Batch converters return a diagnostic string; single-file ones return
-            # False and print the real reason, which is why stdout is captured.
-            detail = result if isinstance(result, str) else _tail(captured.getvalue())
-            return _error(f"{conv.label} conversion produced no output.", detail or None)
+            produced = sorted(p for p in job_out.rglob("*") if p.is_file())
+            if not produced:
+                # Batch converters return a diagnostic string; single-file ones return
+                # False and print the real reason, which is why stdout is captured.
+                detail = result if isinstance(result, str) else _tail(captured.getvalue())
+                return _error(f"{conv.label} conversion produced no output.", detail or None)
 
-        if len(produced) == 1:
-            payload = produced[0].read_bytes()
-            filename = f"{stem}{conv.target_ext}"
-            media_type = "application/octet-stream"
-        else:
-            buffer = io.BytesIO()
-            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-                for path in produced:
-                    archive.write(path, path.relative_to(job_out))
-            payload = buffer.getvalue()
-            filename = f"{stem}.zip"
-            media_type = "application/zip"
+            if len(produced) == 1:
+                payload = produced[0].read_bytes()
+                filename = f"{stem}{conv.target_ext}"
+                media_type = "application/octet-stream"
+            else:
+                buffer = io.BytesIO()
+                with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+                    for path in produced:
+                        archive.write(path, path.relative_to(job_out))
+                payload = buffer.getvalue()
+                filename = f"{stem}.zip"
+                media_type = "application/zip"
 
     # JSON keeps the header plain ASCII whatever the error text contains.
     headers = {
@@ -868,21 +957,12 @@ def combine(files: list[UploadFile] = File(...)):
 
     captured = io.StringIO()
 
-    with _LOCK, job_workspace() as (job_dir, job_in, job_out):
+    # Uploads are staged before taking _LOCK, same as in convert().
+    with job_workspace() as (job_dir, job_in, job_out):
         staged_names: list[str] = []
         total = 0
 
         for item, raw_name in zip(files, names):
-            data = item.file.read(MAX_UPLOAD_BYTES + 1 - total)
-            total += len(data)
-            if total > MAX_UPLOAD_BYTES:
-                return _error(
-                    f"Files add up to more than the "
-                    f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit."
-                )
-            if not data:
-                return _error(f"'{raw_name}' is empty.")
-
             # Two uploads can share a name, and the second would overwrite the first.
             # Suffixing keeps both, and keeps the count honest.
             stem, suffix = Path(raw_name).stem, Path(raw_name).suffix
@@ -891,25 +971,35 @@ def combine(files: list[UploadFile] = File(...)):
                 name = f"{stem}_{counter}{suffix}"
                 counter += 1
 
-            (job_in / name).write_bytes(data)
+            size = _stage_upload(item, job_in / name, MAX_UPLOAD_BYTES - total)
+            total += size
+            if total > MAX_UPLOAD_BYTES:
+                return _error(
+                    f"Files add up to more than the "
+                    f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit."
+                )
+            if not size:
+                return _error(f"'{raw_name}' is empty.")
+
             staged_names.append(name)
 
-        try:
-            with patched(combine_files, setup_directories=lambda: (job_in, job_out)):
-                with redirect_stdout(captured), redirect_stderr(captured):
-                    ok = combine_files.combine_files(staged_names)
-        except Exception as exc:
-            traceback.print_exc()
-            return _error("Combining failed.", f"{exc!r}\n{_tail(captured.getvalue())}",
-                          status=500)
+        with _LOCK:
+            try:
+                with patched(combine_files, setup_directories=lambda: (job_in, job_out)):
+                    with redirect_stdout(captured), redirect_stderr(captured):
+                        ok = combine_files.combine_files(staged_names)
+            except Exception as exc:
+                traceback.print_exc()
+                return _error("Combining failed.", f"{exc!r}\n{_tail(captured.getvalue())}",
+                              status=500)
 
-        produced = sorted(p for p in job_out.rglob("*") if p.is_file())
-        if not ok or not produced:
-            # combine_files() reports the reason on stdout and returns False.
-            return _error("Combining failed.", _tail(captured.getvalue()) or None)
+            produced = sorted(p for p in job_out.rglob("*") if p.is_file())
+            if not ok or not produced:
+                # combine_files() reports the reason on stdout and returns False.
+                return _error("Combining failed.", _tail(captured.getvalue()) or None)
 
-        payload = produced[0].read_bytes()
-        filename = produced[0].name
+            payload = produced[0].read_bytes()
+            filename = produced[0].name
 
     return Response(
         content=payload,

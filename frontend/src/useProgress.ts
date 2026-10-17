@@ -4,12 +4,14 @@ import { getProgress } from './api'
 const POLL_MS = 1000
 
 /**
- * Live numbers for a running conversion: elapsed seconds, and the percent the backend
- * reports (null when it has none, which is every conversion except the local-model one).
- * Pass null when nothing is running and both reset.
+ * Live numbers for a running conversion: elapsed seconds, the percent the backend
+ * reports (null when it has none, which is every conversion except the local-model one),
+ * and whether it is still queued behind another conversion.
+ * Pass null when nothing is running and all of them reset.
  */
 export function useProgress(jobId: string | null) {
   const [percent, setPercent] = useState<number | null>(null)
+  const [queued, setQueued] = useState(false)
   const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
@@ -22,8 +24,11 @@ export function useProgress(jobId: string | null) {
     const timer = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startedAt) / 1000))
       getProgress(jobId)
-        .then((value) => {
-          if (active) setPercent(value)
+        .then((progress) => {
+          if (active) {
+            setPercent(progress.percent)
+            setQueued(progress.queued)
+          }
         })
         // A missed poll just leaves the last value on screen until the next one.
         .catch(() => {})
@@ -34,8 +39,9 @@ export function useProgress(jobId: string | null) {
       clearInterval(timer)
       setElapsed(0)
       setPercent(null)
+      setQueued(false)
     }
   }, [jobId])
 
-  return { percent, elapsed }
+  return { percent, queued, elapsed }
 }

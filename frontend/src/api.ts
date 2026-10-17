@@ -88,14 +88,20 @@ export async function cancelConversion(jobId: string): Promise<void> {
   }
 }
 
-/** Percent done for a running conversion, or null when the backend has none to report. */
-export async function getProgress(jobId: string): Promise<number | null> {
+export interface Progress {
+  // Percent done, or null when the backend has none to report.
+  percent: number | null
+  // True while the conversion waits behind another one that is still running.
+  queued: boolean
+}
+
+/** How far along a running conversion is, and whether it has started yet. */
+export async function getProgress(jobId: string): Promise<Progress> {
   const response = await fetch(`/api/progress/${encodeURIComponent(jobId)}`)
   if (!response.ok) {
     throw new Error('Could not read the conversion progress.')
   }
-  const payload: { percent: number | null } = await response.json()
-  return payload.percent
+  return response.json()
 }
 
 /**

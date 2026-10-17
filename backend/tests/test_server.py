@@ -608,16 +608,16 @@ def test_the_latest_percent_is_the_last_progress_line_printed() -> None:
 
 
 def test_progress_for_a_job_that_is_not_running_is_null(client: TestClient) -> None:
-    assert client.get("/api/progress/no-such-job").json() == {"percent": None}
+    assert client.get("/api/progress/no-such-job").json() == {"percent": None, "queued": False}
 
 
 def test_progress_reads_the_output_of_a_running_job(client: TestClient) -> None:
     output = io.StringIO("Converting page 2/4 (25%)")
 
     with server.tracked("job-1", output):
-        assert client.get("/api/progress/job-1").json() == {"percent": 25}
+        assert client.get("/api/progress/job-1").json() == {"percent": 25, "queued": False}
 
-    assert client.get("/api/progress/job-1").json() == {"percent": None}
+    assert client.get("/api/progress/job-1").json() == {"percent": None, "queued": False}
 
 
 def test_cancelling_an_unknown_job_is_a_404(client: TestClient) -> None:

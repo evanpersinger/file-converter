@@ -1,10 +1,14 @@
 interface ProgressBarProps {
   /** 0 to 100, or null when the backend has no percentage for this conversion. */
   percent: number | null
+  /** True while the conversion waits behind another one and has not started yet. */
+  queued: boolean
 }
 
-export default function ProgressBar({ percent }: ProgressBarProps) {
-  const label = percent === null ? 'Converting...' : `${percent}%`
+export default function ProgressBar({ percent, queued }: ProgressBarProps) {
+  const label = queued
+    ? 'Waiting for another conversion...'
+    : percent === null ? 'Converting...' : `${percent}%`
 
   return (
     <div
