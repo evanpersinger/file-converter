@@ -13,13 +13,14 @@ uv sync
 uv run uvicorn server:app --app-dir backend --reload --port 8019 --loop asyncio
 ```
 
-Open http://localhost:3004. Both have to be running.
+Open http://localhost:3004. Both have to be running. The ports are set in
+`frontend/vite.config.ts` (3004 for the page, 8019 for the backend), change both if you move the backend.
 
 Pick files, pick a target format, convert, download. **View** previews a file before or
 after converting. The **Convert Files (LLM)** tab turns PDFs and handwriting photos into
 Markdown with an LLM: local Ollama (free, pull the model first with `ollama pull <model>`),
 OpenAI, or Anthropic (the last two cost money and need `OPENAI_API_KEY` or
-`ANTHROPIC_API_KEY` in `.env`).
+`ANTHROPIC_API_KEY` in a `.env` file at the repo root, copy `.env.example` to start).
 
 ## What it converts
 
@@ -53,6 +54,8 @@ HTML to SVG needs Google Chrome. Mermaid diagrams in Markdown to PDF need
 
 ## Good to know
 
+- There is no login and the converters run on whatever you upload, so keep the backend on localhost
+  (don't start it with `--host 0.0.0.0`) and don't convert files you don't trust.
 - Converting a file again overwrites the old output, and the script prints a message when it does.
 - Combine only works on files that share one extension, and keeps the order you added them.
 - Uploads are capped at 500 MB per request.
