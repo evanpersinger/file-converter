@@ -443,6 +443,7 @@ def extract_table_cells(image, table_cells):
         return ""
 
     cell_texts = []
+    ocr_error = None
     for row_cells in rows:
         row_texts = []
         for x, y, w, h in row_cells:
@@ -466,8 +467,8 @@ def extract_table_cells(image, table_cells):
                     text = pytesseract.image_to_string(cell_pil, config=config, lang='eng').strip()
                     if text:
                         cell_texts_tried.append(fix_common_ocr_errors(text, table_cells=True))
-                except Exception:
-                    continue
+                except Exception as e:
+                    ocr_error = e
 
             if cell_texts_tried:
                 text = fix_common_ocr_errors(
@@ -478,6 +479,9 @@ def extract_table_cells(image, table_cells):
 
         if row_texts:
             cell_texts.append('| ' + ' | '.join(row_texts) + ' |')
+
+    if not cell_texts and ocr_error:
+        print(f"Warning: table OCR produced no text, last error: {ocr_error}")
 
     return '\n'.join(cell_texts)
 
@@ -492,6 +496,7 @@ def extract_with_multiple_psm_modes(image):
     ]
 
     results = []
+    ocr_error = None
     for psm, description in psm_modes:
         try:
             config = f'--oem 3 --psm {psm}'
@@ -499,10 +504,12 @@ def extract_with_multiple_psm_modes(image):
             if text and len(text) > 10:
                 text = fix_common_ocr_errors(text)
                 results.append({'text': text, 'psm': psm, 'description': description, 'length': len(text)})
-        except Exception:
-            continue
+        except Exception as e:
+            ocr_error = e
 
     if not results:
+        if ocr_error:
+            print(f"Warning: OCR produced no text, last error: {ocr_error}")
         return ""
 
     # Deduplicate, preferring the longer of similar results

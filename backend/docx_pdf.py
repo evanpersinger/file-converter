@@ -223,9 +223,9 @@ def convert_docx_to_pdf(docx_path: str, output_path: str | None = None, input_di
                                     img = Image(io.BytesIO(img_data), width=img_width, height=img_height)
                                     story.append(img)
                                     story.append(Spacer(1, 12))
-                    except Exception:
-                        pass
-                    
+                    except Exception as e:
+                        print(f"Warning: skipped an embedded image: {e}")
+
                     # If run has text and no image, collect it
                     if run.text and not has_image:
                         text_runs.append(run)

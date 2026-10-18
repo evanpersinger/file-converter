@@ -57,7 +57,7 @@ def _print_to_pdf(html_file: str, pdf_file: str, profile_dir: str) -> None:
             command, capture_output=True, text=True, timeout=CHROME_TIMEOUT_SECONDS
         )
     except subprocess.TimeoutExpired:
-        raise RuntimeError(f"Chrome took longer than {CHROME_TIMEOUT_SECONDS} seconds")
+        raise RuntimeError(f"Chrome took longer than {CHROME_TIMEOUT_SECONDS} seconds") from None
 
     if result.returncode != 0 or not os.path.exists(pdf_file):
         raise RuntimeError(f"Chrome exited with code {result.returncode} and wrote no PDF")
