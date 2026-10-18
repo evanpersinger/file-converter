@@ -42,6 +42,7 @@ import csv_xlsx
 import docx_md
 import docx_pdf
 import gif_pdf
+import gif_png
 import gif_svg
 import heic_jpg
 import heic_md
@@ -55,13 +56,16 @@ import jpg_pdf
 import jpg_png
 import jpg_svg
 import jpg_txt
+import jpg_webp
 import llm_md
 import llm_pdf_md
 import md_pdf
 import pdf_md
 import pdf_png
+import png_jpg
 import png_pdf
 import png_svg
+import png_webp
 import pptx_md
 import pptx_pdf
 import R_Rmd
@@ -71,6 +75,7 @@ import ss_txt
 import txt_pdf
 import webp_jpg
 import webp_pdf
+import webp_png
 import webp_svg
 import xlsx_csv
 
@@ -109,10 +114,10 @@ _JOB_QUEUED: set[str] = set()
 # the work, and conversions would silently write into site-packages. Fail loudly.
 _CONVERTER_MODULES = [
     csv_md, csv_xlsx, docx_md, docx_pdf, heic_jpg, heic_md, heic_png, html_pdf,
-    ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, md_pdf, pdf_md, pdf_png,
-    png_pdf, png_svg, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt, txt_pdf,
-    xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md,
-    webp_jpg, webp_pdf, webp_svg, html_svg, gif_pdf, gif_svg,
+    ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, jpg_webp, md_pdf, pdf_md, pdf_png,
+    png_jpg, png_pdf, png_svg, png_webp, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt,
+    txt_pdf, xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md,
+    webp_jpg, webp_pdf, webp_png, webp_svg, html_svg, gif_pdf, gif_png, gif_svg,
 ]
 _stray = [m.__name__ for m in _CONVERTER_MODULES
           if Path(m.__file__).resolve().parent != BACKEND]
@@ -479,18 +484,28 @@ REGISTRY: list[Conversion] = [
                via_globals(jpg_png, lambda s: jpg_png.convert_jpg_to_png())),
     Conversion((".jpg", ".jpeg"), "jpg->svg", "SVG", ".svg",
                via_globals(jpg_svg, lambda s: jpg_svg.convert_jpg_to_svg())),
+    Conversion((".jpg", ".jpeg"), "jpg->webp", "WEBP", ".webp",
+               via_globals(jpg_webp, lambda s: jpg_webp.convert_jpg_to_webp())),
+    Conversion((".png",), "png->jpg", "JPG", ".jpg",
+               via_globals(png_jpg, lambda s: png_jpg.convert_png_to_jpg())),
     Conversion((".png",), "png->pdf", "PDF", ".pdf",
                via_globals(png_pdf, lambda s: png_pdf.convert_png_to_pdf())),
     Conversion((".png",), "png->svg", "SVG", ".svg",
                via_globals(png_svg, lambda s: png_svg.convert_png_to_svg())),
+    Conversion((".png",), "png->webp", "WEBP", ".webp",
+               via_globals(png_webp, lambda s: png_webp.convert_png_to_webp())),
     Conversion((".webp",), "webp->jpg", "JPG", ".jpg",
                via_globals(webp_jpg, lambda s: webp_jpg.convert_webp_to_jpg())),
     Conversion((".webp",), "webp->pdf", "PDF", ".pdf",
                via_globals(webp_pdf, lambda s: webp_pdf.convert_webp_to_pdf())),
+    Conversion((".webp",), "webp->png", "PNG", ".png",
+               via_globals(webp_png, lambda s: webp_png.convert_webp_to_png())),
     Conversion((".webp",), "webp->svg", "SVG", ".svg",
                via_globals(webp_svg, lambda s: webp_svg.convert_webp_to_svg())),
     Conversion((".gif",), "gif->pdf", "PDF", ".pdf",
                via_globals(gif_pdf, lambda s: gif_pdf.convert_gif_to_pdf())),
+    Conversion((".gif",), "gif->png", "PNG", ".png",
+               via_globals(gif_png, lambda s: gif_png.convert_gif_to_png())),
     Conversion((".gif",), "gif->svg", "SVG", ".svg",
                via_globals(gif_svg, lambda s: gif_svg.convert_gif_to_svg())),
 

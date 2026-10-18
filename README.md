@@ -31,7 +31,7 @@ OpenAI, or Anthropic (the last two cost money and need `OPENAI_API_KEY` or
 - **PowerPoint** to PDF, Markdown
 - **Markdown, HTML, TXT, SQL, Jupyter, R Markdown** to PDF
 - **Excel, CSV** to each other, CSV to Markdown
-- **JPG, PNG, GIF, WebP, HEIC** to PDF, PNG, JPG, SVG, Markdown or text (which ones depends on the source)
+- **JPG, PNG, GIF, WebP, HEIC** to PDF, PNG, JPG, WebP, SVG, Markdown or text (which ones depends on the source)
 - Combine several files of one type into one
 
 Every script is in `backend/<from>_<to>.py`. Each runs on its own: drop files in
