@@ -24,8 +24,11 @@ script_dir = Path(__file__).resolve().parent
 input_dir = script_dir / "input"   # Folder containing files to convert
 output_dir = script_dir / "output"  # Folder where converted files will be saved
 
+
 # Patched per-request by server.py to check a job's cancel flag; a no-op for the CLI.
-should_cancel: Callable[[], bool] = lambda: False
+def should_cancel() -> bool:
+    return False
+
 
 OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"]  # vision_parse only supports these two for OpenAI
 ANTHROPIC_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-5"]  # weakest first, same as the other menus

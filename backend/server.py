@@ -664,7 +664,7 @@ class RejectOversizeBody:
         if scope["type"] == "http" and scope["method"] == "POST":
             declared = dict(scope["headers"]).get(b"content-length", b"")
             if declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES:
-                while (message := await receive()).get("more_body"):
+                while (await receive()).get("more_body"):
                     pass
                 response = _error(
                     f"The upload is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
