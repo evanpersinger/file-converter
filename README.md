@@ -1,5 +1,7 @@
 # File Converter
 
+[![CI](https://github.com/evanpersinger/file-converter/actions/workflows/ci.yml/badge.svg)](https://github.com/evanpersinger/file-converter/actions/workflows/ci.yml)
+
 Convert files between formats from a local web UI or from standalone Python scripts.
 
 ## Run it
