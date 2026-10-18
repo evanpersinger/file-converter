@@ -121,6 +121,7 @@ only-include = [
     "backend/sql_pdf.py",
     "backend/ss_txt.py",
     "backend/txt_pdf.py",
+    "backend/webp_pdf.py",
     "backend/webp_svg.py",
     "backend/xlsx_csv.py",
 ]
@@ -163,6 +164,7 @@ only-include = [
     "backend/sql_pdf.py",
     "backend/ss_txt.py",
     "backend/txt_pdf.py",
+    "backend/webp_pdf.py",
     "backend/webp_svg.py",
     "backend/xlsx_csv.py",
     "pyproject.toml",
