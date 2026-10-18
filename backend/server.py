@@ -69,6 +69,7 @@ import Rmd_pdf
 import sql_pdf
 import ss_txt
 import txt_pdf
+import webp_jpg
 import webp_pdf
 import webp_svg
 import xlsx_csv
@@ -111,7 +112,7 @@ _CONVERTER_MODULES = [
     ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, md_pdf, pdf_md, pdf_png,
     png_pdf, png_svg, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt, txt_pdf,
     xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md,
-    webp_pdf, webp_svg, html_svg, gif_pdf, gif_svg,
+    webp_jpg, webp_pdf, webp_svg, html_svg, gif_pdf, gif_svg,
 ]
 _stray = [m.__name__ for m in _CONVERTER_MODULES
           if Path(m.__file__).resolve().parent != BACKEND]
@@ -482,6 +483,8 @@ REGISTRY: list[Conversion] = [
                via_globals(png_pdf, lambda s: png_pdf.convert_png_to_pdf())),
     Conversion((".png",), "png->svg", "SVG", ".svg",
                via_globals(png_svg, lambda s: png_svg.convert_png_to_svg())),
+    Conversion((".webp",), "webp->jpg", "JPG", ".jpg",
+               via_globals(webp_jpg, lambda s: webp_jpg.convert_webp_to_jpg())),
     Conversion((".webp",), "webp->pdf", "PDF", ".pdf",
                via_globals(webp_pdf, lambda s: webp_pdf.convert_webp_to_pdf())),
     Conversion((".webp",), "webp->svg", "SVG", ".svg",
