@@ -32,6 +32,7 @@ OpenAI, or Anthropic (the last two cost money and need `OPENAI_API_KEY` or
 - **Markdown, HTML, TXT, SQL, Jupyter, R Markdown** to PDF
 - **Excel, CSV** to each other, CSV to Markdown
 - **JPG, PNG, GIF, WebP, HEIC** to PDF, PNG, JPG, WebP, SVG, Markdown or text (which ones depends on the source)
+- **SVG** to PDF, PNG
 - Combine several files of one type into one
 
 Every script is in `backend/<from>_<to>.py`. Each runs on its own: drop files in
@@ -51,7 +52,7 @@ brew install wkhtmltopdf                # HTML to PDF
 brew install ollama                     # local LLM
 ```
 
-HTML to SVG needs Google Chrome. Mermaid diagrams in Markdown to PDF need
+HTML to SVG and SVG to PDF or PNG need Google Chrome. Mermaid diagrams in Markdown to PDF need
 `pnpm add -g mermaid-filter`.
 
 ## Good to know

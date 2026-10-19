@@ -72,6 +72,8 @@ import R_Rmd
 import Rmd_pdf
 import sql_pdf
 import ss_txt
+import svg_pdf
+import svg_png
 import txt_pdf
 import webp_jpg
 import webp_pdf
@@ -116,7 +118,7 @@ _CONVERTER_MODULES = [
     csv_md, csv_xlsx, docx_md, docx_pdf, heic_jpg, heic_md, heic_png, html_pdf,
     ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, jpg_webp, md_pdf, pdf_md, pdf_png,
     png_jpg, png_pdf, png_svg, png_webp, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt,
-    txt_pdf, xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md,
+    svg_pdf, svg_png, txt_pdf, xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md,
     webp_jpg, webp_pdf, webp_png, webp_svg, html_svg, gif_pdf, gif_png, gif_svg,
 ]
 _stray = [m.__name__ for m in _CONVERTER_MODULES
@@ -508,6 +510,12 @@ REGISTRY: list[Conversion] = [
                via_globals(gif_png, lambda s: gif_png.convert_gif_to_png())),
     Conversion((".gif",), "gif->svg", "SVG", ".svg",
                via_globals(gif_svg, lambda s: gif_svg.convert_gif_to_svg())),
+    Conversion((".svg",), "svg->pdf", "PDF", ".pdf",
+               via_globals(svg_pdf, lambda s: svg_pdf.convert_svg_to_pdf()),
+               requires=("chrome",)),
+    Conversion((".svg",), "svg->png", "PNG", ".png",
+               via_globals(svg_png, lambda s: svg_png.convert_svg_to_png()),
+               requires=("chrome",)),
 
     # ss_txt is the only OCR route for these formats (jpg/jpeg are served by jpg_txt,
     # so registering ss_txt for them too would just be a duplicate "Text" option).
