@@ -170,6 +170,24 @@ def test_local_stops_after_the_current_page_when_cancelled(
     assert "Converted 1 file(s)" in summary
 
 
+@pytest.mark.parametrize("batch_limit, rests", [(1, 1), (10**9, 0)])
+def test_local_rests_between_files_only_when_the_batch_is_over_the_size_limit(
+    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch, batch_limit: int, rests: int
+) -> None:
+    input_dir, _ = local_sandbox
+    _make_pdf(input_dir / "a.pdf")
+    _make_pdf(input_dir / "b.pdf")
+    monkeypatch.setattr(llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": "text"}}))
+    monkeypatch.setattr(llm_pdf_md, "BATCH_PAUSE_BYTES", batch_limit)
+    sleeps: list[int] = []
+    monkeypatch.setattr(llm_pdf_md.time, "sleep", sleeps.append)
+
+    llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+
+    # One rest between the two files, none after the last one.
+    assert sleeps == [llm_pdf_md.PAUSE_SECONDS] * rests
+
+
 def test_local_reports_no_content_when_cancelled_before_any_page(
     local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:

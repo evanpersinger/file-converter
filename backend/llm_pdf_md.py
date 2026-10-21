@@ -38,6 +38,8 @@ OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script comp
 _MODEL_DISPLAY_NAMES = {"claude-haiku-4-5-20251001": "claude-haiku-4.5"}  # friendlier label for the CLI menu, actual model id is unchanged
 LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
 OLLAMA_PAGE_TIMEOUT_SECONDS = 60  # a page taking longer than this is treated as stuck, not just slow
+BATCH_PAUSE_BYTES = 100 * 1024 * 1024  # a batch totalling more than this gets a rest between files
+PAUSE_SECONDS = 30
 
 _DOCUMENT_PROMPT = (
     "Convert this PDF to Markdown. Reproduce the text faithfully and completely, do not "
@@ -262,6 +264,11 @@ def list_ollama_models() -> list[str]:
 
 
 # Shared folder loop
+def rest_between_files() -> None:
+    print(f"Pausing {PAUSE_SECONDS}s before the next file")
+    time.sleep(PAUSE_SECONDS)
+
+
 def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]]) -> str:
     """Run convert_one over every PDF in input_dir and write each result to output_dir.
 
@@ -282,8 +289,11 @@ def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]
 
     converted = []
     errors = []
+    needs_rest = sum((input_dir / n).stat().st_size for n in pdf_names) > BATCH_PAUSE_BYTES
 
-    for pdf_name in pdf_names:
+    for i, pdf_name in enumerate(pdf_names):
+        if needs_rest and i > 0:
+            rest_between_files()
         if should_cancel():
             break
         pdf_path = input_dir / pdf_name

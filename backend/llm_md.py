@@ -20,11 +20,13 @@ import requests
 from openai import OpenAI
 
 from llm_pdf_md import (
+    BATCH_PAUSE_BYTES,
     LOCAL_RENDER_DPI,
     OLLAMA_HOST,
     _convert_page_ollama,
     _prompt_for_local_model,
     _prompt_for_provider,
+    rest_between_files,
 )
 
 # Define input and output directories relative to this script
@@ -197,8 +199,11 @@ def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]
 
     converted = []
     errors = []
+    needs_rest = sum((input_dir / n).stat().st_size for n in names) > BATCH_PAUSE_BYTES
 
-    for name in names:
+    for i, name in enumerate(names):
+        if needs_rest and i > 0:
+            rest_between_files()
         if should_cancel():
             break
         path = input_dir / name

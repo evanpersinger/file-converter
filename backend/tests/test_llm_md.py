@@ -163,6 +163,24 @@ def test_local_sends_a_jpg_with_the_handwriting_prompt_and_the_chosen_model(
     assert len(calls[0]["messages"][0]["images"]) == 1
 
 
+@pytest.mark.parametrize("batch_limit, rests", [(1, 1), (10**9, 0)])
+def test_local_rests_between_files_only_when_the_batch_is_over_the_size_limit(
+    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch, batch_limit: int, rests: int
+) -> None:
+    input_dir, _ = sandbox
+    _make_jpg(input_dir / "a.jpg")
+    _make_jpg(input_dir / "b.jpg")
+    _fake_ollama(monkeypatch)
+    monkeypatch.setattr(llm_md, "BATCH_PAUSE_BYTES", batch_limit)
+    rested: list[bool] = []
+    monkeypatch.setattr(llm_md, "rest_between_files", lambda: rested.append(True))
+
+    llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+
+    # One rest between the two files, none after the last one.
+    assert len(rested) == rests
+
+
 def test_local_accepts_the_jpeg_extension(sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch) -> None:
     input_dir, output_dir = sandbox
     _make_jpg(input_dir / "note.jpeg")
