@@ -52,6 +52,7 @@ dependencies = [
     # Document Processing
     "python-docx>=1.1.2",
     "python-pptx>=1.0.2",
+    "mistune>=3.0,<4",  # md_toon.py parses Markdown tables with it, nbconvert pulls it in too
 
     # Image Processing
     "pillow>=11.3.0",
@@ -111,6 +112,7 @@ only-include = [
     "backend/jpg_webp.py",
     "backend/json_toon.py",
     "backend/md_pdf.py",
+    "backend/md_toon.py",
     "backend/llm_md.py",
     "backend/llm_pdf_md.py",
     "backend/pdf_md.py",
@@ -131,6 +133,10 @@ only-include = [
     "backend/svg_pdf.py",
     "backend/svg_png.py",
     "backend/toon_json.py",
+    "backend/toon_layout.py",
+    "backend/toon_md.py",
+    "backend/toon_pdf.py",
+    "backend/toon_tables.py",
     "backend/txt_pdf.py",
     "backend/webp_jpg.py",
     "backend/webp_pdf.py",
@@ -166,6 +172,7 @@ only-include = [
     "backend/jpg_webp.py",
     "backend/json_toon.py",
     "backend/md_pdf.py",
+    "backend/md_toon.py",
     "backend/llm_md.py",
     "backend/llm_pdf_md.py",
     "backend/pdf_md.py",
@@ -186,6 +193,10 @@ only-include = [
     "backend/svg_pdf.py",
     "backend/svg_png.py",
     "backend/toon_json.py",
+    "backend/toon_layout.py",
+    "backend/toon_md.py",
+    "backend/toon_pdf.py",
+    "backend/toon_tables.py",
     "backend/txt_pdf.py",
     "backend/webp_jpg.py",
     "backend/webp_pdf.py",

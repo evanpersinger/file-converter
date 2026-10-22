@@ -380,6 +380,7 @@ source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "fastapi" },
+    { name = "mistune" },
     { name = "nbconvert" },
     { name = "numpy" },
     { name = "openai" },
@@ -418,6 +419,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", specifier = ">=1.0" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "mistune", specifier = ">=3.0,<4" },
     { name = "nbconvert", specifier = ">=7.16.6" },
     { name = "numpy", specifier = ">=2.2.5" },
     { name = "openai", specifier = ">=2.7.1" },

@@ -64,6 +64,7 @@ import json_toon
 import llm_md
 import llm_pdf_md
 import md_pdf
+import md_toon
 import pdf_md
 import pdf_png
 import png_jpg
@@ -79,6 +80,8 @@ import ss_txt
 import svg_pdf
 import svg_png
 import toon_json
+import toon_md
+import toon_pdf
 import txt_pdf
 import webp_jpg
 import webp_pdf
@@ -380,6 +383,11 @@ REGISTRY: list[Conversion] = [
                via_params(lambda s, i, o: json_toon.convert_json_to_toon(i, o))),
     Conversion((".toon",), "toon->json", "JSON", ".json",
                via_params(lambda s, i, o: toon_json.convert_toon_to_json(i, o))),
+    Conversion((".toon",), "toon->md", "Markdown", ".md",
+               via_params(lambda s, i, o: toon_md.convert_toon_to_markdown(i, o))),
+    Conversion((".toon",), "toon->pdf", "PDF", ".pdf",
+               via_params(lambda s, i, o: toon_pdf.convert_toon_to_pdf(i, o)),
+               note="Latin text only. Other scripts (Chinese, emoji) fail instead of drawing boxes"),
 
     # --- PDF -----------------------------------------------------------------
     Conversion((".pdf",), "pdf->md", "Markdown", ".md",
@@ -517,6 +525,9 @@ REGISTRY: list[Conversion] = [
                via_params(lambda s, i, o: md_pdf.convert_md_to_pdf(
                    str(s), None, input_dir=i, output_dir=o)),
                requires=("pandoc", "latex")),
+    Conversion((".md",), "md->toon", "TOON", ".toon",
+               via_params(lambda s, i, o: md_toon.convert_markdown_to_toon(i, o)),
+               note="Converts the tables only, each keyed by the heading above it. A file with no table fails"),
     Conversion((".txt",), "txt->pdf", "PDF", ".pdf",
                via_params(lambda s, i, o: txt_pdf.convert_txt_to_pdf(
                    str(s), None, input_dir=i, output_dir=o))),

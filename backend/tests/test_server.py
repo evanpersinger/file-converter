@@ -835,6 +835,63 @@ def test_json_and_toon_convert_both_ways_through_the_api(
     assert json.loads(back.content) == {"a": 1}
 
 
+def test_a_toon_table_converts_to_a_markdown_table_through_the_api(
+    client: TestClient, jobs_root: Path
+) -> None:
+    response = client.post(
+        "/api/convert",
+        data={"target": "toon->md"},
+        files={"file": ("users.toon", b"users[1]{id,name}:\n  1,Ana\n")},
+    )
+
+    assert response.status_code == 200
+    assert 'filename="users.md"' in response.headers["content-disposition"]
+    assert "| id | name |\n| --- | --- |\n| 1 | Ana |" in response.text
+
+
+def test_a_markdown_table_converts_to_toon_through_the_api(
+    client: TestClient, jobs_root: Path
+) -> None:
+    response = client.post(
+        "/api/convert",
+        data={"target": "md->toon"},
+        files={"file": ("users.md", b"# users\n\n| id | name |\n| --- | --- |\n| 1 | Ana |\n")},
+    )
+
+    assert response.status_code == 200
+    assert 'filename="users.toon"' in response.headers["content-disposition"]
+    assert response.content == b"users[1]{id,name}:\n  1,Ana\n"
+
+
+def test_a_markdown_file_with_no_table_is_refused_with_the_reason(
+    client: TestClient, jobs_root: Path
+) -> None:
+    response = client.post(
+        "/api/convert",
+        data={"target": "md->toon"},
+        files={"file": ("notes.md", b"# Notes\n\nJust prose.\n")},
+    )
+
+    assert response.status_code == 400
+    assert "produced no output" in response.json()["error"]
+    assert "no tables found" in response.json()["hint"]
+
+
+def test_a_toon_file_converts_to_a_pdf_through_the_api(
+    client: TestClient, jobs_root: Path
+) -> None:
+    response = client.post(
+        "/api/convert",
+        data={"target": "toon->pdf"},
+        files={"file": ("users.toon", b"users[1]{id,name}:\n  1,Ana\n")},
+    )
+
+    assert response.status_code == 200
+    assert 'filename="users.pdf"' in response.headers["content-disposition"]
+    with fitz.open(stream=response.content, filetype="pdf") as doc:
+        assert "Ana" in doc[0].get_text()
+
+
 def test_a_conversion_returns_the_converted_file(
     client: TestClient, jobs_root: Path
 ) -> None:
