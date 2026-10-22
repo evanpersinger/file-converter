@@ -72,17 +72,6 @@ def _text_message(text: str) -> SimpleNamespace:
 
 
 @pytest.fixture
-def sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
-    """Point llm_md's Path globals at a throwaway pair of directories."""
-    input_dir = tmp_path / "input"
-    output_dir = tmp_path / "output"
-    input_dir.mkdir()
-    monkeypatch.setattr(llm_md, "input_dir", input_dir)
-    monkeypatch.setattr(llm_md, "output_dir", output_dir)
-    return input_dir, output_dir
-
-
-@pytest.fixture
 def ollama_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llm_md.requests, "get", lambda *a, **k: FakeResponse())
 
@@ -115,23 +104,23 @@ def test_conversions_require_a_model_instead_of_defaulting_to_one(convert) -> No
 
 
 # --- folder loop ---------------------------------------------------------------------
-def test_local_reports_when_only_markdown_present(sandbox, ollama_reachable) -> None:
-    input_dir, _ = sandbox
+def test_local_reports_when_only_markdown_present(work_dirs, ollama_reachable) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "notes.md").write_text("hi")
 
-    assert llm_md.convert_handwriting_to_markdown_local("gemma4:12b") == "That file is already in md format"
+    assert llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir) == "That file is already in md format"
 
 
-def test_local_only_takes_jpg_and_pdf_files(sandbox, ollama_reachable) -> None:
-    input_dir, _ = sandbox
+def test_local_only_takes_jpg_and_pdf_files(work_dirs, ollama_reachable) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "notes.txt").write_text("hi")
     (input_dir / "photo.png").write_bytes(b"not really a png")
 
-    assert llm_md.convert_handwriting_to_markdown_local("gemma4:12b") == "No JPG or PDF files found in input folder"
+    assert llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir) == "No JPG or PDF files found in input folder"
 
 
-def test_local_reports_when_ollama_is_unreachable(sandbox, monkeypatch: pytest.MonkeyPatch) -> None:
-    input_dir, _ = sandbox
+def test_local_reports_when_ollama_is_unreachable(work_dirs, monkeypatch: pytest.MonkeyPatch) -> None:
+    input_dir, output_dir = work_dirs
     _make_jpg(input_dir / "note.jpg")
 
     def raise_connection_error(*_args, **_kwargs):
@@ -140,7 +129,7 @@ def test_local_reports_when_ollama_is_unreachable(sandbox, monkeypatch: pytest.M
     monkeypatch.setattr(llm_md.requests, "get", raise_connection_error)
     calls = _fake_ollama(monkeypatch)
 
-    result = llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+    result = llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     assert result.startswith("Error: Ollama not reachable")
     assert calls == []
@@ -148,13 +137,13 @@ def test_local_reports_when_ollama_is_unreachable(sandbox, monkeypatch: pytest.M
 
 # --- local (Ollama) ------------------------------------------------------------------
 def test_local_sends_a_jpg_with_the_handwriting_prompt_and_the_chosen_model(
-    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = sandbox
+    input_dir, output_dir = work_dirs
     _make_jpg(input_dir / "note.jpg")
     calls = _fake_ollama(monkeypatch)
 
-    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     assert "note.md" in summary
     assert (output_dir / "note.md").read_text(encoding="utf-8") == "Page 1 content"
@@ -165,9 +154,9 @@ def test_local_sends_a_jpg_with_the_handwriting_prompt_and_the_chosen_model(
 
 @pytest.mark.parametrize("batch_limit, rests", [(1, 1), (10**9, 0)])
 def test_local_rests_between_files_only_when_the_batch_is_over_the_size_limit(
-    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch, batch_limit: int, rests: int
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch, batch_limit: int, rests: int
 ) -> None:
-    input_dir, _ = sandbox
+    input_dir, output_dir = work_dirs
     _make_jpg(input_dir / "a.jpg")
     _make_jpg(input_dir / "b.jpg")
     _fake_ollama(monkeypatch)
@@ -175,39 +164,39 @@ def test_local_rests_between_files_only_when_the_batch_is_over_the_size_limit(
     rested: list[bool] = []
     monkeypatch.setattr(llm_md, "rest_between_files", lambda: rested.append(True))
 
-    llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+    llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     # One rest between the two files, none after the last one.
     assert len(rested) == rests
 
 
-def test_local_accepts_the_jpeg_extension(sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch) -> None:
-    input_dir, output_dir = sandbox
+def test_local_accepts_the_jpeg_extension(work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch) -> None:
+    input_dir, output_dir = work_dirs
     _make_jpg(input_dir / "note.jpeg")
     _fake_ollama(monkeypatch)
 
-    llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+    llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     assert (output_dir / "note.md").exists()
 
 
 def test_local_transcribes_a_multi_page_pdf_in_page_order(
-    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "notes.pdf", pages=2)
     calls = _fake_ollama(monkeypatch)
 
-    llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+    llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     assert (output_dir / "notes.md").read_text(encoding="utf-8") == "Page 1 content\n\nPage 2 content"
     assert [c["messages"][0]["content"] for c in calls] == [llm_md._HANDWRITING_PROMPT] * 2
 
 
 def test_notes_after_the_marker_are_printed_not_written_into_the_markdown(
-    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    input_dir, output_dir = sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "notes.pdf", pages=2)
     replies = iter(["Page 1 text\n---NOTES---\nSome words\nwere unclear", "Page 2 text"])
 
@@ -216,16 +205,16 @@ def test_notes_after_the_marker_are_printed_not_written_into_the_markdown(
 
     monkeypatch.setattr(llm_md.requests, "post", fake_post)
 
-    llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+    llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     assert (output_dir / "notes.md").read_text(encoding="utf-8") == "Page 1 text\n\nPage 2 text"
     assert "Model note (page 1): Some words were unclear" in capsys.readouterr().out
 
 
 def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
-    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "notes.pdf", pages=3)
     calls: list[dict] = []
 
@@ -237,7 +226,7 @@ def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
 
     monkeypatch.setattr(llm_md.requests, "post", fake_post)
 
-    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     markdown = (output_dir / "notes.md").read_text(encoding="utf-8")
     assert markdown == "Page 1 content\n\nPage 3 content"
@@ -246,38 +235,38 @@ def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
 
 
 def test_a_password_protected_pdf_is_reported_as_a_failed_file(
-    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, _ = sandbox
+    input_dir, output_dir = work_dirs
     doc = fitz.open()
     doc.new_page()
     doc.save(input_dir / "locked.pdf", encryption=fitz.PDF_ENCRYPT_AES_256, owner_pw="owner", user_pw="secret")
     doc.close()
     calls = _fake_ollama(monkeypatch)
 
-    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     assert "password protected" in summary
     assert calls == []
 
 
 def test_an_empty_transcription_is_reported_instead_of_written(
-    sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = sandbox
+    input_dir, output_dir = work_dirs
     _make_jpg(input_dir / "note.jpg")
     monkeypatch.setattr(
         llm_md.requests, "post", lambda url, json, timeout: FakeResponse({"message": {"content": "  "}})
     )
 
-    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b")
+    summary = llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     assert "conversion returned no content" in summary
     assert not (output_dir / "note.md").exists()
 
 
 # --- Anthropic -----------------------------------------------------------------------
-def test_anthropic_reports_a_missing_key(sandbox, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_anthropic_reports_a_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     result = llm_md.convert_handwriting_to_markdown_anthropic("claude-sonnet-5")
@@ -286,15 +275,17 @@ def test_anthropic_reports_a_missing_key(sandbox, monkeypatch: pytest.MonkeyPatc
 
 
 def test_anthropic_sends_the_image_and_prompt_and_uses_the_chosen_model(
-    sandbox, monkeypatch: pytest.MonkeyPatch
+    work_dirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = sandbox
+    input_dir, output_dir = work_dirs
     _make_jpg(input_dir / "note.jpg")
     client = FakeAnthropic(_text_message("hello"))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(llm_md.anthropic, "Anthropic", lambda: client)
 
-    summary = llm_md.convert_handwriting_to_markdown_anthropic("claude-haiku-4-5-20251001")
+    summary = llm_md.convert_handwriting_to_markdown_anthropic(
+        "claude-haiku-4-5-20251001", input_dir, output_dir
+    )
 
     assert "note.md" in summary
     assert (output_dir / "note.md").read_text(encoding="utf-8") == "hello"
@@ -305,14 +296,14 @@ def test_anthropic_sends_the_image_and_prompt_and_uses_the_chosen_model(
     assert text_block["text"] == llm_md._HANDWRITING_PROMPT
 
 
-def test_anthropic_sends_each_pdf_page_as_a_png(sandbox, monkeypatch: pytest.MonkeyPatch) -> None:
-    input_dir, output_dir = sandbox
+def test_anthropic_sends_each_pdf_page_as_a_png(work_dirs, monkeypatch: pytest.MonkeyPatch) -> None:
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "notes.pdf", pages=2)
     client = FakeAnthropic(_text_message("page"))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(llm_md.anthropic, "Anthropic", lambda: client)
 
-    llm_md.convert_handwriting_to_markdown_anthropic("claude-sonnet-5")
+    llm_md.convert_handwriting_to_markdown_anthropic("claude-sonnet-5", input_dir, output_dir)
 
     assert len(client.calls) == 2
     assert client.calls[0]["messages"][0]["content"][0]["source"]["media_type"] == "image/png"
@@ -343,7 +334,7 @@ def test_anthropic_ignores_blocks_that_are_not_text() -> None:
 
 
 # --- OpenAI --------------------------------------------------------------------------
-def test_openai_reports_a_missing_key(sandbox, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_openai_reports_a_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     result = llm_md.convert_handwriting_to_markdown_openai("gpt-4o")
@@ -352,15 +343,15 @@ def test_openai_reports_a_missing_key(sandbox, monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_openai_sends_the_image_and_prompt_and_uses_the_chosen_model(
-    sandbox, monkeypatch: pytest.MonkeyPatch
+    work_dirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = sandbox
+    input_dir, output_dir = work_dirs
     _make_jpg(input_dir / "note.jpg")
     client = FakeOpenAI("hello")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(llm_md, "OpenAI", lambda api_key: client)
 
-    summary = llm_md.convert_handwriting_to_markdown_openai("gpt-4o")
+    summary = llm_md.convert_handwriting_to_markdown_openai("gpt-4o", input_dir, output_dir)
 
     assert "note.md" in summary
     assert (output_dir / "note.md").read_text(encoding="utf-8") == "hello"

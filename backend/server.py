@@ -1,8 +1,8 @@
 """FastAPI backend for the web UI. Upload a file, pick a format, get the converted file back.
 
-Each request runs in a scratch dir under .webui_jobs/ with the converter modules
-redirected there (see the `via_*` helpers). That redirection mutates module globals,
-so keep one uvicorn worker and the _LOCK.
+Each request runs in a scratch dir under .webui_jobs/ that the converters are handed as
+arguments (see the `via_*` helpers). Their printed output is captured with redirect_stdout,
+which is process-wide, so keep one uvicorn worker and the _LOCK.
 
 Run: uv run uvicorn server:app --app-dir backend --reload --port 8019 --loop asyncio
 (--loop asyncio is required for the OpenAI PDF conversion, everything else works either way.)
@@ -93,7 +93,8 @@ STALE_JOB_SECONDS = 24 * 60 * 60
 # The .env lives at the repo root, one level up from this file.
 load_dotenv(REPO / ".env")
 
-# Serialises the process-global module patching. See the CONCURRENCY note above.
+# Serialises conversions, because their printed output is captured with the process-wide
+# redirect_stdout. See the note at the top of the file.
 _LOCK = threading.Lock()
 
 # Output of the conversions currently running, by the job_id the UI sent with the request.
@@ -109,37 +110,13 @@ _JOB_CANCEL: dict[str, threading.Event] = {}
 _JOB_QUEUED: set[str] = set()
 
 
-# Import sanity check
-# This project is also installed as a wheel (with backend/ flattened to top level),
-# so `import csv_md` can resolve to site-packages instead of backend/. If that
-# happened, we would be patching a different copy of the module than the one doing
-# the work, and conversions would silently write into site-packages. Fail loudly.
-_CONVERTER_MODULES = [
-    csv_md, csv_xlsx, docx_md, docx_pdf, heic_jpg, heic_md, heic_png, html_pdf,
-    ipynb_pdf, jpg_md, jpg_pdf, jpg_png, jpg_svg, jpg_txt, jpg_webp, md_pdf, pdf_md, pdf_png,
-    png_jpg, png_pdf, png_svg, png_webp, pptx_md, pptx_pdf, R_Rmd, Rmd_pdf, sql_pdf, ss_txt,
-    svg_pdf, svg_png, txt_pdf, xlsx_csv, combine_files, llm_md, heic_pdf, llm_pdf_md,
-    webp_jpg, webp_pdf, webp_png, webp_svg, html_svg, gif_pdf, gif_png, gif_svg,
-]
-_stray = [m.__name__ for m in _CONVERTER_MODULES
-          if Path(m.__file__).resolve().parent != BACKEND]
-if _stray:
-    raise RuntimeError(
-        f"These converter modules were imported from outside {BACKEND}: {_stray}. "
-        "Start the server with `uvicorn server:app --app-dir backend` so the local "
-        "copies shadow the installed wheel."
-    )
-
-
 # Isolation primitives
 @contextmanager
 def job_workspace() -> Iterator[tuple[Path, Path, Path]]:
     """Yield a fresh (job_dir, input_dir, output_dir), deleted on exit no matter what.
 
-    .resolve() matters: the __file__-patched converters call
-    Path(__file__).resolve().parent, so the dirs have to already be resolved or the
-    comparison mismatches (on macOS /tmp is a symlink to /private/tmp, which is also
-    why the scratch dir lives inside the repo rather than the system temp dir).
+    The dirs are resolved up front, so every converter sees the same absolute path
+    whatever the OS does with symlinks (on macOS /tmp is a symlink to /private/tmp).
     """
     job_dir = (JOBS_ROOT / uuid4().hex).resolve()
     job_in, job_out = job_dir / "input", job_dir / "output"
@@ -182,25 +159,6 @@ def tracked(job_id: str | None, output: io.StringIO) -> Iterator[threading.Event
             _JOB_CANCEL.pop(job_id, None)
 
 
-_MISSING = object()
-
-
-@contextmanager
-def patched(module, **attrs):
-    """Temporarily set module attributes, restoring the originals unconditionally."""
-    saved = {k: getattr(module, k, _MISSING) for k in attrs}
-    try:
-        for key, value in attrs.items():
-            setattr(module, key, value)
-        yield
-    finally:
-        for key, old in saved.items():
-            if old is _MISSING:
-                delattr(module, key)
-            else:
-                setattr(module, key, old)
-
-
 # The two ways a converter is handed the job's folders. Each returns an
 # `invoke(job_dir, job_in, job_out, staged)`. `call` receives the absolute path of the
 # staged upload.
@@ -223,28 +181,9 @@ def via_model_params(call: Callable):
     return invoke
 
 
-def via_dir_globals_model(module, call: Callable):
-    """Module has `input_dir` / `output_dir` Path globals read at call time (llm_pdf_md),
-    and the user picks the model. `call` receives the staged path and the model name.
-    `should_cancel` defaults to a no-op so this still works for callers (tests, other
-    converters) that don't pass one.
-
-    The OpenAI path in llm_pdf_md only imports vision_parse when it runs, so a uvloop event
-    loop breaks that one conversion at call time instead of at server startup. Run with
-    `--loop asyncio` for it to work.
-    """
-    def invoke(
-        job_dir: Path, job_in: Path, job_out: Path, staged: Path, model: str,
-        should_cancel: Callable[[], bool] = lambda: False,
-    ):
-        with patched(module, input_dir=job_in, output_dir=job_out, should_cancel=should_cancel):
-            return call(staged, model)
-    return invoke
-
-
 def via_params(call: Callable):
-    """Converter accepts input_dir / output_dir arguments. No patching needed. This is how
-    every converter except the LLM ones is called.
+    """Converter accepts input_dir / output_dir arguments. This is how every converter
+    except the LLM ones is called.
     """
     def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
         return call(staged, job_in, job_out)
@@ -411,25 +350,22 @@ REGISTRY: list[Conversion] = [
                note="Sends the PDF to Anthropic's Claude. Slower, and it bills your key"),
     # llm_md takes more than PDFs: it reads handwriting from JPGs and PDFs.
     Conversion((".jpg", ".jpeg", ".pdf"), "handwriting->md", "Markdown (handwriting, Open Source model, free)", ".md",
-               via_dir_globals_model(
-                   llm_md,
-                   lambda s, model: llm_md.convert_handwriting_to_markdown_local(model)),
+               via_model_params(lambda s, model, i, o, cancel: (
+                   llm_md.convert_handwriting_to_markdown_local(model, i, o, cancel))),
                requires=("ollama",), takes_model=True, group="llm",
                script="Handwriting", provider="local",
                caption="Used for converting pictures of handwriting",
                note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first"),
     Conversion((".jpg", ".jpeg", ".pdf"), "handwriting->md-ai", "Markdown (handwriting, OpenAI, costs money)", ".md",
-               via_dir_globals_model(
-                   llm_md,
-                   lambda s, model: llm_md.convert_handwriting_to_markdown_openai(model)),
+               via_model_params(lambda s, model, i, o, cancel: (
+                   llm_md.convert_handwriting_to_markdown_openai(model, i, o, cancel))),
                requires=("openai_key",), takes_model=True,
                model_names=CLOUD_MODELS["openai"], group="llm",
                script="Handwriting", provider="openai",
                note="Sends the file to OpenAI's Vision API. Slower, and it bills your key"),
     Conversion((".jpg", ".jpeg", ".pdf"), "handwriting->md-claude", "Markdown (handwriting, Claude, costs money)", ".md",
-               via_dir_globals_model(
-                   llm_md,
-                   lambda s, model: llm_md.convert_handwriting_to_markdown_anthropic(model)),
+               via_model_params(lambda s, model, i, o, cancel: (
+                   llm_md.convert_handwriting_to_markdown_anthropic(model, i, o, cancel))),
                requires=("anthropic_key",), takes_model=True,
                model_names=CLOUD_MODELS["anthropic"], group="llm",
                script="Handwriting", provider="anthropic",
@@ -891,7 +827,7 @@ def convert(
     captured = io.StringIO()
 
     # The upload is staged before taking _LOCK, so copying it (or rejecting it) never
-    # waits behind a running conversion. Staging touches no patched converter state.
+    # waits behind a running conversion. Staging touches no converter state.
     with job_workspace() as (job_dir, job_in, job_out):
         # ext was lowercased above, so the staged name is lowercase whatever the upload
         # was called.

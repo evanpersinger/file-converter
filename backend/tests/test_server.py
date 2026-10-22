@@ -270,7 +270,9 @@ def test_a_cloud_handwriting_conversion_uses_the_model_the_user_chose(
 ) -> None:
     monkeypatch.setenv(key_var, "test-key")
     calls: list[str] = []
-    monkeypatch.setattr(server.llm_md, func, lambda chosen: calls.append(chosen) or "done")
+    monkeypatch.setattr(
+        server.llm_md, func, lambda chosen, *_: calls.append(chosen) or "done"
+    )
 
     client.post(
         "/api/convert",
@@ -479,7 +481,7 @@ def test_a_handwriting_conversion_uses_the_model_the_user_chose(
     monkeypatch.setattr(
         server.llm_md,
         "convert_handwriting_to_markdown_local",
-        lambda chosen: calls.append(chosen) or "done",
+        lambda chosen, *_: calls.append(chosen) or "done",
     )
 
     client.post(

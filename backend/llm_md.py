@@ -19,6 +19,7 @@ import fitz  # PyMuPDF
 import requests
 from openai import OpenAI
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
 from llm_pdf_md import (
     BATCH_PAUSE_BYTES,
     LOCAL_RENDER_DPI,
@@ -26,18 +27,9 @@ from llm_pdf_md import (
     _convert_page_ollama,
     _prompt_for_local_model,
     _prompt_for_provider,
+    not_cancelled,
     rest_between_files,
 )
-
-# Define input and output directories relative to this script
-script_dir = Path(__file__).resolve().parent
-input_dir = script_dir / "input"   # Folder containing files to convert
-output_dir = script_dir / "output"  # Folder where converted files will be saved
-
-
-# Patched per-request by server.py to check a job's cancel flag; a no-op for the CLI.
-def should_cancel() -> bool:
-    return False
 
 
 _NOTES_MARKER = "---NOTES---"
@@ -115,7 +107,11 @@ def _image_anthropic(client: anthropic.Anthropic, model: str, image_b64: str, me
     return "".join(block.text for block in message.content if block.type == "text")
 
 
-def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str]) -> tuple[str, list[int], int]:
+def _convert_pdf_pages(
+    pdf_path: Path,
+    convert_image: Callable[[str, str], str],
+    should_cancel: Callable[[], bool] = not_cancelled,
+) -> tuple[str, list[int], int]:
     """Render each page of the PDF to an image and transcribe them one at a time.
 
     convert_image takes a base64 image and its media type, and returns the transcription.
@@ -166,26 +162,35 @@ def _convert_pdf_pages(pdf_path: Path, convert_image: Callable[[str, str], str])
     return "\n\n".join(pages), skipped, attempted
 
 
-def _convert_file(path: Path, convert_image: Callable[[str, str], str]) -> tuple[str, list[int], int | None]:
+def _convert_file(
+    path: Path, convert_image: Callable[[str, str], str], should_cancel: Callable[[], bool]
+) -> tuple[str, list[int], int | None]:
     """Transcribe one JPG, or every page of one PDF, with the given image converter.
 
     Returns (markdown, skipped page numbers, total page count). Page count is None for a
     single JPG, there's no pagination to report on.
     """
     if path.suffix.lower() == ".pdf":
-        return _convert_pdf_pages(path, convert_image)
+        return _convert_pdf_pages(path, convert_image, should_cancel)
     image_b64 = base64.standard_b64encode(path.read_bytes()).decode("ascii")
     return _split_notes(convert_image(image_b64, "image/jpeg")), [], None
 
 
 # Shared folder loop
-def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]]) -> str:
+def _convert_all(
+    convert_one: Callable[[Path], tuple[str, list[int], int | None]],
+    input_dir: str | Path,
+    output_dir: str | Path,
+    should_cancel: Callable[[], bool],
+) -> str:
     """Run convert_one over every JPG and PDF in input_dir and write each result to output_dir.
 
     convert_one takes a file path and returns (markdown, skipped page numbers, total page
     count), page count is None when the file has no pagination to report (a single JPG).
+    No new file is started once should_cancel() is true.
     Returns a summary of what was converted, suitable for showing to a caller.
     """
+    input_dir, output_dir = Path(input_dir), Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     entries = list(os.listdir(input_dir)) if input_dir.is_dir() else []
@@ -245,7 +250,12 @@ def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]
 
 
 # Public entry points
-def convert_handwriting_to_markdown_openai(model: str) -> str:
+def convert_handwriting_to_markdown_openai(
+    model: str,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+    should_cancel: Callable[[], bool] = not_cancelled,
+) -> str:
     """Convert all JPG and PDF files in the input folder to Markdown using OpenAI's Vision API.
 
     Costs money and sends the files to OpenAI. Requires OPENAI_API_KEY to be set in the
@@ -253,6 +263,9 @@ def convert_handwriting_to_markdown_openai(model: str) -> str:
 
     Args:
         model: OpenAI model to use.
+        input_dir: Folder holding the JPGs and PDFs.
+        output_dir: Folder the Markdown is written to.
+        should_cancel: Checked before each page and each file, true stops the conversion.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -266,10 +279,18 @@ def convert_handwriting_to_markdown_openai(model: str) -> str:
     def convert_image(image_b64: str, media_type: str) -> str:
         return _image_openai(client, model, image_b64, media_type)
 
-    return _convert_all(lambda path: _convert_file(path, convert_image))
+    return _convert_all(
+        lambda path: _convert_file(path, convert_image, should_cancel),
+        input_dir, output_dir, should_cancel,
+    )
 
 
-def convert_handwriting_to_markdown_anthropic(model: str) -> str:
+def convert_handwriting_to_markdown_anthropic(
+    model: str,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+    should_cancel: Callable[[], bool] = not_cancelled,
+) -> str:
     """Convert all JPG and PDF files in the input folder to Markdown using Anthropic's Claude.
 
     Costs money and sends the files to Anthropic. Requires ANTHROPIC_API_KEY to be set in the
@@ -278,6 +299,9 @@ def convert_handwriting_to_markdown_anthropic(model: str) -> str:
 
     Args:
         model: Anthropic model to use.
+        input_dir: Folder holding the JPGs and PDFs.
+        output_dir: Folder the Markdown is written to.
+        should_cancel: Checked before each page and each file, true stops the conversion.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -290,10 +314,18 @@ def convert_handwriting_to_markdown_anthropic(model: str) -> str:
     def convert_image(image_b64: str, media_type: str) -> str:
         return _image_anthropic(client, model, image_b64, media_type)
 
-    return _convert_all(lambda path: _convert_file(path, convert_image))
+    return _convert_all(
+        lambda path: _convert_file(path, convert_image, should_cancel),
+        input_dir, output_dir, should_cancel,
+    )
 
 
-def convert_handwriting_to_markdown_local(model: str) -> str:
+def convert_handwriting_to_markdown_local(
+    model: str,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+    should_cancel: Callable[[], bool] = not_cancelled,
+) -> str:
     """Convert all JPG and PDF files in the input folder to Markdown using a local Ollama model.
 
     Free, no API key or internet needed. Requires Ollama running locally with a vision-capable
@@ -301,6 +333,9 @@ def convert_handwriting_to_markdown_local(model: str) -> str:
 
     Args:
         model: name of a locally pulled Ollama model, as shown by `ollama list`.
+        input_dir: Folder holding the JPGs and PDFs.
+        output_dir: Folder the Markdown is written to.
+        should_cancel: Checked before each page and each file, true stops the conversion.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -313,7 +348,10 @@ def convert_handwriting_to_markdown_local(model: str) -> str:
     def convert_image(image_b64: str, _media_type: str) -> str:
         return _convert_page_ollama(image_b64, model, _HANDWRITING_PROMPT)
 
-    return _convert_all(lambda path: _convert_file(path, convert_image))
+    return _convert_all(
+        lambda path: _convert_file(path, convert_image, should_cancel),
+        input_dir, output_dir, should_cancel,
+    )
 
 
 if __name__ == "__main__":
