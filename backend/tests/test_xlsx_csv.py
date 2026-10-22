@@ -6,9 +6,7 @@ out looking fine is indistinguishable from one that quietly lost half the file.
 """
 
 import io
-from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import openpyxl
 import pandas as pd
@@ -18,76 +16,79 @@ from PIL import Image
 
 import xlsx_csv
 
-Sandbox = Callable[[ModuleType], tuple[Path, Path]]
+WorkDirs = tuple[Path, Path]
 
 
 # Batch contract
 
 
-def test_reports_when_input_is_empty(sandbox: Sandbox) -> None:
-    sandbox(xlsx_csv)
-    assert xlsx_csv.convert_xlsx_to_csv() == "No Excel files found in input folder"
+def test_reports_when_input_is_empty(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    assert (
+        xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
+        == "No Excel files found in input folder"
+    )
 
 
-def test_reports_when_the_file_is_already_a_csv(sandbox: Sandbox) -> None:
-    input_dir, _ = sandbox(xlsx_csv)
+def test_reports_when_the_file_is_already_a_csv(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "data.csv").write_text("a\n1\n", encoding="utf-8")
 
-    assert xlsx_csv.convert_xlsx_to_csv() == "That file is already in csv format"
+    assert xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir) == "That file is already in csv format"
 
 
-def test_converts_a_single_workbook(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(xlsx_csv)
+def test_converts_a_single_workbook(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     pd.DataFrame({"a": [1, 2], "b": [3, 4]}).to_excel(input_dir / "data.xlsx", index=False)
 
-    summary = xlsx_csv.convert_xlsx_to_csv()
+    summary = xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert "data.csv" in summary
     assert (output_dir / "data.csv").read_text(encoding="utf-8") == "a,b\n1,3\n2,4\n"
 
 
-def test_converts_several_workbooks(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(xlsx_csv)
+def test_converts_several_workbooks(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     pd.DataFrame({"a": [1]}).to_excel(input_dir / "one.xlsx", index=False)
     pd.DataFrame({"b": [2]}).to_excel(input_dir / "two.xlsx", index=False)
 
-    summary = xlsx_csv.convert_xlsx_to_csv()
+    summary = xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert "Converted 2 file(s)" in summary
     assert sorted(p.name for p in output_dir.iterdir()) == ["one.csv", "two.csv"]
 
 
 def test_a_file_that_is_not_a_workbook_is_reported_rather_than_raised(
-    sandbox: Sandbox,
+    work_dirs: WorkDirs,
 ) -> None:
-    input_dir, _ = sandbox(xlsx_csv)
+    input_dir, output_dir = work_dirs
     (input_dir / "broken.xlsx").write_bytes(b"this is not a workbook")
 
-    summary = xlsx_csv.convert_xlsx_to_csv()
+    summary = xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert summary.startswith("No files converted. 1 failed:")
     assert "broken.xlsx" in summary
 
 
-def test_one_bad_file_does_not_stop_the_good_ones(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(xlsx_csv)
+def test_one_bad_file_does_not_stop_the_good_ones(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     pd.DataFrame({"a": [1]}).to_excel(input_dir / "good.xlsx", index=False)
     (input_dir / "broken.xlsx").write_bytes(b"this is not a workbook")
 
-    summary = xlsx_csv.convert_xlsx_to_csv()
+    summary = xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert "good.csv" in summary
     assert "1 failed" in summary
     assert (output_dir / "good.csv").exists()
 
 
-def test_the_row_index_is_not_written_as_a_column(sandbox: Sandbox) -> None:
+def test_the_row_index_is_not_written_as_a_column(work_dirs: WorkDirs) -> None:
     """index=False on both legs, otherwise every round trip grows an extra unnamed
     column on the left."""
-    input_dir, output_dir = sandbox(xlsx_csv)
+    input_dir, output_dir = work_dirs
     pd.DataFrame({"a": [1, 2]}).to_excel(input_dir / "data.xlsx", index=False)
 
-    xlsx_csv.convert_xlsx_to_csv()
+    xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert (output_dir / "data.csv").read_text(encoding="utf-8").splitlines()[0] == "a"
 
@@ -95,18 +96,18 @@ def test_the_row_index_is_not_written_as_a_column(sandbox: Sandbox) -> None:
 # What a CSV cannot hold
 
 
-def test_every_sheet_reaches_the_output(sandbox: Sandbox) -> None:
+def test_every_sheet_reaches_the_output(work_dirs: WorkDirs) -> None:
     """pd.read_excel reads only the first sheet unless told otherwise. A three-sheet
     workbook converts with no error and no warning, and two thirds of the data is
     simply not in the output file."""
-    input_dir, output_dir = sandbox(xlsx_csv)
+    input_dir, output_dir = work_dirs
     path = input_dir / "book.xlsx"
     with pd.ExcelWriter(path) as writer:
         pd.DataFrame({"a": [1]}).to_excel(writer, sheet_name="First", index=False)
         pd.DataFrame({"b": [2]}).to_excel(writer, sheet_name="Second", index=False)
         pd.DataFrame({"c": [3]}).to_excel(writer, sheet_name="Third", index=False)
 
-    xlsx_csv.convert_xlsx_to_csv()
+    xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     written = "".join(p.read_text(encoding="utf-8") for p in output_dir.iterdir())
     assert "a" in written
@@ -114,27 +115,27 @@ def test_every_sheet_reaches_the_output(sandbox: Sandbox) -> None:
     assert "c" in written
 
 
-def test_unicode_survives(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(xlsx_csv)
+def test_unicode_survives(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     pd.DataFrame({"word": ["café", "日本語"]}).to_excel(
         input_dir / "data.xlsx", index=False
     )
 
-    xlsx_csv.convert_xlsx_to_csv()
+    xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     text = (output_dir / "data.csv").read_text(encoding="utf-8")
     assert "café" in text
     assert "日本語" in text
 
 
-def test_each_sheet_gets_its_own_named_file(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(xlsx_csv)
+def test_each_sheet_gets_its_own_named_file(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     path = input_dir / "book.xlsx"
     with pd.ExcelWriter(path) as writer:
         pd.DataFrame({"a": [1]}).to_excel(writer, sheet_name="First", index=False)
         pd.DataFrame({"b": [2]}).to_excel(writer, sheet_name="Second", index=False)
 
-    summary = xlsx_csv.convert_xlsx_to_csv()
+    summary = xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert sorted(p.name for p in output_dir.iterdir()) == [
         "book_First.csv",
@@ -145,13 +146,13 @@ def test_each_sheet_gets_its_own_named_file(sandbox: Sandbox) -> None:
     assert "Converted 2 file(s)" in summary
 
 
-def test_a_single_sheet_workbook_keeps_the_plain_name(sandbox: Sandbox) -> None:
+def test_a_single_sheet_workbook_keeps_the_plain_name(work_dirs: WorkDirs) -> None:
     """Naming every output after its sheet would rename the common case to serve the
     rare one, so a one-sheet workbook still produces book.csv."""
-    input_dir, output_dir = sandbox(xlsx_csv)
+    input_dir, output_dir = work_dirs
     pd.DataFrame({"a": [1]}).to_excel(input_dir / "book.xlsx", sheet_name="Only", index=False)
 
-    xlsx_csv.convert_xlsx_to_csv()
+    xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert [p.name for p in output_dir.iterdir()] == ["book.csv"]
 
@@ -173,15 +174,15 @@ def test_sheet_names_are_made_safe_for_a_filename(sheet_name: str, expected: str
 
 
 def test_a_sheet_named_with_a_separator_stays_inside_the_output_folder(
-    sandbox: Sandbox,
+    work_dirs: WorkDirs,
 ) -> None:
-    input_dir, output_dir = sandbox(xlsx_csv)
+    input_dir, output_dir = work_dirs
     path = input_dir / "book.xlsx"
     with pd.ExcelWriter(path) as writer:
         pd.DataFrame({"a": [1]}).to_excel(writer, sheet_name="Q1", index=False)
         pd.DataFrame({"b": [2]}).to_excel(writer, sheet_name="24-25", index=False)
 
-    xlsx_csv.convert_xlsx_to_csv()
+    xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert all(p.parent == output_dir for p in output_dir.iterdir())
 
@@ -200,24 +201,24 @@ def _add_image(path: Path) -> None:
     wb.save(path)
 
 
-def test_an_embedded_image_does_not_change_the_csv_output(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(xlsx_csv)
+def test_an_embedded_image_does_not_change_the_csv_output(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     path = input_dir / "data.xlsx"
     pd.DataFrame({"a": [1, 2], "b": [3, 4]}).to_excel(path, index=False)
     _add_image(path)
 
-    xlsx_csv.convert_xlsx_to_csv()
+    xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert (output_dir / "data.csv").read_text(encoding="utf-8") == "a,b\n1,3\n2,4\n"
 
 
-def test_the_original_workbook_is_not_modified(sandbox: Sandbox) -> None:
-    input_dir, _ = sandbox(xlsx_csv)
+def test_the_original_workbook_is_not_modified(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     path = input_dir / "data.xlsx"
     pd.DataFrame({"a": [1, 2], "b": [3, 4]}).to_excel(path, index=False)
     _add_image(path)
     before = path.read_bytes()
 
-    xlsx_csv.convert_xlsx_to_csv()
+    xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert path.read_bytes() == before

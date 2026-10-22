@@ -389,7 +389,7 @@ REGISTRY: list[Conversion] = [
     Conversion((".csv",), "csv->xlsx", "Excel", ".xlsx",
                via_params(lambda s, i, o: csv_xlsx.convert_csv_to_xlsx(i, o))),
     Conversion((".xlsx",), "xlsx->csv", "CSV", ".csv",
-               via_globals(xlsx_csv, lambda s: xlsx_csv.convert_xlsx_to_csv()),
+               via_params(lambda s, i, o: xlsx_csv.convert_xlsx_to_csv(i, o)),
                note="One CSV per sheet. Multi-sheet workbooks come back as a zip"),
 
     # --- PDF -----------------------------------------------------------------
@@ -397,7 +397,7 @@ REGISTRY: list[Conversion] = [
                via_params(lambda s, i, o: pdf_md.convert_pdf_to_markdown(i, o)),
                requires=("tesseract",)),
     Conversion((".pdf",), "pdf->png", "PNG", ".png",
-               via_globals(pdf_png, lambda s: pdf_png.convert_pdf_to_png()),
+               via_params(lambda s, i, o: pdf_png.convert_pdf_to_png(i, o)),
                note="One PNG per page. Multi-page PDFs come back as a zip"),
     # The LLM conversions: two scripts (typed PDFs, handwriting) times three providers.
     # Local first within each script, so the free route is the one listed first.
@@ -509,7 +509,7 @@ REGISTRY: list[Conversion] = [
     Conversion((".gif",), "gif->png", "PNG", ".png",
                via_params(lambda s, i, o: gif_png.convert_gif_to_png(i, o))),
     Conversion((".gif",), "gif->svg", "SVG", ".svg",
-               via_globals(gif_svg, lambda s: gif_svg.convert_gif_to_svg())),
+               via_params(lambda s, i, o: gif_svg.convert_gif_to_svg(i, o))),
     Conversion((".svg",), "svg->pdf", "PDF", ".pdf",
                via_params(lambda s, i, o: svg_pdf.convert_svg_to_pdf(i, o)),
                requires=("chrome",)),
@@ -543,7 +543,7 @@ REGISTRY: list[Conversion] = [
                      "wkhtmltopdf is not installed, so this falls back to Pandoc and "
                      "CSS/layout will not be preserved. brew install wkhtmltopdf")),
     Conversion((".html", ".htm"), "html->svg", "SVG", ".svg",
-               via_globals(html_svg, lambda s: html_svg.convert_html_to_svg()),
+               via_params(lambda s, i, o: html_svg.convert_html_to_svg(i, o)),
                requires=("chrome",)),
     Conversion((".sql",), "sql->pdf", "PDF", ".pdf",
                via_setup_dirs(sql_pdf, lambda s: sql_pdf.convert_sql_files())),

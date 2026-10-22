@@ -14,14 +14,8 @@ from pathlib import Path
 import openpyxl
 
 import compress
+from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folder containing Excel files
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
 
 # Where openpyxl keeps embedded pictures inside the .xlsx zip.
 _MEDIA_PREFIX = "xl/media/"
@@ -57,21 +51,23 @@ def _read_excel_with_compression(path: str) -> dict[str, pd.DataFrame]:
         return pd.read_excel(staged, sheet_name=None, dtype=str)
 
 
-def convert_xlsx_to_csv() -> str:
+def convert_xlsx_to_csv(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all XLSX files in the input folder to CSV files in the output folder.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
     # Create output folder if it doesn't exist
-    os.makedirs(output_folder, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
 
     # Find all .xlsx files in the folder
-    excel_files = find_files(input_folder, '.xlsx')
+    excel_files = find_files(input_dir, '.xlsx')
 
     if not excel_files:
         # If only CSVs are present, notify they're already CSV
-        csv_present = find_files(input_folder, '.csv')
+        csv_present = find_files(input_dir, '.csv')
         if csv_present:
             return "That file is already in csv format"
         return "No Excel files found in input folder"
@@ -108,7 +104,7 @@ def convert_xlsx_to_csv() -> str:
                 else:
                     csv_filename = f"{stem}_{_safe_name(sheet_name)}.csv"
 
-                csv_path = os.path.join(output_folder, csv_filename)
+                csv_path = os.path.join(output_dir, csv_filename)
                 existed_before = os.path.exists(csv_path)
                 df.to_csv(csv_path, index=False)
                 print(f"Converted {filename} [{sheet_name}] to {csv_filename}")

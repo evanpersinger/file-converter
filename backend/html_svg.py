@@ -14,14 +14,8 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
 
 CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 CHROME_TIMEOUT_SECONDS = 60
@@ -63,7 +57,7 @@ def _print_to_pdf(html_file: str, pdf_file: str, profile_dir: str) -> None:
         raise RuntimeError(f"Chrome exited with code {result.returncode} and wrote no PDF")
 
 
-def _write_pages(pdf_file: str, filename: str) -> list[str]:
+def _write_pages(pdf_file: str, filename: str, output_dir: str | Path) -> list[str]:
     """Write each page of the PDF to an SVG in the output folder.
 
     Returns:
@@ -77,7 +71,7 @@ def _write_pages(pdf_file: str, filename: str) -> list[str]:
             # with a pointless "_page1" suffix.
             suffix = "" if page_count == 1 else f"_page{index}"
             svg_name = f"{filename}{suffix}.svg"
-            svg_file = os.path.join(output_folder, svg_name)
+            svg_file = os.path.join(output_dir, svg_name)
             if os.path.exists(svg_file):
                 print(f"Overwrote existing file: {svg_name}")
 
@@ -88,7 +82,9 @@ def _write_pages(pdf_file: str, filename: str) -> list[str]:
     return names
 
 
-def convert_html_to_svg() -> str:
+def convert_html_to_svg(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all HTML files in the input folder to SVG files in the output folder.
 
     Returns:
@@ -96,13 +92,12 @@ def convert_html_to_svg() -> str:
     """
 
     # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    os.makedirs(output_dir, exist_ok=True)
 
-    html_files = find_files(input_folder, '.html', '.htm')
+    html_files = find_files(input_dir, '.html', '.htm')
 
     if not html_files:
-        svg_present = find_files(input_folder, '.svg')
+        svg_present = find_files(input_dir, '.svg')
         if svg_present:
             return "That file is already in svg format"
         return "No HTML files found in input folder"
@@ -121,7 +116,7 @@ def convert_html_to_svg() -> str:
             with tempfile.TemporaryDirectory() as work_dir:
                 pdf_file = os.path.join(work_dir, "page.pdf")
                 _print_to_pdf(html_file, pdf_file, os.path.join(work_dir, "profile"))
-                names = _write_pages(pdf_file, filename)
+                names = _write_pages(pdf_file, filename, output_dir)
 
             print(f"Converted {os.path.basename(html_file)} to {', '.join(names)}")
             converted.extend(names)

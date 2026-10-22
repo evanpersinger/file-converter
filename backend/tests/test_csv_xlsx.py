@@ -7,9 +7,7 @@ bottom pushes a CSV through to XLSX and back and compares.
 """
 
 import shutil
-from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import pandas as pd
 from openpyxl import load_workbook
@@ -17,23 +15,21 @@ from openpyxl import load_workbook
 import csv_xlsx
 import xlsx_csv
 
-Sandbox = Callable[[ModuleType], tuple[Path, Path]]
 WorkDirs = tuple[Path, Path]
 
 
-def round_trip(sandbox: Sandbox, csv_text: str) -> str:
+def round_trip(work_dirs: WorkDirs, csv_text: str) -> str:
     """Send a CSV through csv_xlsx and back through xlsx_csv, returning the CSV text
-    that comes out the far end. xlsx_csv still reads module folder globals, so it is
-    redirected to the same folders csv_xlsx is handed, and the intermediate workbook is
-    moved from output back to input between the two legs."""
-    input_dir, output_dir = sandbox(xlsx_csv)
+    that comes out the far end. Both legs share the same two folders, so the
+    intermediate workbook is moved from output back to input between them."""
+    input_dir, output_dir = work_dirs
 
     (input_dir / "data.csv").write_text(csv_text, encoding="utf-8")
     csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
 
     (input_dir / "data.csv").unlink()
     shutil.move(output_dir / "data.xlsx", input_dir / "data.xlsx")
-    xlsx_csv.convert_xlsx_to_csv()
+    xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     return (output_dir / "data.csv").read_text(encoding="utf-8")
 
@@ -107,49 +103,49 @@ def test_one_bad_file_does_not_stop_the_good_ones(work_dirs: WorkDirs) -> None:
 # Round-trip fidelity
 
 
-def test_text_survives_the_round_trip(sandbox: Sandbox) -> None:
-    assert round_trip(sandbox, "word\ncafé\n日本語\n") == "word\ncafé\n日本語\n"
+def test_text_survives_the_round_trip(work_dirs: WorkDirs) -> None:
+    assert round_trip(work_dirs, "word\ncafé\n日本語\n") == "word\ncafé\n日本語\n"
 
 
-def test_a_quoted_comma_survives_the_round_trip(sandbox: Sandbox) -> None:
+def test_a_quoted_comma_survives_the_round_trip(work_dirs: WorkDirs) -> None:
     """The comma inside the value must stay inside one field rather than splitting it."""
     source = 'name\n"Smith, John"\n'
-    assert round_trip(sandbox, source) == source
+    assert round_trip(work_dirs, source) == source
 
 
-def test_an_empty_cell_survives_the_round_trip(sandbox: Sandbox) -> None:
-    assert round_trip(sandbox, "a,b\n1,\n") == "a,b\n1,\n"
+def test_an_empty_cell_survives_the_round_trip(work_dirs: WorkDirs) -> None:
+    assert round_trip(work_dirs, "a,b\n1,\n") == "a,b\n1,\n"
 
 
-def test_a_date_like_string_survives_the_round_trip(sandbox: Sandbox) -> None:
-    assert round_trip(sandbox, "d\n2024-01-02\n") == "d\n2024-01-02\n"
+def test_a_date_like_string_survives_the_round_trip(work_dirs: WorkDirs) -> None:
+    assert round_trip(work_dirs, "d\n2024-01-02\n") == "d\n2024-01-02\n"
 
 
-def test_leading_zeros_survive_the_round_trip(sandbox: Sandbox) -> None:
+def test_leading_zeros_survive_the_round_trip(work_dirs: WorkDirs) -> None:
     """A zip code, product code or phone number written as 007 is a string, but pandas
     infers the column as integer and the zeros are gone for good."""
-    assert round_trip(sandbox, "code\n007\n042\n") == "code\n007\n042\n"
+    assert round_trip(work_dirs, "code\n007\n042\n") == "code\n007\n042\n"
 
 
-def test_boolean_spelling_survives_the_round_trip(sandbox: Sandbox) -> None:
+def test_boolean_spelling_survives_the_round_trip(work_dirs: WorkDirs) -> None:
     """TRUE is inferred as a Python bool and comes back spelled True."""
-    assert round_trip(sandbox, "flag\nTRUE\nFALSE\n") == "flag\nTRUE\nFALSE\n"
+    assert round_trip(work_dirs, "flag\nTRUE\nFALSE\n") == "flag\nTRUE\nFALSE\n"
 
 
 def test_a_cell_starting_with_equals_is_not_turned_into_a_formula(
-    sandbox: Sandbox,
+    work_dirs: WorkDirs,
 ) -> None:
     """openpyxl stores a leading = as a live formula rather than as the text it was.
     The workbook has no cached result for it, so the value does not survive, and a
     spreadsheet opening that file would execute it."""
-    assert round_trip(sandbox, "f\n=1+1\n") == "f\n=1+1\n"
+    assert round_trip(work_dirs, "f\n=1+1\n") == "f\n=1+1\n"
 
 
-def test_trailing_zeros_on_a_float_survive_the_round_trip(sandbox: Sandbox) -> None:
+def test_trailing_zeros_on_a_float_survive_the_round_trip(work_dirs: WorkDirs) -> None:
     """1.10 and 1.1 are the same number but not the same text, so the column is kept as
     text rather than converted. A price list written to two decimal places stays that
     way instead of being reformatted on the user's behalf."""
-    assert round_trip(sandbox, "n\n1.10\n") == "n\n1.10\n"
+    assert round_trip(work_dirs, "n\n1.10\n") == "n\n1.10\n"
 
 
 def test_a_plain_numeric_column_is_still_written_as_numbers(work_dirs: WorkDirs) -> None:

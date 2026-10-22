@@ -6,17 +6,12 @@ Pillow decodes the frames and vtracer is handed a PNG of each. Suits flat-color 
 
 import io
 import os
+from pathlib import Path
 import vtracer
 from PIL import Image, ImageSequence
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
 
 
 def _trace_frame(frame: Image.Image) -> str:
@@ -28,7 +23,7 @@ def _trace_frame(frame: Image.Image) -> str:
     return vtracer.convert_raw_image_to_svg(png.getvalue(), img_format='png')
 
 
-def _write_svgs(svgs: list[str], filename: str) -> list[str]:
+def _write_svgs(svgs: list[str], filename: str, output_dir: str | Path) -> list[str]:
     """Write the traced frames to the output folder.
 
     Returns:
@@ -40,7 +35,7 @@ def _write_svgs(svgs: list[str], filename: str) -> list[str]:
         # pointless "_frame1" suffix.
         suffix = "" if len(svgs) == 1 else f"_frame{index}"
         svg_name = f"{filename}{suffix}.svg"
-        svg_file = os.path.join(output_folder, svg_name)
+        svg_file = os.path.join(output_dir, svg_name)
         if os.path.exists(svg_file):
             print(f"Overwrote existing file: {svg_name}")
 
@@ -50,7 +45,9 @@ def _write_svgs(svgs: list[str], filename: str) -> list[str]:
     return names
 
 
-def convert_gif_to_svg() -> str:
+def convert_gif_to_svg(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all GIF files in the input folder to SVG files in the output folder.
 
     Returns:
@@ -58,13 +55,12 @@ def convert_gif_to_svg() -> str:
     """
 
     # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    os.makedirs(output_dir, exist_ok=True)
 
-    gif_files = find_files(input_folder, '.gif')
+    gif_files = find_files(input_dir, '.gif')
 
     if not gif_files:
-        svg_present = find_files(input_folder, '.svg')
+        svg_present = find_files(input_dir, '.svg')
         if svg_present:
             return "That file is already in svg format"
         return "No GIF files found in input folder"
@@ -81,7 +77,7 @@ def convert_gif_to_svg() -> str:
             # does not leave a half-converted set behind.
             with Image.open(gif_file) as img:
                 svgs = [_trace_frame(frame) for frame in ImageSequence.Iterator(img)]
-            names = _write_svgs(svgs, filename)
+            names = _write_svgs(svgs, filename, output_dir)
 
             print(f"Converted {os.path.basename(gif_file)} to {', '.join(names)}")
             converted.extend(names)

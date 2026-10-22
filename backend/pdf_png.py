@@ -1,16 +1,11 @@
 """Render each page of the PDFs in input/ to a PNG in output/ (name.png, or name_pageN.png for multi-page)."""
 
 import os
+from pathlib import Path
 import fitz  # PyMuPDF
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
 
 # Rendering resolution. PDF pages are vector, so this is a choice rather than a
 # property of the file: 200 keeps body text sharp on screen without turning every
@@ -18,7 +13,9 @@ output_folder = os.path.join(script_dir, 'output')
 RENDER_DPI = 200
 
 
-def convert_pdf_to_png() -> str:
+def convert_pdf_to_png(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Render every page of each PDF in the input folder to a PNG in the output folder.
 
     Returns:
@@ -26,13 +23,12 @@ def convert_pdf_to_png() -> str:
     """
 
     # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    os.makedirs(output_dir, exist_ok=True)
 
-    pdf_files = find_files(input_folder, '.pdf')
+    pdf_files = find_files(input_dir, '.pdf')
 
     if not pdf_files:
-        png_present = find_files(input_folder, '.png')
+        png_present = find_files(input_dir, '.png')
         if png_present:
             return "That file is already in png format"
         return "No PDF files found in input folder"
@@ -58,7 +54,7 @@ def convert_pdf_to_png() -> str:
                     # not end up with a pointless "_page1" suffix.
                     suffix = "" if page_count == 1 else f"_page{index}"
                     png_name = f"{filename}{suffix}.png"
-                    png_file = os.path.join(output_folder, png_name)
+                    png_file = os.path.join(output_dir, png_name)
                     if os.path.exists(png_file):
                         overwritten.append(png_name)
 

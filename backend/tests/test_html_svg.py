@@ -6,15 +6,13 @@ missing-Chrome and failed-Chrome cases run anywhere.
 """
 
 import re
-from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
 import html_svg
 
-Sandbox = Callable[[ModuleType], tuple[Path, Path]]
+WorkDirs = tuple[Path, Path]
 
 needs_chrome = pytest.mark.skipif(
     not Path(html_svg.CHROME_PATH).exists(), reason="Google Chrome is not installed"
@@ -26,37 +24,40 @@ h1 { color: #d11f2e }
 </style></head><body><h1>Hello</h1><div class="box">Green box</div></body></html>"""
 
 
-def test_reports_when_input_is_empty(sandbox: Sandbox) -> None:
-    sandbox(html_svg)
-    assert html_svg.convert_html_to_svg() == "No HTML files found in input folder"
+def test_reports_when_input_is_empty(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    assert (
+        html_svg.convert_html_to_svg(input_dir, output_dir)
+        == "No HTML files found in input folder"
+    )
 
 
-def test_reports_when_the_file_is_already_an_svg(sandbox: Sandbox) -> None:
-    input_dir, _ = sandbox(html_svg)
+def test_reports_when_the_file_is_already_an_svg(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "logo.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"></svg>')
 
-    assert html_svg.convert_html_to_svg() == "That file is already in svg format"
+    assert html_svg.convert_html_to_svg(input_dir, output_dir) == "That file is already in svg format"
 
 
 def test_reports_when_chrome_is_missing(
-    sandbox: Sandbox, monkeypatch: pytest.MonkeyPatch
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, _ = sandbox(html_svg)
+    input_dir, output_dir = work_dirs
     (input_dir / "page.html").write_text(COLORED_PAGE)
     monkeypatch.setattr(html_svg, "CHROME_PATH", "/nonexistent/chrome")
 
-    assert html_svg.convert_html_to_svg().startswith("Google Chrome not found")
+    assert html_svg.convert_html_to_svg(input_dir, output_dir).startswith("Google Chrome not found")
 
 
 def test_a_failed_chrome_run_is_reported_rather_than_raised(
-    sandbox: Sandbox, monkeypatch: pytest.MonkeyPatch
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`false` exits 1 and writes no PDF, which is what a Chrome failure looks like."""
-    input_dir, _ = sandbox(html_svg)
+    input_dir, output_dir = work_dirs
     (input_dir / "page.html").write_text(COLORED_PAGE)
     monkeypatch.setattr(html_svg, "CHROME_PATH", "/usr/bin/false")
 
-    summary = html_svg.convert_html_to_svg()
+    summary = html_svg.convert_html_to_svg(input_dir, output_dir)
 
     assert summary.startswith("No files converted. 1 failed:")
     assert "page.html" in summary
@@ -64,11 +65,11 @@ def test_a_failed_chrome_run_is_reported_rather_than_raised(
 
 @needs_chrome
 @pytest.mark.parametrize("filename", ["page.html", "page.htm"])
-def test_colors_survive_the_conversion(sandbox: Sandbox, filename: str) -> None:
-    input_dir, output_dir = sandbox(html_svg)
+def test_colors_survive_the_conversion(work_dirs: WorkDirs, filename: str) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / filename).write_text(COLORED_PAGE)
 
-    summary = html_svg.convert_html_to_svg()
+    summary = html_svg.convert_html_to_svg(input_dir, output_dir)
 
     assert "page.svg" in summary
     svg = (output_dir / "page.svg").read_text()
@@ -78,12 +79,12 @@ def test_colors_survive_the_conversion(sandbox: Sandbox, filename: str) -> None:
 
 
 @needs_chrome
-def test_a_long_page_splits_into_numbered_svgs(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(html_svg)
+def test_a_long_page_splits_into_numbered_svgs(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     paragraphs = "".join(f"<p>Paragraph {i}</p>" for i in range(150))
     (input_dir / "long.html").write_text(f"<!doctype html><body>{paragraphs}</body>")
 
-    html_svg.convert_html_to_svg()
+    html_svg.convert_html_to_svg(input_dir, output_dir)
 
     names = sorted(p.name for p in output_dir.iterdir())
     assert names[:2] == ["long_page1.svg", "long_page2.svg"]
