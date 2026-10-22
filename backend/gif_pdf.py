@@ -7,7 +7,8 @@ is flattened onto white, because converting straight to RGB turns transparent ar
 
 from pathlib import Path
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images, save_pdf_pages
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images, save_pdf_pages
 
 
 def convert_gif_to_pdf(

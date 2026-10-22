@@ -6,7 +6,7 @@ Suits flat-color art. Photos come back as huge, slow SVGs. Tuning knobs are in t
 from pathlib import Path
 import vtracer
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 
 
 def _trace(source: Path, dest: Path) -> None:

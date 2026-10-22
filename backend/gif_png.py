@@ -6,7 +6,8 @@ is kept, and animated GIFs give their first frame.
 
 from pathlib import Path
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images, saver
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images, saver
 
 
 def convert_gif_to_png(

@@ -5,7 +5,6 @@ heading, promotes large-font text to subheadings, and writes the text to output/
 """
 
 import io
-import os
 import re
 import shutil
 import tempfile
@@ -15,17 +14,10 @@ from pptx import Presentation
 from pptx.shapes.group import GroupShape
 
 import compress
-from find_files import find_files
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 
 # Where python-pptx keeps embedded pictures inside the .pptx zip.
 _MEDIA_PREFIX = "ppt/media/"
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
 
 # These start emphasis, code, links or raw HTML wherever they appear in a line
 _INLINE_SPECIALS = re.compile(r'([\\`*\[\]<])')
@@ -159,64 +151,22 @@ def _extract_with_compression(pptx_file: str) -> str:
         return extract_text_from_pptx(str(staged))
 
 
-def convert_pptx_to_markdown() -> str:
+def _write_markdown(source: Path, dest: Path) -> None:
+    # Extract text and format as markdown
+    dest.write_text(_extract_with_compression(str(source)), encoding='utf-8')
+
+
+def convert_pptx_to_markdown(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all PPTX files in the input folder to Markdown files in the output folder.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-
-    # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    # Find all PPTX files
-    pptx_files = find_files(input_folder, '.pptx')
-
-    if not pptx_files:
-        # If there are only markdown files present, notify the user
-        md_present = find_files(input_folder, '.md')
-        if md_present:
-            return "That file is already in markdown format"
-        return "No PPTX files found in input folder"
-
-    converted = []
-    errors = []
-
-    for pptx_file in pptx_files:
-        try:
-            # Get filename without extension
-            filename = os.path.splitext(os.path.basename(pptx_file))[0]
-            md_file = os.path.join(output_folder, f"{filename}.md")
-
-            print(f"Converting {os.path.basename(pptx_file)} to md")
-
-            # Extract text and format as markdown
-            markdown_content = _extract_with_compression(pptx_file)
-
-            # Write to markdown file
-            existed_before = os.path.exists(md_file)
-            with open(md_file, 'w', encoding='utf-8') as f:
-                f.write(markdown_content)
-
-            print(f"Converted {os.path.basename(pptx_file)} to {filename}.md")
-            if existed_before:
-                print(f"Overwrote existing file: {filename}.md")
-            converted.append(f"{filename}.md")
-
-        except Exception as e:
-            print(f"Error converting {pptx_file}: {str(e)}")
-            errors.append(f"{os.path.basename(pptx_file)}: {e}")
-
-        print()
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
+    return convert_files(
+        input_dir, output_dir, ('.pptx',), ('.md',), _write_markdown, target_label="markdown"
+    )
 
 
 if __name__ == "__main__":

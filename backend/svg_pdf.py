@@ -12,14 +12,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import html_svg
-from find_files import find_files
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 
 # CSS pixels per SVG length unit, at the 96 pixels per inch browsers use.
 PX_PER_UNIT = {
@@ -93,62 +86,33 @@ def svg_to_pdf(svg_file: str, pdf_file: str, work_dir: str) -> None:
     html_svg._print_to_pdf(wrapper_file, pdf_file, os.path.join(work_dir, "profile"))
 
 
-def convert_svg_to_pdf() -> str:
+def chrome_missing() -> str | None:
+    """The message to return when Chrome isn't installed, or None when it is."""
+    if not os.path.exists(html_svg.CHROME_PATH):
+        return f"Google Chrome not found at {html_svg.CHROME_PATH}"
+    return None
+
+
+def _print_pdf(source: Path, dest: Path) -> None:
+    # Printed to a temp folder first, so a stale PDF from an earlier run cannot
+    # make a failed Chrome run look like it worked.
+    with tempfile.TemporaryDirectory() as work_dir:
+        printed_file = os.path.join(work_dir, "page.pdf")
+        svg_to_pdf(str(source), printed_file, work_dir)
+        shutil.copyfile(printed_file, dest)
+
+
+def convert_svg_to_pdf(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all SVG files in the input folder to PDF files in the output folder.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-
-    # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    svg_files = find_files(input_folder, '.svg')
-
-    if not svg_files:
-        pdf_present = find_files(input_folder, '.pdf')
-        if pdf_present:
-            return "That file is already in pdf format"
-        return "No SVG files found in input folder"
-
-    if not os.path.exists(html_svg.CHROME_PATH):
-        return f"Google Chrome not found at {html_svg.CHROME_PATH}"
-
-    converted = []
-    errors = []
-
-    for svg_file in svg_files:
-        try:
-            filename = os.path.splitext(os.path.basename(svg_file))[0]
-            pdf_file = os.path.join(output_folder, f"{filename}.pdf")
-
-            existed_before = os.path.exists(pdf_file)
-            print(f"Converting {os.path.basename(svg_file)} to pdf")
-
-            # Printed to a temp folder first, so a stale PDF from an earlier run cannot
-            # make a failed Chrome run look like it worked.
-            with tempfile.TemporaryDirectory() as work_dir:
-                printed_file = os.path.join(work_dir, "page.pdf")
-                svg_to_pdf(svg_file, printed_file, work_dir)
-                shutil.copyfile(printed_file, pdf_file)
-
-            print(f"Converted {os.path.basename(svg_file)} to {filename}.pdf")
-            if existed_before:
-                print(f"Overwrote existing file: {filename}.pdf")
-            converted.append(f"{filename}.pdf")
-
-        except Exception as e:
-            print(f"Error converting {svg_file}: {str(e)}")
-            errors.append(f"{os.path.basename(svg_file)}: {e}")
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
+    return convert_files(
+        input_dir, output_dir, ('.svg',), ('.pdf',), _print_pdf, precheck=chrome_missing
+    )
 
 
 if __name__ == "__main__":

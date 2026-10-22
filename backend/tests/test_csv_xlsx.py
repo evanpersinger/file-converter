@@ -18,17 +18,18 @@ import csv_xlsx
 import xlsx_csv
 
 Sandbox = Callable[[ModuleType], tuple[Path, Path]]
+WorkDirs = tuple[Path, Path]
 
 
 def round_trip(sandbox: Sandbox, csv_text: str) -> str:
     """Send a CSV through csv_xlsx and back through xlsx_csv, returning the CSV text
-    that comes out the far end. Both modules read the same folder globals, so the
-    intermediate workbook is moved from output back to input between the two legs."""
-    input_dir, output_dir = sandbox(csv_xlsx)
-    sandbox(xlsx_csv)
+    that comes out the far end. xlsx_csv still reads module folder globals, so it is
+    redirected to the same folders csv_xlsx is handed, and the intermediate workbook is
+    moved from output back to input between the two legs."""
+    input_dir, output_dir = sandbox(xlsx_csv)
 
     (input_dir / "data.csv").write_text(csv_text, encoding="utf-8")
-    csv_xlsx.convert_csv_to_xlsx()
+    csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
 
     (input_dir / "data.csv").unlink()
     shutil.move(output_dir / "data.xlsx", input_dir / "data.xlsx")
@@ -40,57 +41,63 @@ def round_trip(sandbox: Sandbox, csv_text: str) -> str:
 # Batch contract
 
 
-def test_reports_when_input_is_empty(sandbox: Sandbox) -> None:
-    sandbox(csv_xlsx)
-    assert csv_xlsx.convert_csv_to_xlsx() == "No CSV files found in input folder"
+def test_reports_when_input_is_empty(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    assert (
+        csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
+        == "No CSV files found in input folder"
+    )
 
 
-def test_reports_when_the_file_is_already_a_workbook(sandbox: Sandbox) -> None:
-    input_dir, _ = sandbox(csv_xlsx)
+def test_reports_when_the_file_is_already_a_workbook(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     pd.DataFrame({"a": [1]}).to_excel(input_dir / "book.xlsx", index=False)
 
-    assert csv_xlsx.convert_csv_to_xlsx() == "That file is already in Excel format"
+    assert (
+        csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
+        == "That file is already in Excel format"
+    )
 
 
-def test_converts_a_single_csv(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(csv_xlsx)
+def test_converts_a_single_csv(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "data.csv").write_text("a,b\n1,2\n", encoding="utf-8")
 
-    summary = csv_xlsx.convert_csv_to_xlsx()
+    summary = csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
 
     assert "data.xlsx" in summary
     assert pd.read_excel(output_dir / "data.xlsx").to_dict("list") == {"a": [1], "b": [2]}
 
 
-def test_converts_several_csvs(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(csv_xlsx)
+def test_converts_several_csvs(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "one.csv").write_text("a\n1\n", encoding="utf-8")
     (input_dir / "two.csv").write_text("b\n2\n", encoding="utf-8")
 
-    summary = csv_xlsx.convert_csv_to_xlsx()
+    summary = csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
 
     assert "Converted 2 file(s)" in summary
     assert sorted(p.name for p in output_dir.iterdir()) == ["one.xlsx", "two.xlsx"]
 
 
-def test_an_empty_csv_is_reported_rather_than_raised(sandbox: Sandbox) -> None:
+def test_an_empty_csv_is_reported_rather_than_raised(work_dirs: WorkDirs) -> None:
     """A zero-byte file has no header row for pandas to read, which raises rather than
     producing an empty frame."""
-    input_dir, _ = sandbox(csv_xlsx)
+    input_dir, output_dir = work_dirs
     (input_dir / "empty.csv").write_text("", encoding="utf-8")
 
-    summary = csv_xlsx.convert_csv_to_xlsx()
+    summary = csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
 
     assert summary.startswith("No files converted. 1 failed:")
     assert "empty.csv" in summary
 
 
-def test_one_bad_file_does_not_stop_the_good_ones(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(csv_xlsx)
+def test_one_bad_file_does_not_stop_the_good_ones(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "good.csv").write_text("a\n1\n", encoding="utf-8")
     (input_dir / "empty.csv").write_text("", encoding="utf-8")
 
-    summary = csv_xlsx.convert_csv_to_xlsx()
+    summary = csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
 
     assert "good.xlsx" in summary
     assert "1 failed" in summary
@@ -145,14 +152,14 @@ def test_trailing_zeros_on_a_float_survive_the_round_trip(sandbox: Sandbox) -> N
     assert round_trip(sandbox, "n\n1.10\n") == "n\n1.10\n"
 
 
-def test_a_plain_numeric_column_is_still_written_as_numbers(sandbox: Sandbox) -> None:
+def test_a_plain_numeric_column_is_still_written_as_numbers(work_dirs: WorkDirs) -> None:
     """The point of detecting per column rather than reading everything as text: a
     column that loses nothing by being numeric stays numeric, so Excel can still add
     it up."""
-    input_dir, output_dir = sandbox(csv_xlsx)
+    input_dir, output_dir = work_dirs
     (input_dir / "data.csv").write_text("price,code\n15,007\n20,042\n", encoding="utf-8")
 
-    csv_xlsx.convert_csv_to_xlsx()
+    csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
 
     # Read the cells rather than a DataFrame: what matters is the type stored in the
     # workbook, and pandas would re-guess it on the way back in.

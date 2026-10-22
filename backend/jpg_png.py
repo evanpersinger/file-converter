@@ -6,7 +6,8 @@ output/. JPEG carries no transparency, so nothing is lost on the way across.
 
 from pathlib import Path
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images, saver
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images, saver
 
 
 def convert_jpg_to_png(

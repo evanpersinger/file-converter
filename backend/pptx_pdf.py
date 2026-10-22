@@ -4,19 +4,32 @@ For each .pptx in input/, shells out to a headless LibreOffice (soffice) to rend
 the slides to PDF in output/. Requires LibreOffice to be installed.
 """
 
-import os
 import subprocess
+from pathlib import Path
 
-from find_files import find_files
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
+def _find_libreoffice() -> str | None:
+    """Resolve the LibreOffice executable across platforms, or None if there isn't one."""
+    libreoffice_executables = [
+        'libreoffice',  # common on Linux
+        'soffice',      # common alias
+        '/Applications/LibreOffice.app/Contents/MacOS/soffice'  # macOS app bundle
+    ]
+    for candidate in libreoffice_executables:
+        try:
+            check = subprocess.run([candidate, '--version'], capture_output=True, text=True)
+            if check.returncode == 0 or 'LibreOffice' in check.stdout:
+                return candidate
+        except FileNotFoundError:
+            continue
+    return None
 
-def convert_pptx_to_pdf() -> str:
+
+def convert_pptx_to_pdf(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all PPTX files in the input folder to PDF files in the output folder.
 
     Requires LibreOffice to be installed.
@@ -24,92 +37,36 @@ def convert_pptx_to_pdf() -> str:
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
+    executable = None
 
-    # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    def find_executable() -> str | None:
+        nonlocal executable
+        executable = _find_libreoffice()
+        if not executable:
+            return (
+                "LibreOffice not found in PATH. On macOS (Homebrew cask): "
+                "brew install --cask libreoffice. If already installed via .app, add a "
+                "symlink: sudo ln -s /Applications/LibreOffice.app/Contents/MacOS/soffice "
+                "/usr/local/bin/soffice"
+            )
+        print(f"Using LibreOffice executable: {executable}")
+        return None
 
-    # Find all PPTX files
-    pptx_files = find_files(input_folder, '.pptx')
-
-    if not pptx_files:
-        # If only PDFs are present, notify the file(s) are already PDF
-        pdf_present = find_files(input_folder, '.pdf')
-        if pdf_present:
-            return "That file is already in pdf format"
-        return "No PPTX files found in input folder"
-
-    # Resolve LibreOffice executable across platforms
-    libreoffice_executables = [
-        'libreoffice',  # common on Linux
-        'soffice',      # common alias
-        '/Applications/LibreOffice.app/Contents/MacOS/soffice'  # macOS app bundle
-    ]
-    resolved_executable = None
-    for candidate in libreoffice_executables:
-        try:
-            check = subprocess.run([candidate, '--version'], capture_output=True, text=True)
-            if check.returncode == 0 or 'LibreOffice' in check.stdout:
-                resolved_executable = candidate
-                break
-        except FileNotFoundError:
-            continue
-
-    if not resolved_executable:
-        return (
-            "LibreOffice not found in PATH. On macOS (Homebrew cask): "
-            "brew install --cask libreoffice. If already installed via .app, add a symlink: "
-            "sudo ln -s /Applications/LibreOffice.app/Contents/MacOS/soffice /usr/local/bin/soffice"
+    def render(source: Path, dest: Path) -> None:
+        # LibreOffice names the PDF after the .pptx, which is what dest is already called.
+        result = subprocess.run(
+            [executable, '--headless', '--convert-to', 'pdf', '--outdir', str(dest.parent),
+             str(source)],
+            capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip())
 
-    print(f"Using LibreOffice executable: {resolved_executable}")
+    return convert_files(
+        input_dir, output_dir, ('.pptx',), ('.pdf',), render, precheck=find_executable
+    )
 
-    converted = []
-    errors = []
-
-    for pptx_file in pptx_files:
-        try:
-            # Get filename without extension
-            filename = os.path.splitext(os.path.basename(pptx_file))[0]
-            pdf_output_path = os.path.join(output_folder, f"{filename}.pdf")
-            existed_before = os.path.exists(pdf_output_path)
-            print(f"Converting {os.path.basename(pptx_file)} to pdf")
-
-            # Use LibreOffice to convert PPTX to PDF
-            # This requires LibreOffice to be installed
-            cmd = [
-                resolved_executable,
-                '--headless',
-                '--convert-to', 'pdf',
-                '--outdir', output_folder,
-                pptx_file
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True)
-
-            if result.returncode == 0:
-                print(f"Converted {os.path.basename(pptx_file)} to {filename}.pdf")
-                if existed_before:
-                    print(f"Overwrote existing file: {filename}.pdf")
-                converted.append(f"{filename}.pdf")
-            else:
-                print(f"Error converting {pptx_file}: {result.stderr}")
-                errors.append(f"{os.path.basename(pptx_file)}: {result.stderr.strip()}")
-
-        except FileNotFoundError:
-            errors.append("LibreOffice executable became unavailable during run")
-            break
-        except Exception as e:
-            print(f"Error converting {pptx_file}: {str(e)}")
-            errors.append(f"{os.path.basename(pptx_file)}: {e}")
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
 
 if __name__ == "__main__":
     result = convert_pptx_to_pdf()

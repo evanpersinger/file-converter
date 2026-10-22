@@ -6,7 +6,8 @@ single-page PDF in output/.
 
 from pathlib import Path
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images, save_pdf
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images, save_pdf
 
 
 def convert_jpg_to_pdf(

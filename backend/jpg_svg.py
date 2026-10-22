@@ -6,7 +6,7 @@ JPEG artifacts trace as real shapes, so prefer a PNG source when you have one.
 from pathlib import Path
 import vtracer
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 
 
 def _trace(source: Path, dest: Path) -> None:

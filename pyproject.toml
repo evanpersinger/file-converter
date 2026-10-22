@@ -85,6 +85,7 @@ packages = []
 # imports (`from md_pdf import ...`) keep resolving after the backend/ reorg.
 sources = ["backend"]
 only-include = [
+    "backend/batch_convert.py",
     "backend/combine_files.py",
     "backend/csv_md.py",
     "backend/csv_xlsx.py",
@@ -137,6 +138,7 @@ only-include = [
 
 [tool.hatch.build.targets.sdist]
 only-include = [
+    "backend/batch_convert.py",
     "backend/combine_files.py",
     "backend/csv_md.py",
     "backend/csv_xlsx.py",

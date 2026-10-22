@@ -256,7 +256,7 @@ def via_dir_globals_model(module, call: Callable):
 def via_params(call: Callable):
     """Converter already accepts input_dir / output_dir arguments. No patching needed.
 
-    Applies to docx_pdf, R_Rmd, Rmd_pdf and the converters built on image_convert.
+    Applies to docx_pdf, R_Rmd, Rmd_pdf and the converters built on batch_convert.
     """
     def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
         return call(staged, job_in, job_out)
@@ -385,16 +385,16 @@ CLOUD_MODELS = {
 REGISTRY: list[Conversion] = [
     # --- spreadsheets / data -------------------------------------------------
     Conversion((".csv",), "csv->md", "Markdown", ".md",
-               via_globals(csv_md, lambda s: csv_md.convert_csv_to_markdown())),
+               via_params(lambda s, i, o: csv_md.convert_csv_to_markdown(i, o))),
     Conversion((".csv",), "csv->xlsx", "Excel", ".xlsx",
-               via_globals(csv_xlsx, lambda s: csv_xlsx.convert_csv_to_xlsx())),
+               via_params(lambda s, i, o: csv_xlsx.convert_csv_to_xlsx(i, o))),
     Conversion((".xlsx",), "xlsx->csv", "CSV", ".csv",
                via_globals(xlsx_csv, lambda s: xlsx_csv.convert_xlsx_to_csv()),
                note="One CSV per sheet. Multi-sheet workbooks come back as a zip"),
 
     # --- PDF -----------------------------------------------------------------
     Conversion((".pdf",), "pdf->md", "Markdown", ".md",
-               via_globals(pdf_md, lambda s: pdf_md.convert_pdf_to_markdown()),
+               via_params(lambda s, i, o: pdf_md.convert_pdf_to_markdown(i, o)),
                requires=("tesseract",)),
     Conversion((".pdf",), "pdf->png", "PNG", ".png",
                via_globals(pdf_png, lambda s: pdf_png.convert_pdf_to_png()),
@@ -452,12 +452,12 @@ REGISTRY: list[Conversion] = [
 
     # --- office --------------------------------------------------------------
     Conversion((".pptx",), "pptx->md", "Markdown", ".md",
-               via_globals(pptx_md, lambda s: pptx_md.convert_pptx_to_markdown())),
+               via_params(lambda s, i, o: pptx_md.convert_pptx_to_markdown(i, o))),
     Conversion((".pptx",), "pptx->pdf", "PDF", ".pdf",
-               via_globals(pptx_pdf, lambda s: pptx_pdf.convert_pptx_to_pdf()),
+               via_params(lambda s, i, o: pptx_pdf.convert_pptx_to_pdf(i, o)),
                requires=("libreoffice",)),
     Conversion((".docx",), "docx->md", "Markdown", ".md",
-               via_globals(docx_md, lambda s: docx_md.convert_docx_to_markdown()),
+               via_params(lambda s, i, o: docx_md.convert_docx_to_markdown(i, o)),
                requires=("pandoc",),
                note="Documents with images come back as a zip, with the images in a folder"),
     Conversion((".docx",), "docx->pdf", "PDF", ".pdf",
@@ -470,15 +470,15 @@ REGISTRY: list[Conversion] = [
     Conversion((".heic",), "heic->png", "PNG", ".png",
                via_params(lambda s, i, o: heic_png.convert_heic_to_png(i, o))),
     Conversion((".heic",), "heic->md", "Markdown", ".md",
-               via_globals(heic_md, lambda s: heic_md.convert_heic_to_markdown()),
+               via_params(lambda s, i, o: heic_md.convert_heic_to_markdown(i, o)),
                requires=("tesseract",)),
     Conversion((".heic",), "heic->pdf", "PDF", ".pdf",
                via_params(lambda s, i, o: heic_pdf.convert_heic_to_pdf(i, o))),
     Conversion((".jpg", ".jpeg"), "jpg->md", "Markdown", ".md",
-               via_globals(jpg_md, lambda s: jpg_md.convert_jpg_to_markdown()),
+               via_params(lambda s, i, o: jpg_md.convert_jpg_to_markdown(i, o)),
                requires=("tesseract",)),
     Conversion((".jpg", ".jpeg"), "jpg->txt", "Text", ".txt",
-               via_globals(jpg_txt, lambda s: jpg_txt.convert_jpg_to_txt()),
+               via_params(lambda s, i, o: jpg_txt.convert_jpg_to_txt(i, o)),
                requires=("tesseract",)),
     Conversion((".jpg", ".jpeg"), "jpg->pdf", "PDF", ".pdf",
                via_params(lambda s, i, o: jpg_pdf.convert_jpg_to_pdf(i, o))),
@@ -511,10 +511,10 @@ REGISTRY: list[Conversion] = [
     Conversion((".gif",), "gif->svg", "SVG", ".svg",
                via_globals(gif_svg, lambda s: gif_svg.convert_gif_to_svg())),
     Conversion((".svg",), "svg->pdf", "PDF", ".pdf",
-               via_globals(svg_pdf, lambda s: svg_pdf.convert_svg_to_pdf()),
+               via_params(lambda s, i, o: svg_pdf.convert_svg_to_pdf(i, o)),
                requires=("chrome",)),
     Conversion((".svg",), "svg->png", "PNG", ".png",
-               via_globals(svg_png, lambda s: svg_png.convert_svg_to_png()),
+               via_params(lambda s, i, o: svg_png.convert_svg_to_png(i, o)),
                requires=("chrome",)),
 
     # ss_txt is the only OCR route for these formats (jpg/jpeg are served by jpg_txt,

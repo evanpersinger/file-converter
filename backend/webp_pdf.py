@@ -6,7 +6,8 @@ per frame, so a static WebP gives a single page. Each frame is flattened onto wh
 
 from pathlib import Path
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images, save_pdf_pages
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images, save_pdf_pages
 
 
 def convert_webp_to_pdf(

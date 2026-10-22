@@ -11,7 +11,8 @@ from pathlib import Path
 import vtracer
 from PIL import Image
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images
 
 
 def _trace(img: Image.Image, dest: Path) -> None:

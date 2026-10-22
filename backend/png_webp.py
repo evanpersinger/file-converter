@@ -6,7 +6,8 @@ pixels change. Transparency is kept.
 
 from pathlib import Path
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images, saver
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images, saver
 
 
 def convert_png_to_webp(

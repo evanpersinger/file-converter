@@ -6,7 +6,8 @@ transparency, so transparent areas are painted white. Animated WebPs give their 
 
 from pathlib import Path
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images, save_jpg_on_white
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images, save_jpg_on_white
 
 
 def convert_webp_to_jpg(

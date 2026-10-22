@@ -7,7 +7,6 @@ produces Markdown whose images break the moment the output is zipped or moved.
 
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 from docx import Document
@@ -15,25 +14,30 @@ from docx.shared import Inches
 
 import docx_md
 
-Sandbox = Callable[[ModuleType], tuple[Path, Path]]
+WorkDirs = tuple[Path, Path]
 
 
-def test_reports_when_input_is_empty(sandbox: Sandbox) -> None:
-    sandbox(docx_md)
-    assert docx_md.convert_docx_to_markdown() == "No DOCX files found in input folder"
+def test_reports_when_input_is_empty(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    assert (
+        docx_md.convert_docx_to_markdown(input_dir, output_dir)
+        == "No DOCX files found in input folder"
+    )
 
 
 def test_reports_when_pandoc_is_missing(
-    sandbox: Sandbox, monkeypatch: pytest.MonkeyPatch
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    sandbox(docx_md)
+    input_dir, output_dir = work_dirs
     monkeypatch.setattr(docx_md, "which", lambda _name: None)
 
-    assert docx_md.convert_docx_to_markdown().startswith("Error: pandoc not found")
+    assert docx_md.convert_docx_to_markdown(input_dir, output_dir).startswith(
+        "Error: pandoc not found"
+    )
 
 
-def test_keeps_headings_formatting_and_tables(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(docx_md)
+def test_keeps_headings_formatting_and_tables(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     doc = Document()
     doc.add_heading("Notes", level=1)
     paragraph = doc.add_paragraph("This is ")
@@ -45,7 +49,7 @@ def test_keeps_headings_formatting_and_tables(sandbox: Sandbox) -> None:
     table.cell(1, 1).text = "92"
     doc.save(input_dir / "notes.docx")
 
-    summary = docx_md.convert_docx_to_markdown()
+    summary = docx_md.convert_docx_to_markdown(input_dir, output_dir)
 
     assert "notes.md" in summary
     markdown = (output_dir / "notes.md").read_text(encoding="utf-8")
@@ -55,14 +59,14 @@ def test_keeps_headings_formatting_and_tables(sandbox: Sandbox) -> None:
 
 
 def test_images_are_saved_and_linked_with_relative_paths(
-    sandbox: Sandbox, write_image: Callable[..., Path], tmp_path: Path
+    work_dirs: WorkDirs, write_image: Callable[..., Path], tmp_path: Path
 ) -> None:
-    input_dir, output_dir = sandbox(docx_md)
+    input_dir, output_dir = work_dirs
     doc = Document()
     doc.add_picture(str(write_image(tmp_path / "red.png", "PNG")), width=Inches(1))
     doc.save(input_dir / "report.docx")
 
-    docx_md.convert_docx_to_markdown()
+    docx_md.convert_docx_to_markdown(input_dir, output_dir)
 
     markdown = (output_dir / "report.md").read_text(encoding="utf-8")
     assert "report_images/media/image1.png" in markdown

@@ -3,21 +3,37 @@
 Images are saved to output/<name>_images/ and linked from the Markdown with relative paths.
 """
 
-import os
 import subprocess
+from pathlib import Path
 from shutil import which
 
-from find_files import find_files
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 
 
-def convert_docx_to_markdown() -> str:
+def _run_pandoc(source: Path, dest: Path) -> None:
+    # Runs from inside the output folder with a relative --extract-media path, because
+    # pandoc writes image links exactly as given. An absolute path would break the
+    # links as soon as the output is moved or zipped.
+    result = subprocess.run(
+        [
+            "pandoc", str(source.resolve()),
+            "--to=gfm",                             # GitHub Markdown, pipe tables
+            "--wrap=none",                          # no hard line breaks at 72 columns
+            f"--extract-media={dest.stem}_images",
+            "-o", dest.name,
+        ],
+        cwd=dest.parent,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "unknown pandoc error")
+
+
+def convert_docx_to_markdown(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all DOCX files in the input folder to Markdown files in the output folder.
 
     Uses pandoc, so headings, lists, tables, links, and images carry over. Requires
@@ -29,66 +45,9 @@ def convert_docx_to_markdown() -> str:
     if not which("pandoc"):
         return "Error: pandoc not found. Install it with: brew install pandoc"
 
-    # Create output folder if it doesn't exist
-    os.makedirs(output_folder, exist_ok=True)
-
-    docx_files = find_files(input_folder, '.docx')
-
-    if not docx_files:
-        # If there are only markdown files present, notify the user
-        md_present = find_files(input_folder, '.md')
-        if md_present:
-            return "That file is already in markdown format"
-        return "No DOCX files found in input folder"
-
-    converted = []
-    errors = []
-
-    for docx_file in docx_files:
-        filename = os.path.splitext(os.path.basename(docx_file))[0]
-
-        try:
-            existed_before = os.path.exists(os.path.join(output_folder, f"{filename}.md"))
-            print(f"Converting {os.path.basename(docx_file)} to md")
-
-            # Runs from inside output_folder with a relative --extract-media path, because
-            # pandoc writes image links exactly as given. An absolute path would break the
-            # links as soon as the output is moved or zipped.
-            result = subprocess.run(
-                [
-                    "pandoc", docx_file,
-                    "--to=gfm",                             # GitHub Markdown, pipe tables
-                    "--wrap=none",                          # no hard line breaks at 72 columns
-                    f"--extract-media={filename}_images",
-                    "-o", f"{filename}.md",
-                ],
-                cwd=output_folder,
-                capture_output=True,
-                text=True,
-            )
-
-            if result.returncode != 0:
-                message = result.stderr.strip() or "unknown pandoc error"
-                print(f"Error converting {docx_file}: {message}")
-                errors.append(f"{os.path.basename(docx_file)}: {message}")
-                continue
-
-            print(f"Converted {os.path.basename(docx_file)} to {filename}.md")
-            if existed_before:
-                print(f"Overwrote existing file: {filename}.md")
-            converted.append(f"{filename}.md")
-
-        except Exception as e:
-            print(f"Error converting {docx_file}: {str(e)}")
-            errors.append(f"{os.path.basename(docx_file)}: {e}")
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
+    return convert_files(
+        input_dir, output_dir, ('.docx',), ('.md',), _run_pandoc, target_label="markdown"
+    )
 
 
 if __name__ == "__main__":

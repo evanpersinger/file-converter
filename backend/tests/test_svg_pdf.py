@@ -6,9 +6,7 @@ without it. The size parsing and the empty-input, missing-Chrome and failed-Chro
 run anywhere.
 """
 
-from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import fitz
 import pytest
@@ -16,7 +14,7 @@ import pytest
 import html_svg
 import svg_pdf
 
-Sandbox = Callable[[ModuleType], tuple[Path, Path]]
+WorkDirs = tuple[Path, Path]
 
 needs_chrome = pytest.mark.skipif(
     not Path(html_svg.CHROME_PATH).exists(), reason="Google Chrome is not installed"
@@ -63,50 +61,56 @@ def test_the_size_is_read_in_css_pixels(
     assert svg_pdf.svg_size(str(svg_file)) == pytest.approx(expected, abs=0.01)
 
 
-def test_reports_when_input_is_empty(sandbox: Sandbox) -> None:
-    sandbox(svg_pdf)
-    assert svg_pdf.convert_svg_to_pdf() == "No SVG files found in input folder"
+def test_reports_when_input_is_empty(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    assert (
+        svg_pdf.convert_svg_to_pdf(input_dir, output_dir) == "No SVG files found in input folder"
+    )
 
 
-def test_reports_when_the_file_is_already_a_pdf(sandbox: Sandbox) -> None:
-    input_dir, _ = sandbox(svg_pdf)
+def test_reports_when_the_file_is_already_a_pdf(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "doc.pdf").write_bytes(b"%PDF-1.4")
 
-    assert svg_pdf.convert_svg_to_pdf() == "That file is already in pdf format"
+    assert (
+        svg_pdf.convert_svg_to_pdf(input_dir, output_dir) == "That file is already in pdf format"
+    )
 
 
 def test_reports_when_chrome_is_missing(
-    sandbox: Sandbox, monkeypatch: pytest.MonkeyPatch
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, _ = sandbox(svg_pdf)
+    input_dir, output_dir = work_dirs
     (input_dir / "shape.svg").write_text(svg("600", "300"))
     monkeypatch.setattr(html_svg, "CHROME_PATH", "/nonexistent/chrome")
 
-    assert svg_pdf.convert_svg_to_pdf().startswith("Google Chrome not found")
+    assert svg_pdf.convert_svg_to_pdf(input_dir, output_dir).startswith(
+        "Google Chrome not found"
+    )
 
 
 def test_a_failed_chrome_run_is_reported_rather_than_raised(
-    sandbox: Sandbox, monkeypatch: pytest.MonkeyPatch
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`false` exits 1 and writes no PDF, which is what a Chrome failure looks like."""
-    input_dir, _ = sandbox(svg_pdf)
+    input_dir, output_dir = work_dirs
     (input_dir / "shape.svg").write_text(svg("600", "300"))
     monkeypatch.setattr(html_svg, "CHROME_PATH", "/usr/bin/false")
 
-    summary = svg_pdf.convert_svg_to_pdf()
+    summary = svg_pdf.convert_svg_to_pdf(input_dir, output_dir)
 
     assert summary.startswith("No files converted. 1 failed:")
     assert "shape.svg" in summary
 
 
 def test_an_svg_with_no_size_is_reported_rather_than_raised(
-    sandbox: Sandbox, monkeypatch: pytest.MonkeyPatch
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, _ = sandbox(svg_pdf)
+    input_dir, output_dir = work_dirs
     (input_dir / "sizeless.svg").write_text(f"<svg {SVG_NS}>{SHAPES}</svg>")
     monkeypatch.setattr(html_svg, "CHROME_PATH", "/usr/bin/false")
 
-    summary = svg_pdf.convert_svg_to_pdf()
+    summary = svg_pdf.convert_svg_to_pdf(input_dir, output_dir)
 
     assert "sizeless.svg" in summary
     assert "size is unknown" in summary
@@ -114,11 +118,11 @@ def test_an_svg_with_no_size_is_reported_rather_than_raised(
 
 @needs_chrome
 @pytest.mark.parametrize("filename", ["shape.svg", "shape.SVG"])
-def test_the_page_is_the_size_of_the_svg(sandbox: Sandbox, filename: str) -> None:
-    input_dir, output_dir = sandbox(svg_pdf)
+def test_the_page_is_the_size_of_the_svg(work_dirs: WorkDirs, filename: str) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / filename).write_text(svg("600", "300"))
 
-    summary = svg_pdf.convert_svg_to_pdf()
+    summary = svg_pdf.convert_svg_to_pdf(input_dir, output_dir)
 
     assert "shape.pdf" in summary
     with fitz.open(output_dir / "shape.pdf") as document:
@@ -130,12 +134,12 @@ def test_the_page_is_the_size_of_the_svg(sandbox: Sandbox, filename: str) -> Non
 
 
 @needs_chrome
-def test_a_large_svg_is_not_clipped(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(svg_pdf)
+def test_a_large_svg_is_not_clipped(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     body = '<circle cx="1400" cy="1000" r="150" fill="#1f8a3c"/>'
     (input_dir / "big.svg").write_text(svg("1600", "1200", body))
 
-    svg_pdf.convert_svg_to_pdf()
+    svg_pdf.convert_svg_to_pdf(input_dir, output_dir)
 
     with fitz.open(output_dir / "big.pdf") as document:
         assert document.page_count == 1
@@ -143,34 +147,34 @@ def test_a_large_svg_is_not_clipped(sandbox: Sandbox) -> None:
 
 
 @needs_chrome
-def test_an_odd_size_still_gives_one_page(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(svg_pdf)
+def test_an_odd_size_still_gives_one_page(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "odd.svg").write_text(svg("333", "777"))
 
-    svg_pdf.convert_svg_to_pdf()
+    svg_pdf.convert_svg_to_pdf(input_dir, output_dir)
 
     with fitz.open(output_dir / "odd.pdf") as document:
         assert document.page_count == 1
 
 
 @needs_chrome
-def test_css_in_the_svg_is_applied(sandbox: Sandbox) -> None:
+def test_css_in_the_svg_is_applied(work_dirs: WorkDirs) -> None:
     """A renderer that ignores <style> would draw this box black."""
-    input_dir, output_dir = sandbox(svg_pdf)
+    input_dir, output_dir = work_dirs
     (input_dir / "styled.svg").write_text(svg("300", "200", STYLED))
 
-    svg_pdf.convert_svg_to_pdf()
+    svg_pdf.convert_svg_to_pdf(input_dir, output_dir)
 
     assert pixel(output_dir / "styled.pdf", 150, 100)[:3] == pytest.approx((31, 138, 60), abs=3)
 
 
 @needs_chrome
-def test_one_bad_file_does_not_stop_the_good_ones(sandbox: Sandbox) -> None:
-    input_dir, output_dir = sandbox(svg_pdf)
+def test_one_bad_file_does_not_stop_the_good_ones(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "good.svg").write_text(svg("600", "300"))
     (input_dir / "broken.svg").write_text("this is not an svg")
 
-    summary = svg_pdf.convert_svg_to_pdf()
+    summary = svg_pdf.convert_svg_to_pdf(input_dir, output_dir)
 
     assert "good.pdf" in summary
     assert "1 failed" in summary

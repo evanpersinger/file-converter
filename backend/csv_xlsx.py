@@ -4,16 +4,9 @@ For each .csv in input/, reads it with pandas and writes an .xlsx to output/.
 """
 
 import pandas as pd
-import os
+from pathlib import Path
 
-from find_files import find_files
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folder containing CSV files
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 
 
 def _round_trips(converted: pd.Series, original: pd.Series) -> bool:
@@ -50,69 +43,33 @@ def _infer_lossless(column: pd.Series) -> pd.Series:
     return column
 
 
-def convert_csv_to_xlsx() -> str:
+def _write_workbook(source: Path, dest: Path) -> None:
+    # Read as text so pandas' own guessing can't damage anything, then put back
+    # only the types that survive being printed out again.
+    df = pd.read_csv(source, dtype=str).apply(_infer_lossless)
+
+    # xlsxwriter rather than the default openpyxl. openpyxl stores any string
+    # starting with '=' as a live formula, which both loses the original text
+    # and hands the user a workbook their spreadsheet will execute on open.
+    with pd.ExcelWriter(
+        dest,
+        engine="xlsxwriter",
+        engine_kwargs={"options": {"strings_to_formulas": False}},
+    ) as writer:
+        df.to_excel(writer, index=False)
+
+
+def convert_csv_to_xlsx(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all CSV files in the input folder to XLSX files in the output folder.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-    # Create output folder if it doesn't exist
-    os.makedirs(output_folder, exist_ok=True)
-
-    # Find all .csv files in the folder
-    csv_files = find_files(input_folder, '.csv')
-
-    if not csv_files:
-        # If only .xlsx files are present, notify they're already Excel
-        xlsx_present = find_files(input_folder, '.xlsx')
-        if xlsx_present:
-            return "That file is already in Excel format"
-        return "No CSV files found in input folder"
-
-    converted = []
-    errors = []
-
-    for file in csv_files:
-        # Get just the filename (outside the try so it's always available for errors)
-        filename = os.path.basename(file)
-
-        try:
-            # Create output Excel filename
-            xlsx_filename = os.path.splitext(filename)[0] + '.xlsx'
-            xlsx_path = os.path.join(output_folder, xlsx_filename)
-
-            print(f"Converting {filename} to xlsx")
-
-            # Read as text so pandas' own guessing can't damage anything, then put back
-            # only the types that survive being printed out again.
-            df = pd.read_csv(file, dtype=str).apply(_infer_lossless)
-
-            # xlsxwriter rather than the default openpyxl. openpyxl stores any string
-            # starting with '=' as a live formula, which both loses the original text
-            # and hands the user a workbook their spreadsheet will execute on open.
-            existed_before = os.path.exists(xlsx_path)
-            with pd.ExcelWriter(
-                xlsx_path,
-                engine="xlsxwriter",
-                engine_kwargs={"options": {"strings_to_formulas": False}},
-            ) as writer:
-                df.to_excel(writer, index=False)
-            print(f"Converted {filename} to {xlsx_filename}")
-            if existed_before:
-                print(f"Overwrote existing file: {xlsx_filename}")
-            converted.append(xlsx_filename)
-
-        except Exception as e:
-            print(f"Error converting {filename}: {e}")
-            errors.append(f"{filename}: {e}")
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
+    return convert_files(
+        input_dir, output_dir, ('.csv',), ('.xlsx',), _write_workbook, target_label="Excel"
+    )
 
 
 if __name__ == "__main__":

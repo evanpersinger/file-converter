@@ -3,21 +3,16 @@
 English only (lang='eng'): other languages come back as garbled English, not an error.
 """
 
-import os
 import re
+from pathlib import Path
 import pytesseract
 import pillow_heif
 from PIL import Image, ImageEnhance, ImageFilter
 
-from find_files import find_files
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images
 
 pillow_heif.register_heif_opener()
-
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# input and output folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
 
 
 def preprocess_image(image):
@@ -90,7 +85,22 @@ def clean_text(text):
     return text.strip()
 
 
-def convert_heic_to_markdown() -> str:
+def _ocr_to_markdown(img: Image.Image, dest: Path) -> None:
+    processed_image = preprocess_image(img)
+
+    custom_config = r'--oem 3 --psm 6'
+    text = pytesseract.image_to_string(
+        processed_image,
+        config=custom_config,
+        lang='eng'
+    )
+
+    dest.write_text(clean_text(text), encoding='utf-8')
+
+
+def convert_heic_to_markdown(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all HEIC files in the input folder to Markdown files in the output folder.
 
     Uses OCR and processes the HEIC in memory, so no intermediate JPG is written.
@@ -98,60 +108,9 @@ def convert_heic_to_markdown() -> str:
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    heic_files = find_files(input_folder, '.heic')
-
-    if not heic_files:
-        md_present = find_files(input_folder, '.md')
-        if md_present:
-            return "That file is already in markdown format"
-        return "No HEIC files found in input folder"
-
-    converted = []
-    errors = []
-
-    for heic_file in heic_files:
-        try:
-            filename = os.path.splitext(os.path.basename(heic_file))[0]
-            md_file = os.path.join(output_folder, f"{filename}.md")
-
-            print(f"Converting {os.path.basename(heic_file)} to md")
-
-            with Image.open(heic_file) as img:
-                processed_image = preprocess_image(img)
-
-                custom_config = r'--oem 3 --psm 6'
-                text = pytesseract.image_to_string(
-                    processed_image,
-                    config=custom_config,
-                    lang='eng'
-                )
-
-                text = clean_text(text)
-
-                existed_before = os.path.exists(md_file)
-                with open(md_file, 'w', encoding='utf-8') as f:
-                    f.write(text)
-
-                print(f"Converted {os.path.basename(heic_file)} to {filename}.md")
-                if existed_before:
-                    print(f"Overwrote existing file: {filename}.md")
-                converted.append(f"{filename}.md")
-
-        except Exception as e:
-            print(f"Error converting {heic_file}: {str(e)}")
-            errors.append(f"{os.path.basename(heic_file)}: {e}")
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
+    return convert_images(
+        input_dir, output_dir, ('.heic',), ('.md',), _ocr_to_markdown, target_label="markdown"
+    )
 
 
 if __name__ == "__main__":

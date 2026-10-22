@@ -5,16 +5,9 @@ writes a pipe-delimited Markdown table to output/.
 """
 
 import csv
-import os
+from pathlib import Path
 
-from find_files import find_files
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 
 
 # convert a csv file to a markdown table
@@ -42,58 +35,23 @@ def csv_to_markdown(csv_file):
     return '\n'.join(lines) + '\n' # joins all lines together
 
 
+def _write_markdown(source: Path, dest: Path) -> None:
+    dest.write_text(csv_to_markdown(source), encoding='utf-8')
+
+
 # convert all csv files to markdown files
 # handles file system operations
-def convert_csv_to_markdown() -> str:
+def convert_csv_to_markdown(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all CSV files in the input folder to Markdown tables in the output folder.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-
-    os.makedirs(output_folder, exist_ok=True)
-
-    csv_files = find_files(input_folder, '.csv')
-
-    if not csv_files:
-        md_present = find_files(input_folder, '.md')
-        if md_present:
-            return "File is already in markdown format"
-        return "No CSV files found in input folder"
-
-    converted = []
-    errors = []
-
-    # loop through all csv files
-    for csv_file in csv_files:
-        try:
-            filename = os.path.splitext(os.path.basename(csv_file))[0] # builds new filename
-            md_file = os.path.join(output_folder, f"{filename}.md")
-
-            print(f"Converting {os.path.basename(csv_file)} to md")
-
-            markdown_content = csv_to_markdown(csv_file)
-
-            existed_before = os.path.exists(md_file)
-            with open(md_file, 'w', encoding='utf-8') as f:
-                f.write(markdown_content)
-
-            print(f"Converted {os.path.basename(csv_file)} to {filename}.md")
-            if existed_before:
-                print(f"Overwrote existing file: {filename}.md")
-            converted.append(f"{filename}.md")
-
-        except Exception as e:
-            print(f"Error converting {os.path.basename(csv_file)}: {str(e)}")
-            errors.append(f"{os.path.basename(csv_file)}: {e}")
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
+    return convert_files(
+        input_dir, output_dir, ('.csv',), ('.md',), _write_markdown, target_label="markdown"
+    )
 
 
 if __name__ == "__main__":

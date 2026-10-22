@@ -8,7 +8,8 @@ from pathlib import Path
 from PIL import Image
 import pillow_heif
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images
 
 # Register HEIF opener with Pillow so it can read .heic files
 pillow_heif.register_heif_opener()

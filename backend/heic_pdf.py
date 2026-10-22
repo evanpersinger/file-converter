@@ -3,7 +3,8 @@
 from pathlib import Path
 import pillow_heif
 
-from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images, save_pdf
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+from image_convert import convert_images, save_pdf
 
 # Register HEIF opener with Pillow so it can read .heic files
 pillow_heif.register_heif_opener()

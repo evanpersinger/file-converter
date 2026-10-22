@@ -15,6 +15,8 @@ import pytesseract
 from PIL import Image
 from tqdm import tqdm
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+
 # Config
 OCR_DPI = 300                      # 300 is the OCR sweet spot; 600 is 4x slower for little gain
 TEXT_MIN_CHARS = 20                # a page with fewer real chars is treated as scanned -> OCR
@@ -30,11 +32,6 @@ MIN_HEADER_PAGES = 3               # an edge line repeating on this many pages i
 _tesseract_path = shutil.which("tesseract")
 if _tesseract_path:
     pytesseract.pytesseract.tesseract_cmd = _tesseract_path
-
-script_dir = os.path.dirname(os.path.abspath(__file__))
-input_folder = os.path.join(script_dir, "input")
-output_folder = os.path.join(script_dir, "output")
-image_folder = os.path.join(output_folder, "images")
 
 # Math normalization
 SUPERSCRIPT_MAP = {
@@ -287,8 +284,8 @@ def _ocr_page(page):
     return pytesseract.image_to_string(img, config=TESSERACT_CONFIG, lang=TESSERACT_LANG)
 
 
-def pdf_to_markdown(pdf_path):
-    """Convert a single PDF to a markdown string."""
+def pdf_to_markdown(pdf_path, image_dir=None):
+    """Convert a single PDF to a markdown string. image_dir is where extracted images go."""
     doc = fitz.open(pdf_path)
     if doc.is_encrypted:
         # try an empty password; skip if it's really locked
@@ -311,9 +308,9 @@ def pdf_to_markdown(pdf_path):
     # Searchable pages -> real markdown via pymupdf4llm
     if text_pages:
         md_kwargs = dict(pages=text_pages, page_chunks=True, show_progress=False)
-        if EXTRACT_IMAGES:
-            os.makedirs(image_folder, exist_ok=True)
-            md_kwargs.update(write_images=True, image_path=image_folder, image_format="png")
+        if EXTRACT_IMAGES and image_dir is not None:
+            os.makedirs(image_dir, exist_ok=True)
+            md_kwargs.update(write_images=True, image_path=str(image_dir), image_format="png")
         chunks = pymupdf4llm.to_markdown(doc, **md_kwargs)
         texts = strip_repeated_headers([strip_page_numbers(chunk["text"].strip()) for chunk in chunks])
         for page_no, text in zip(text_pages, texts):
@@ -335,7 +332,13 @@ def pdf_to_markdown(pdf_path):
 
 
 # Runner
-def convert_pdf_to_markdown() -> str:
+def _write_markdown(source: Path, dest: Path) -> None:
+    dest.write_text(pdf_to_markdown(str(source), dest.parent / "images"), encoding="utf-8")
+
+
+def convert_pdf_to_markdown(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert every PDF in the input folder to Markdown in the output folder.
 
     Searchable pages become real Markdown; scanned pages fall back to OCR, handled
@@ -345,44 +348,7 @@ def convert_pdf_to_markdown() -> str:
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-    os.makedirs(output_folder, exist_ok=True)
-
-    entries = os.listdir(input_folder) if os.path.isdir(input_folder) else []
-    pdf_files = sorted(f for f in entries if f.lower().endswith(".pdf"))
-
-    if not pdf_files:
-        if any(f.lower().endswith(".md") for f in entries):
-            return "That file is already in md format"
-        return "No PDF files found in input folder"
-
-    converted = []
-    errors = []
-
-    for filename in pdf_files:
-        pdf_path = os.path.join(input_folder, filename)
-        md_filename = os.path.splitext(filename)[0] + ".md"
-        md_path = os.path.join(output_folder, md_filename)
-        print(f"Converting {filename} to md")
-        try:
-            markdown = pdf_to_markdown(pdf_path)
-            existed_before = os.path.exists(md_path)
-            with open(md_path, "w", encoding="utf-8") as f:
-                f.write(markdown)
-            print(f"Converted {filename} to {md_filename}")
-            if existed_before:
-                print(f"Overwrote existing file: {md_filename}")
-            converted.append(md_filename)
-        except Exception as e:
-            print(f"Error converting {filename}: {e}")
-            errors.append(f"{filename}: {e}")
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
+    return convert_files(input_dir, output_dir, (".pdf",), (".md",), _write_markdown)
 
 
 def main():
