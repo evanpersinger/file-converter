@@ -49,41 +49,29 @@ class FakeResponse:
 
 
 @pytest.fixture
-def local_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
-    """Point llm_pdf_md's Path globals at a throwaway pair of directories.
-
-    llm_pdf_md reads `input_dir`/`output_dir` (Path objects) at call time, this is the
-    same thing server.py's `via_dir_globals_model` patches for a real web UI request.
-    """
-    input_dir = tmp_path / "input"
-    output_dir = tmp_path / "output"
-    input_dir.mkdir()
-    monkeypatch.setattr(llm_pdf_md, "input_dir", input_dir)
-    monkeypatch.setattr(llm_pdf_md, "output_dir", output_dir)
-    return input_dir, output_dir
-
-
-@pytest.fixture
 def ollama_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make the /api/version reachability check in convert_pdf_to_markdown_local pass."""
     monkeypatch.setattr(llm_pdf_md.requests, "get", lambda *a, **k: FakeResponse())
 
 
 # --- convert_pdf_to_markdown_local: folder-loop behavior -----------------------------
-def test_local_reports_when_input_is_empty(local_sandbox, ollama_reachable) -> None:
-    assert llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b") == "No PDF files found in input folder"
+def test_local_reports_when_input_is_empty(work_dirs, ollama_reachable) -> None:
+    input_dir, output_dir = work_dirs
+    result = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
+    assert result == "No PDF files found in input folder"
 
 
-def test_local_reports_when_only_markdown_present(local_sandbox, ollama_reachable) -> None:
-    input_dir, _ = local_sandbox
+def test_local_reports_when_only_markdown_present(work_dirs, ollama_reachable) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "notes.md").write_text("hi")
-    assert llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b") == "That file is already in md format"
+    result = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
+    assert result == "That file is already in md format"
 
 
 def test_local_reports_when_ollama_is_unreachable(
-    local_sandbox, monkeypatch: pytest.MonkeyPatch
+    work_dirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, _ = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "doc.pdf")
 
     def raise_connection_error(*_args, **_kwargs):
@@ -93,16 +81,16 @@ def test_local_reports_when_ollama_is_unreachable(
     posts: list[dict] = []
     monkeypatch.setattr(llm_pdf_md.requests, "post", lambda *a, **k: posts.append(k))
 
-    result = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    result = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     assert result.startswith("Error: Ollama not reachable")
     assert posts == []  # never even tried to convert a page
 
 
 def test_local_converts_multi_page_pdf_in_page_order(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "doc.pdf", pages=2)
     calls: list[dict] = []
 
@@ -112,7 +100,7 @@ def test_local_converts_multi_page_pdf_in_page_order(
 
     monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     assert "doc.md" in summary
     markdown = (output_dir / "doc.md").read_text(encoding="utf-8")
@@ -121,9 +109,9 @@ def test_local_converts_multi_page_pdf_in_page_order(
 
 
 def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "doc.pdf", pages=3)
     calls: list[dict] = []
 
@@ -135,7 +123,7 @@ def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
 
     monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     markdown = (output_dir / "doc.md").read_text(encoding="utf-8")
     assert markdown == "Page 1 content\n\nPage 3 content"
@@ -144,9 +132,9 @@ def test_local_skips_a_page_that_fails_and_keeps_converting_the_rest(
 
 
 def test_local_stops_after_the_current_page_when_cancelled(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
-    input_dir, output_dir = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "doc.pdf", pages=3)
     calls: list[dict] = []
 
@@ -155,11 +143,12 @@ def test_local_stops_after_the_current_page_when_cancelled(
         return FakeResponse({"message": {"content": f"Page {len(calls)} content"}})
 
     monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
-    # should_cancel is checked before each page starts, so setting it true after the
-    # first call means page 1 finishes and page 2 never starts.
-    monkeypatch.setattr(llm_pdf_md, "should_cancel", lambda: len(calls) >= 1)
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    # should_cancel is checked before each page starts, so it turning true after the
+    # first call means page 1 finishes and page 2 never starts.
+    summary = llm_pdf_md.convert_pdf_to_markdown_local(
+        "qwen3.5:9b", input_dir, output_dir, should_cancel=lambda: len(calls) >= 1
+    )
 
     # The page count reported must reflect pages actually attempted (1), not the PDF's
     # full page count (3), a cancelled file isn't "3/3 pages" just because it has 3 pages.
@@ -172,9 +161,9 @@ def test_local_stops_after_the_current_page_when_cancelled(
 
 @pytest.mark.parametrize("batch_limit, rests", [(1, 1), (10**9, 0)])
 def test_local_rests_between_files_only_when_the_batch_is_over_the_size_limit(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch, batch_limit: int, rests: int
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch, batch_limit: int, rests: int
 ) -> None:
-    input_dir, _ = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "a.pdf")
     _make_pdf(input_dir / "b.pdf")
     monkeypatch.setattr(llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": "text"}}))
@@ -182,31 +171,32 @@ def test_local_rests_between_files_only_when_the_batch_is_over_the_size_limit(
     sleeps: list[int] = []
     monkeypatch.setattr(llm_pdf_md.time, "sleep", sleeps.append)
 
-    llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     # One rest between the two files, none after the last one.
     assert sleeps == [llm_pdf_md.PAUSE_SECONDS] * rests
 
 
 def test_local_reports_no_content_when_cancelled_before_any_page(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, _ = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "doc.pdf")
-    monkeypatch.setattr(llm_pdf_md, "should_cancel", lambda: True)
     posts: list[dict] = []
     monkeypatch.setattr(llm_pdf_md.requests, "post", lambda *a, **k: posts.append(k))
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local(
+        "qwen3.5:9b", input_dir, output_dir, should_cancel=lambda: True
+    )
 
     assert posts == []
     assert "No files converted" in summary
 
 
 def test_local_stops_picking_up_new_files_once_cancelled(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "a.pdf")
     _make_pdf(input_dir / "b.pdf")
     monkeypatch.setattr(
@@ -214,35 +204,35 @@ def test_local_stops_picking_up_new_files_once_cancelled(
     )
     # Cancel takes effect once the first file has landed in output/, before the loop
     # picks up the second one.
-    monkeypatch.setattr(llm_pdf_md, "should_cancel", lambda: any(output_dir.iterdir()))
-
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local(
+        "qwen3.5:9b", input_dir, output_dir, should_cancel=lambda: any(output_dir.iterdir())
+    )
 
     assert len(list(output_dir.iterdir())) == 1
     assert "Converted 1 file(s)" in summary
 
 
 def test_local_recognizes_uppercase_pdf_extension(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, output_dir = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "SCAN.PDF")
     monkeypatch.setattr(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": "x"}})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     assert "SCAN.md" in summary
     assert (output_dir / "SCAN.md").exists()
 
 
 def test_local_sends_deterministic_options_and_the_chosen_model(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Regression check: temperature=0 and the 30s keep_alive are actually on the
     request, and the model the caller asked for is the one that gets sent."""
-    input_dir, _ = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "doc.pdf")
     calls: list[dict] = []
 
@@ -252,7 +242,7 @@ def test_local_sends_deterministic_options_and_the_chosen_model(
 
     monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
 
-    llm_pdf_md.convert_pdf_to_markdown_local("gemma4:12b")
+    llm_pdf_md.convert_pdf_to_markdown_local("gemma4:12b", input_dir, output_dir)
 
     assert calls[0]["model"] == "gemma4:12b"
     assert calls[0]["options"]["temperature"] == 0
@@ -274,74 +264,74 @@ def test_conversions_require_a_model_instead_of_defaulting_to_one(convert) -> No
 
 
 def test_local_reports_password_protected_pdf_as_a_per_file_error(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, _ = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_encrypted_pdf(input_dir / "locked.pdf")
     monkeypatch.setattr(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": "x"}})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     assert "No files converted" in summary
     assert "password protected" in summary
 
 
 def test_local_reports_malformed_ollama_response_as_a_per_file_error(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An Ollama response missing the expected "message" key shouldn't crash the run,
     it should show up as that file's error, same as any other conversion failure."""
-    input_dir, _ = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "doc.pdf")
     monkeypatch.setattr(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"unexpected": "shape"})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     assert "No files converted" in summary
     assert "doc.pdf" in summary
 
 
 def test_local_reports_empty_page_content_as_no_content(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    input_dir, _ = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "blank.pdf")
     monkeypatch.setattr(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": ""}})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     assert "conversion returned no content" in summary
 
 
 def test_local_reports_all_empty_pages_as_no_content(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Joining several empty pages with "\\n\\n" produces a non-empty, whitespace-only
     string. That must still be reported as no content, not written out as a fake success."""
-    input_dir, output_dir = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "blank.pdf", pages=2)
     monkeypatch.setattr(
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": ""}})
     )
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     assert "conversion returned no content" in summary
     assert not (output_dir / "blank.md").exists()
 
 
 def test_local_continues_after_one_pdf_fails_mid_batch(
-    local_sandbox, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """One PDF's Ollama call blows up; the batch doesn't abort, the other PDF still
     converts, and the summary reports both outcomes."""
-    input_dir, output_dir = local_sandbox
+    input_dir, output_dir = work_dirs
     _make_pdf(input_dir / "a.pdf")
     _make_pdf(input_dir / "b.pdf")
     call_count = 0
@@ -355,7 +345,7 @@ def test_local_continues_after_one_pdf_fails_mid_batch(
 
     monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
 
-    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b")
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
 
     assert "Converted 1 file(s)" in summary
     assert "1 failed" in summary

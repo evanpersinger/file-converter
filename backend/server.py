@@ -205,6 +205,24 @@ def patched(module, **attrs):
 # `invoke(job_dir, job_in, job_out, staged)`. `call` receives the absolute path of the
 # staged upload.
 
+def via_model_params(call: Callable):
+    """The LLM conversions: the converter takes input_dir / output_dir / should_cancel
+    arguments, and the user picks the model. `call` receives the staged path, the model
+    name, the job's folders and the cancel check. `should_cancel` defaults to a no-op so
+    this still works for callers (tests) that don't pass one.
+
+    The OpenAI path in llm_pdf_md only imports vision_parse when it runs, so a uvloop event
+    loop breaks that one conversion at call time instead of at server startup. Run with
+    `--loop asyncio` for it to work.
+    """
+    def invoke(
+        job_dir: Path, job_in: Path, job_out: Path, staged: Path, model: str,
+        should_cancel: Callable[[], bool] = lambda: False,
+    ):
+        return call(staged, model, job_in, job_out, should_cancel)
+    return invoke
+
+
 def via_dir_globals_model(module, call: Callable):
     """Module has `input_dir` / `output_dir` Path globals read at call time (llm_pdf_md),
     and the user picks the model. `call` receives the staged path and the model name.
@@ -372,24 +390,21 @@ REGISTRY: list[Conversion] = [
     # The LLM conversions: two scripts (typed PDFs, handwriting) times three providers.
     # Local first within each script, so the free route is the one listed first.
     Conversion((".pdf",), "pdf->md-local", "Markdown (Open Source model, free)", ".md",
-               via_dir_globals_model(
-                   llm_pdf_md,
-                   lambda s, model: llm_pdf_md.convert_pdf_to_markdown_local(model)),
+               via_model_params(lambda s, model, i, o, cancel: (
+                   llm_pdf_md.convert_pdf_to_markdown_local(model, i, o, cancel))),
                requires=("ollama",), takes_model=True, group="llm",
                script="Typed PDF", provider="local",
                note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first"),
     Conversion((".pdf",), "pdf->md-ai", "Markdown (LLM: OpenAI, costs money)", ".md",
-               via_dir_globals_model(
-                   llm_pdf_md,
-                   lambda s, model: llm_pdf_md.convert_pdf_to_markdown_openai(model)),
+               via_model_params(lambda s, model, i, o, cancel: (
+                   llm_pdf_md.convert_pdf_to_markdown_openai(model, i, o, cancel))),
                requires=("openai_key",), takes_model=True,
                model_names=CLOUD_MODELS["openai"], group="llm",
                script="Typed PDF", provider="openai",
                note="Sends the PDF to OpenAI's Vision API. Slower, and it bills your key"),
     Conversion((".pdf",), "pdf->md-claude", "Markdown (LLM: Claude, costs money)", ".md",
-               via_dir_globals_model(
-                   llm_pdf_md,
-                   lambda s, model: llm_pdf_md.convert_pdf_to_markdown_anthropic(model)),
+               via_model_params(lambda s, model, i, o, cancel: (
+                   llm_pdf_md.convert_pdf_to_markdown_anthropic(model, i, o, cancel))),
                requires=("anthropic_key",), takes_model=True,
                model_names=CLOUD_MODELS["anthropic"], group="llm",
                script="Typed PDF", provider="anthropic",

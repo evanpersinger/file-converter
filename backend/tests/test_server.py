@@ -244,7 +244,9 @@ def test_a_cloud_conversion_uses_the_model_the_user_chose(
     """The model in the request form has to be the one that reaches the provider."""
     monkeypatch.setenv(key_var, "test-key")
     calls: list[str] = []
-    monkeypatch.setattr(server.llm_pdf_md, func, lambda chosen: calls.append(chosen) or "done")
+    monkeypatch.setattr(
+        server.llm_pdf_md, func, lambda chosen, *_: calls.append(chosen) or "done"
+    )
 
     client.post(
         "/api/convert",

@@ -17,16 +17,13 @@ import fitz  # PyMuPDF
 import requests
 from dotenv import load_dotenv
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+
 load_dotenv()
 
-# Define input and output directories relative to this script
-script_dir = Path(__file__).resolve().parent
-input_dir = script_dir / "input"   # Folder containing files to convert
-output_dir = script_dir / "output"  # Folder where converted files will be saved
 
-
-# Patched per-request by server.py to check a job's cancel flag; a no-op for the CLI.
-def should_cancel() -> bool:
+def not_cancelled() -> bool:
+    """The default cancel check: never cancel. server.py passes a job's own check instead."""
     return False
 
 
@@ -192,7 +189,9 @@ def _strip_markdown_fence(text: str) -> str:
     return "\n".join(lines)
 
 
-def _convert_pdf_local(pdf_path: Path, model: str) -> tuple[str, list[int], int]:
+def _convert_pdf_local(
+    pdf_path: Path, model: str, should_cancel: Callable[[], bool] = not_cancelled
+) -> tuple[str, list[int], int]:
     """Render each page of the PDF to an image and transcribe it with the local Ollama model.
 
     Page by page, like the OpenAI path, since local vision models handle one image far more
@@ -269,13 +268,20 @@ def rest_between_files() -> None:
     time.sleep(PAUSE_SECONDS)
 
 
-def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]]) -> str:
+def _convert_all(
+    convert_one: Callable[[Path], tuple[str, list[int], int | None]],
+    input_dir: str | Path,
+    output_dir: str | Path,
+    should_cancel: Callable[[], bool],
+) -> str:
     """Run convert_one over every PDF in input_dir and write each result to output_dir.
 
     convert_one takes a PDF path and returns (markdown, skipped page numbers, total page
-    count), page count is None when the provider doesn't convert page by page.
+    count), page count is None when the provider doesn't convert page by page. No new file
+    is started once should_cancel() is true.
     Returns a summary of what was converted, suitable for showing to a caller.
     """
+    input_dir, output_dir = Path(input_dir), Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     entries = list(os.listdir(input_dir)) if input_dir.is_dir() else []
@@ -336,7 +342,12 @@ def _convert_all(convert_one: Callable[[Path], tuple[str, list[int], int | None]
 
 
 # Public entry points
-def convert_pdf_to_markdown_openai(model: str) -> str:
+def convert_pdf_to_markdown_openai(
+    model: str,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+    should_cancel: Callable[[], bool] = not_cancelled,
+) -> str:
     """Convert all PDF files in the input folder to Markdown using OpenAI's Vision API.
 
     Higher quality than the local pdf_md.py converter, but slower and it costs money.
@@ -344,6 +355,9 @@ def convert_pdf_to_markdown_openai(model: str) -> str:
 
     Args:
         model: OpenAI model to use.
+        input_dir: Folder holding the PDFs.
+        output_dir: Folder the Markdown is written to.
+        should_cancel: Checked before each file, true stops the batch.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -355,10 +369,18 @@ def convert_pdf_to_markdown_openai(model: str) -> str:
         return "Error: OPENAI_API_KEY not found. Please add OPENAI_API_KEY to your .env file"
 
     parser = _build_parser(api_key, model)
-    return _convert_all(lambda pdf_path: ("\n\n".join(convert_with_retry(parser, pdf_path) or []), [], None))
+    return _convert_all(
+        lambda pdf_path: ("\n\n".join(convert_with_retry(parser, pdf_path) or []), [], None),
+        input_dir, output_dir, should_cancel,
+    )
 
 
-def convert_pdf_to_markdown_anthropic(model: str) -> str:
+def convert_pdf_to_markdown_anthropic(
+    model: str,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+    should_cancel: Callable[[], bool] = not_cancelled,
+) -> str:
     """Convert all PDF files in the input folder to Markdown using Anthropic's Claude.
 
     Higher quality than the local pdf_md.py converter, but slower and it costs money.
@@ -368,6 +390,9 @@ def convert_pdf_to_markdown_anthropic(model: str) -> str:
 
     Args:
         model: Anthropic model to use.
+        input_dir: Folder holding the PDFs.
+        output_dir: Folder the Markdown is written to.
+        should_cancel: Checked before each file, true stops the batch.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -376,10 +401,18 @@ def convert_pdf_to_markdown_anthropic(model: str) -> str:
         return "Error: ANTHROPIC_API_KEY not found. Please add ANTHROPIC_API_KEY to your .env file"
 
     client = anthropic.Anthropic()
-    return _convert_all(lambda pdf_path: (_convert_pdf_anthropic(client, pdf_path, model), [], None))
+    return _convert_all(
+        lambda pdf_path: (_convert_pdf_anthropic(client, pdf_path, model), [], None),
+        input_dir, output_dir, should_cancel,
+    )
 
 
-def convert_pdf_to_markdown_local(model: str) -> str:
+def convert_pdf_to_markdown_local(
+    model: str,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+    should_cancel: Callable[[], bool] = not_cancelled,
+) -> str:
     """Convert all PDF files in the input folder to Markdown using a local Ollama vision model.
 
     Free, no API key or internet needed. Requires Ollama running locally with a vision-capable
@@ -387,6 +420,9 @@ def convert_pdf_to_markdown_local(model: str) -> str:
 
     Args:
         model: name of a locally pulled Ollama model, as shown by `ollama list`.
+        input_dir: Folder holding the PDFs.
+        output_dir: Folder the Markdown is written to.
+        should_cancel: Checked before each page and each file, true stops the conversion.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -398,7 +434,10 @@ def convert_pdf_to_markdown_local(model: str) -> str:
     except requests.exceptions.RequestException:
         return f"Error: Ollama not reachable at {OLLAMA_HOST}. Run `ollama serve` (or open the Ollama app)."
 
-    return _convert_all(lambda pdf_path: _convert_pdf_local(pdf_path, model))
+    return _convert_all(
+        lambda pdf_path: _convert_pdf_local(pdf_path, model, should_cancel),
+        input_dir, output_dir, should_cancel,
+    )
 
 
 def _prompt_for_local_model() -> str:
