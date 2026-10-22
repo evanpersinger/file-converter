@@ -3,74 +3,27 @@
 JPEG artifacts trace as real shapes, so prefer a PNG source when you have one.
 """
 
-import os
+from pathlib import Path
 import vtracer
 
-from find_files import find_files
-
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
+from image_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 
 
-def convert_jpg_to_svg() -> str:
+def _trace(source: Path, dest: Path) -> None:
+    # vtracer's defaults. Raise filter_speckle here if JPEG edge artifacts
+    # are showing up as stray micro-paths, see the README.
+    vtracer.convert_image_to_svg_py(str(source), str(dest))
+
+
+def convert_jpg_to_svg(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all JPG/JPEG files in the input folder to SVG files in the output folder.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-
-    # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    jpg_files = find_files(input_folder, '.jpg', '.jpeg')
-
-    if not jpg_files:
-        svg_present = find_files(input_folder, '.svg')
-        if svg_present:
-            return "That file is already in svg format"
-        return "No JPG files found in input folder"
-
-    converted = []
-    errors = []
-
-    for jpg_file in jpg_files:
-        try:
-            filename = os.path.splitext(os.path.basename(jpg_file))[0]
-            svg_file = os.path.join(output_folder, f"{filename}.svg")
-
-            existed_before = os.path.exists(svg_file)
-            print(f"Converting {os.path.basename(jpg_file)} to svg")
-
-            # vtracer's defaults. Raise filter_speckle here if JPEG edge artifacts
-            # are showing up as stray micro-paths, see the README.
-            vtracer.convert_image_to_svg_py(jpg_file, svg_file)
-            print(f"Converted {os.path.basename(jpg_file)} to {filename}.svg")
-            if existed_before:
-                print(f"Overwrote existing file: {filename}.svg")
-            converted.append(f"{filename}.svg")
-
-        # vtracer is a Rust extension: on an unreadable file it panics, and pyo3's
-        # PanicException derives from BaseException, so `except Exception` never sees it
-        # and one bad file takes down the whole batch. The class is not importable to
-        # name directly, hence the wide catch with the interrupts re-raised first.
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except BaseException as e:
-            print(f"Error converting {jpg_file}: {str(e)}")
-            errors.append(f"{os.path.basename(jpg_file)}: {e}")
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
+    return convert_files(input_dir, output_dir, ('.jpg', '.jpeg'), ('.svg',), _trace)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
-"""Shared loop for the Pillow image-to-image converters (jpg_png and friends).
+"""Shared loop for the image converters (jpg_png, jpg_pdf, jpg_svg and friends).
 
-A converter names its source and target extensions and the one step that saves the image.
+A converter names its source and target extensions and the one step that writes the file.
 """
 
 from collections.abc import Callable
@@ -51,17 +51,17 @@ def save_pdf_pages(img: Image.Image, dest: Path) -> None:
     pages[0].save(dest, "PDF", save_all=True, append_images=pages[1:], resolution=100.0)
 
 
-def convert_images(
+def convert_files(
     input_dir: str | Path,
     output_dir: str | Path,
     source_exts: tuple[str, ...],
     target_exts: tuple[str, ...],
-    save: Callable[[Image.Image, Path], None],
+    convert: Callable[[Path, Path], None],
 ) -> str:
     """Convert every source_exts file in input_dir to a target_exts[0] file in output_dir.
 
-    `save` gets the opened image and the path to write it to. A file that fails is reported
-    in the summary and does not stop the rest of the batch.
+    `convert` gets the source path and the path to write. A file that fails is reported in
+    the summary and does not stop the rest of the batch.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -91,14 +91,19 @@ def convert_images(
             existed_before = target_file.exists()
             print(f"Converting {source_name} to {target}")
 
-            with Image.open(source_file) as img:
-                save(img, target_file)
+            convert(Path(source_file), target_file)
             print(f"Converted {source_name} to {filename}.{target}")
             if existed_before:
                 print(f"Overwrote existing file: {filename}.{target}")
             converted.append(f"{filename}.{target}")
 
-        except Exception as e:
+        # vtracer is a Rust extension: on input it dislikes it panics, and pyo3's
+        # PanicException derives from BaseException, so `except Exception` never sees it and
+        # one bad file would take down the whole batch. The class is not importable to name
+        # directly, hence the wide catch with the interrupts re-raised first.
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as e:
             print(f"Error converting {source_file}: {str(e)}")
             errors.append(f"{source_name}: {e}")
 
@@ -109,3 +114,19 @@ def convert_images(
     if errors:
         summary += f". {len(errors)} failed: {'; '.join(errors)}"
     return summary
+
+
+def convert_images(
+    input_dir: str | Path,
+    output_dir: str | Path,
+    source_exts: tuple[str, ...],
+    target_exts: tuple[str, ...],
+    save: Callable[[Image.Image, Path], None],
+) -> str:
+    """convert_files for Pillow images: `save` gets the opened image and the path to write."""
+
+    def convert(source: Path, dest: Path) -> None:
+        with Image.open(source) as img:
+            save(img, dest)
+
+    return convert_files(input_dir, output_dir, source_exts, target_exts, convert)
