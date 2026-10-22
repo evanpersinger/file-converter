@@ -48,27 +48,28 @@ dependencies = [
     "pypdf>=6.0.0",
     "pymupdf>=1.26.4",
     "pymupdf4llm>=0.0.17",
-    
+
     # Document Processing
     "python-docx>=1.1.2",
     "python-pptx>=1.0.2",
-    
+
     # Image Processing
     "pillow>=11.3.0",
     "pillow-heif>=0.22.0",
     "pytesseract>=0.3.13",
     "opencv-python>=4.12.0.88",
     "vtracer>=0.6.15",
-    
+
     # Data Processing
     "pandas>=2.2.3",
     "numpy>=2.2.5",
     "openpyxl>=3.1.5",
     "xlsxwriter>=3.2.5",  # csv_xlsx.py picks it as the pandas engine, nothing imports it
-    
+    "toon-format>=1.2.0",
+
     # Jupyter Notebooks
     "nbconvert>=7.16.6",  # ipynb_pdf.py runs `jupyter nbconvert`, nothing imports it
-    
+
     # Utilities
     "python-magic>=0.4.27",
     "requests>=2.32.3",
@@ -108,6 +109,7 @@ only-include = [
     "backend/jpg_svg.py",
     "backend/jpg_txt.py",
     "backend/jpg_webp.py",
+    "backend/json_toon.py",
     "backend/md_pdf.py",
     "backend/llm_md.py",
     "backend/llm_pdf_md.py",
@@ -128,6 +130,7 @@ only-include = [
     "backend/ss_txt.py",
     "backend/svg_pdf.py",
     "backend/svg_png.py",
+    "backend/toon_json.py",
     "backend/txt_pdf.py",
     "backend/webp_jpg.py",
     "backend/webp_pdf.py",
@@ -161,6 +164,7 @@ only-include = [
     "backend/jpg_svg.py",
     "backend/jpg_txt.py",
     "backend/jpg_webp.py",
+    "backend/json_toon.py",
     "backend/md_pdf.py",
     "backend/llm_md.py",
     "backend/llm_pdf_md.py",
@@ -181,6 +185,7 @@ only-include = [
     "backend/ss_txt.py",
     "backend/svg_pdf.py",
     "backend/svg_png.py",
+    "backend/toon_json.py",
     "backend/txt_pdf.py",
     "backend/webp_jpg.py",
     "backend/webp_pdf.py",

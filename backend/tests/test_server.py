@@ -810,6 +810,31 @@ def test_conversions_past_the_limit_wait_for_a_free_slot(
     assert statuses == [200] * len(job_ids)
 
 
+def test_json_and_toon_convert_both_ways_through_the_api(
+    client: TestClient, jobs_root: Path
+) -> None:
+    routes = client.get("/api/formats").json()["byExtension"]
+    assert "json->toon" in {route["id"] for route in routes[".json"]}
+    assert "toon->json" in {route["id"] for route in routes[".toon"]}
+
+    to_toon = client.post(
+        "/api/convert",
+        data={"target": "json->toon"},
+        files={"file": ("data.json", b'{"a": 1}')},
+    )
+    assert to_toon.status_code == 200
+    assert 'filename="data.toon"' in to_toon.headers["content-disposition"]
+    assert to_toon.content == b"a: 1\n"
+
+    back = client.post(
+        "/api/convert",
+        data={"target": "toon->json"},
+        files={"file": ("data.toon", to_toon.content)},
+    )
+    assert back.status_code == 200
+    assert json.loads(back.content) == {"a": 1}
+
+
 def test_a_conversion_returns_the_converted_file(
     client: TestClient, jobs_root: Path
 ) -> None:

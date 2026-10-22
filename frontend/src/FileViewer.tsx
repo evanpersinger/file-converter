@@ -11,7 +11,7 @@ interface FileViewerProps {
 }
 
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
-const TEXT_EXTS = ['.csv', '.txt', '.sql', '.r', '.rmd', '.md', '.ipynb']
+const TEXT_EXTS = ['.csv', '.txt', '.sql', '.r', '.rmd', '.md', '.ipynb', '.json', '.toon']
 
 // The backend sends every converted file as application/octet-stream, and a browser
 // saves that instead of showing it. This already picks how to render by extension, so
@@ -39,7 +39,7 @@ type HeicStatus =
  * Preview a file before it's converted. Images and PDFs render directly, pptx decks are
  * drawn slide by slide in the browser, heic photos are decoded to a JPEG in the browser
  * first (no browser renders raw HEIC in an <img>), plain-text formats (csv, txt, sql, R,
- * md, Rmd, ipynb) show as text. Anything else (docx, xlsx, ...) says so rather than
+ * md, Rmd, ipynb, json, toon) show as text. Anything else (docx, xlsx, ...) says so rather than
  * showing nothing.
  */
 export default function FileViewer({ file, onClose }: FileViewerProps) {

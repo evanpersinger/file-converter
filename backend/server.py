@@ -60,6 +60,7 @@ import jpg_png
 import jpg_svg
 import jpg_txt
 import jpg_webp
+import json_toon
 import llm_md
 import llm_pdf_md
 import md_pdf
@@ -77,6 +78,7 @@ import sql_pdf
 import ss_txt
 import svg_pdf
 import svg_png
+import toon_json
 import txt_pdf
 import webp_jpg
 import webp_pdf
@@ -374,6 +376,10 @@ REGISTRY: list[Conversion] = [
     Conversion((".xlsx",), "xlsx->csv", "CSV", ".csv",
                via_params(lambda s, i, o: xlsx_csv.convert_xlsx_to_csv(i, o)),
                note="One CSV per sheet. Multi-sheet workbooks come back as a zip"),
+    Conversion((".json",), "json->toon", "TOON", ".toon",
+               via_params(lambda s, i, o: json_toon.convert_json_to_toon(i, o))),
+    Conversion((".toon",), "toon->json", "JSON", ".json",
+               via_params(lambda s, i, o: toon_json.convert_toon_to_json(i, o))),
 
     # --- PDF -----------------------------------------------------------------
     Conversion((".pdf",), "pdf->md", "Markdown", ".md",
