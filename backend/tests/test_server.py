@@ -877,6 +877,25 @@ def test_a_markdown_file_with_no_table_is_refused_with_the_reason(
     assert "no tables found" in response.json()["hint"]
 
 
+def test_a_pdf_table_converts_to_toon_through_the_api(
+    client: TestClient, jobs_root: Path, tmp_path: Path
+) -> None:
+    source = tmp_path / "users.toon"
+    source.write_text("users[1]{id,name}:\n  1,Ana\n", encoding="utf-8")
+    pdf = tmp_path / "users.pdf"
+    server.toon_pdf.toon_to_pdf(source, pdf)
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "pdf->toon"},
+        files={"file": ("users.pdf", pdf.read_bytes())},
+    )
+
+    assert response.status_code == 200
+    assert 'filename="users.toon"' in response.headers["content-disposition"]
+    assert response.content == b"[1]{id,name}:\n  1,Ana\n"
+
+
 def test_a_toon_file_converts_to_a_pdf_through_the_api(
     client: TestClient, jobs_root: Path
 ) -> None:
