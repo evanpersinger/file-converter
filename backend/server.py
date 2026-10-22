@@ -1,8 +1,9 @@
 """FastAPI backend for the web UI. Upload a file, pick a format, get the converted file back.
 
 Each request runs in a scratch dir under .webui_jobs/ that the converters are handed as
-arguments (see the `via_*` helpers). Their printed output is captured with redirect_stdout,
-which is process-wide, so keep one uvicorn worker and the _LOCK.
+arguments (see the `via_*` helpers). Their printed output goes to a per-job buffer (see
+capture_output). Up to MAX_CONCURRENT_JOBS conversions run at once, and the job tables
+live in this process, so keep one uvicorn worker.
 
 Run: uv run uvicorn server:app --app-dir backend --reload --port 8019 --loop asyncio
 (--loop asyncio is required for the OpenAI PDF conversion, everything else works either way.)
@@ -15,11 +16,13 @@ import json
 import os
 import re
 import shutil
+import sys
 import threading
 import time
 import traceback
 import zipfile
-from contextlib import asynccontextmanager, contextmanager, redirect_stderr, redirect_stdout
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
@@ -89,13 +92,15 @@ UPLOAD_CHUNK_BYTES = 1024 * 1024
 # Room above MAX_UPLOAD_BYTES for the multipart framing and form fields around the files.
 MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 STALE_JOB_SECONDS = 24 * 60 * 60
+# Conversions that run at once. A job past this waits for a free slot (and shows as
+# queued), since each one can hold a large file or a local model's pages in memory.
+MAX_CONCURRENT_JOBS = 4
 
 # The .env lives at the repo root, one level up from this file.
 load_dotenv(REPO / ".env")
 
-# Serialises conversions, because their printed output is captured with the process-wide
-# redirect_stdout. See the note at the top of the file.
-_LOCK = threading.Lock()
+# One slot per conversion allowed to run at once.
+_JOB_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
 
 # Output of the conversions currently running, by the job_id the UI sent with the request.
 # /api/progress reads the percentage out of it.
@@ -105,7 +110,7 @@ _JOB_OUTPUT: dict[str, io.StringIO] = {}
 # /api/convert/{job_id}/cancel sets one; a running job's should_cancel checks it.
 _JOB_CANCEL: dict[str, threading.Event] = {}
 
-# Jobs whose upload is staged and that are waiting on _LOCK behind another conversion.
+# Jobs whose upload is staged and that are waiting on _JOB_SLOTS for a free slot.
 # /api/progress reports them as queued.
 _JOB_QUEUED: set[str] = set()
 
@@ -157,6 +162,57 @@ def tracked(job_id: str | None, output: io.StringIO) -> Iterator[threading.Event
         if job_id:
             _JOB_OUTPUT.pop(job_id, None)
             _JOB_CANCEL.pop(job_id, None)
+
+
+# The buffer the current job's prints go to, None outside a job.
+_capture_target: ContextVar[io.StringIO | None] = ContextVar("capture_target", default=None)
+_capture_guard = threading.Lock()
+_capture_jobs = 0
+_original_streams: tuple = ()
+
+
+class _RoutedStream:
+    """Stands in for sys.stdout / sys.stderr while jobs run. A write goes to the buffer of
+    the job that made it, or to the real stream when it came from outside any job."""
+
+    def __init__(self, real) -> None:
+        self._real = real
+
+    def write(self, text: str) -> int:
+        target = _capture_target.get()
+        return (self._real if target is None else target).write(text)
+
+    def flush(self) -> None:
+        target = _capture_target.get()
+        (self._real if target is None else target).flush()
+
+    def __getattr__(self, name: str):
+        return getattr(self._real, name)
+
+
+@contextmanager
+def capture_output(buffer: io.StringIO) -> Iterator[None]:
+    """Send what the code inside prints (stdout and stderr) to `buffer`, for this job only.
+
+    redirect_stdout swaps sys.stdout for the whole process, so two jobs at once would mix
+    their output. Instead the routing stream is installed while any job is inside this
+    block and the originals are put back when the last one leaves.
+    """
+    global _capture_jobs, _original_streams
+    with _capture_guard:
+        if _capture_jobs == 0:
+            _original_streams = (sys.stdout, sys.stderr)
+            sys.stdout, sys.stderr = _RoutedStream(sys.stdout), _RoutedStream(sys.stderr)
+        _capture_jobs += 1
+    token = _capture_target.set(buffer)
+    try:
+        yield
+    finally:
+        _capture_target.reset(token)
+        with _capture_guard:
+            _capture_jobs -= 1
+            if _capture_jobs == 0:
+                sys.stdout, sys.stderr = _original_streams
 
 
 # The two ways a converter is handed the job's folders. Each returns an
@@ -717,10 +773,10 @@ def _latest_percent(output: str) -> int | None:
 def progress(job_id: str) -> dict:
     """How far along a running conversion is, and whether it is still waiting its turn.
 
-    The percent is None when the job isn't running (not started yet, still waiting on
-    the lock, or finished) or its converter prints no percentage, which is every
-    converter except the local-model one. `queued` is True while the job waits on the
-    lock behind another conversion.
+    The percent is None when the job isn't running (not started yet, still waiting for
+    a free slot, or finished) or its converter prints no percentage, which is every
+    converter except the local-model one. `queued` is True while the job waits for a
+    free slot behind other conversions.
     """
     output = _JOB_OUTPUT.get(job_id)
     return {
@@ -770,8 +826,8 @@ def detect(file: UploadFile = File(...)):
     """Report whether an upload's contents match the extension on its name.
 
     Advisory only. Nothing here blocks a conversion, and the answer never changes
-    which conversions are offered, that stays driven by the extension. No _LOCK
-    needed either, since this touches no module-level converter state.
+    which conversions are offered, that stays driven by the extension. It takes no
+    job slot either, since it runs no converter.
     """
     raw_name = Path(file.filename or "").name  # strips any directory components
     if not raw_name:
@@ -826,8 +882,8 @@ def convert(
 
     captured = io.StringIO()
 
-    # The upload is staged before taking _LOCK, so copying it (or rejecting it) never
-    # waits behind a running conversion. Staging touches no converter state.
+    # The upload is staged before taking a job slot, so copying it (or rejecting it) never
+    # waits behind running conversions.
     with job_workspace() as (job_dir, job_in, job_out):
         # ext was lowercased above, so the staged name is lowercase whatever the upload
         # was called.
@@ -837,11 +893,11 @@ def convert(
 
         if job_id:
             _JOB_QUEUED.add(job_id)
-        with _LOCK:
+        with _JOB_SLOTS:
             if job_id:
                 _JOB_QUEUED.discard(job_id)
             try:
-                with tracked(job_id, captured) as cancel_event, redirect_stdout(captured), redirect_stderr(captured):
+                with tracked(job_id, captured) as cancel_event, capture_output(captured):
                     extra = (model, cancel_event.is_set) if conv.takes_model else ()
                     result = conv.invoke(job_dir, job_in, job_out, staged, *extra)
             except Exception as exc:
@@ -908,7 +964,7 @@ def combine(files: list[UploadFile] = File(...)):
 
     captured = io.StringIO()
 
-    # Uploads are staged before taking _LOCK, same as in convert().
+    # Uploads are staged before taking a job slot, same as in convert().
     with job_workspace() as (job_dir, job_in, job_out):
         staged_names: list[str] = []
         total = 0
@@ -934,9 +990,9 @@ def combine(files: list[UploadFile] = File(...)):
 
             staged_names.append(name)
 
-        with _LOCK:
+        with _JOB_SLOTS:
             try:
-                with redirect_stdout(captured), redirect_stderr(captured):
+                with capture_output(captured):
                     ok = combine_files.combine_files(
                         staged_names, input_dir=job_in, output_dir=job_out)
             except Exception as exc:

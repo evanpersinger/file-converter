@@ -5,6 +5,7 @@ the slides to PDF in output/. Requires LibreOffice to be installed.
 """
 
 import subprocess
+import tempfile
 from pathlib import Path
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
@@ -52,20 +53,25 @@ def convert_pptx_to_pdf(
         print(f"Using LibreOffice executable: {executable}")
         return None
 
-    def render(source: Path, dest: Path) -> None:
-        # LibreOffice names the PDF after the .pptx, which is what dest is already called.
-        result = subprocess.run(
-            [executable, '--headless', '--convert-to', 'pdf', '--outdir', str(dest.parent),
-             str(source)],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip())
+    # A throwaway profile per call, because two LibreOffice runs sharing the default one
+    # collide and one of them fails.
+    with tempfile.TemporaryDirectory() as profile_dir:
+        profile = Path(profile_dir).as_uri()
 
-    return convert_files(
-        input_dir, output_dir, ('.pptx',), ('.pdf',), render, precheck=find_executable
-    )
+        def render(source: Path, dest: Path) -> None:
+            # LibreOffice names the PDF after the .pptx, which is what dest is already called.
+            result = subprocess.run(
+                [executable, '--headless', f'-env:UserInstallation={profile}',
+                 '--convert-to', 'pdf', '--outdir', str(dest.parent), str(source)],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.strip())
+
+        return convert_files(
+            input_dir, output_dir, ('.pptx',), ('.pdf',), render, precheck=find_executable
+        )
 
 
 if __name__ == "__main__":

@@ -6,8 +6,12 @@ the REGISTRY has to hold for the UI to be built correctly, the request paths tha
 should be rejected, and the ones that should work end to end.
 """
 
+import contextvars
 import io
 import json
+import sys
+import threading
+import time
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -640,6 +644,42 @@ def test_cancelling_a_running_job_sets_its_flag(client: TestClient) -> None:
         assert cancel_event.is_set()
 
 
+def test_jobs_capturing_at_once_each_get_only_their_own_output() -> None:
+    both_inside = threading.Barrier(2)
+    buffers = {"a": io.StringIO(), "b": io.StringIO()}
+
+    def run(name: str) -> None:
+        with server.capture_output(buffers[name]):
+            both_inside.wait(timeout=5)
+            print(f"{name} out")
+            print(f"{name} err", file=sys.stderr)
+            both_inside.wait(timeout=5)
+
+    threads = [threading.Thread(target=run, args=(name,)) for name in buffers]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert buffers["a"].getvalue() == "a out\na err\n"
+    assert buffers["b"].getvalue() == "b out\nb err\n"
+
+
+def test_output_from_outside_a_job_is_not_captured_and_the_streams_are_restored(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    streams_before = (sys.stdout, sys.stderr)
+    buffer = io.StringIO()
+
+    with server.capture_output(buffer):
+        # An empty context is what code outside any job sees: no capture target is set.
+        contextvars.Context().run(print, "elsewhere")
+
+    assert buffer.getvalue() == ""
+    assert capsys.readouterr().out == "elsewhere\n"
+    assert (sys.stdout, sys.stderr) == streams_before
+
+
 def test_the_local_converters_progress_output_is_readable_as_a_percentage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -713,6 +753,61 @@ def test_an_image_conversion_is_given_the_job_folders(
 
     assert response.status_code == 200
     assert response.content.startswith(b"\x89PNG")
+
+
+def test_conversions_past_the_limit_wait_for_a_free_slot(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    slots = 2
+    monkeypatch.setattr(server, "_JOB_SLOTS", threading.BoundedSemaphore(slots))
+    release = threading.Event()
+    counts = threading.Lock()
+    running = peak = 0
+
+    def convert_slowly(input_dir: Path, output_dir: Path) -> str:
+        nonlocal running, peak
+        with counts:
+            running += 1
+            peak = max(peak, running)
+        # Outlasts the 5 second wait below, so a failure there reports the real count.
+        release.wait(timeout=10)
+        with counts:
+            running -= 1
+        (Path(output_dir) / "data.xlsx").write_bytes(b"x")
+        return "Converted 1 file(s)"
+
+    monkeypatch.setattr(server.csv_xlsx, "convert_csv_to_xlsx", convert_slowly)
+    job_ids = [f"job-{n}" for n in range(slots + 2)]
+    statuses: list[int] = []
+
+    def post(job_id: str) -> None:
+        response = client.post(
+            "/api/convert",
+            data={"target": "csv->xlsx", "job_id": job_id},
+            files={"file": ("data.csv", b"a\n1\n")},
+        )
+        statuses.append(response.status_code)
+
+    threads = [threading.Thread(target=post, args=(job_id,)) for job_id in job_ids]
+    for thread in threads:
+        thread.start()
+    try:
+        deadline = time.monotonic() + 5
+        while True:
+            queued = [j for j in job_ids if client.get(f"/api/progress/{j}").json()["queued"]]
+            waiting = len(job_ids) - slots
+            if (running == slots and len(queued) == waiting) or time.monotonic() > deadline:
+                break
+            time.sleep(0.01)
+        assert running == slots
+        assert len(queued) == waiting
+    finally:
+        release.set()
+        for thread in threads:
+            thread.join()
+
+    assert peak == slots
+    assert statuses == [200] * len(job_ids)
 
 
 def test_a_conversion_returns_the_converted_file(
