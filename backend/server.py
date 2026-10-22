@@ -201,38 +201,9 @@ def patched(module, **attrs):
                 setattr(module, key, old)
 
 
-# The five redirection mechanisms. Each returns an `invoke(job_in, job_out, staged)`.
-# `call` receives the absolute path of the staged upload.
-
-def via_globals(module, call: Callable):
-    """Module has `input_folder` / `output_folder` string globals read at call time."""
-    def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
-        with patched(module, input_folder=str(job_in), output_folder=str(job_out)):
-            return call(staged)
-    return invoke
-
-
-def via_setup_dirs(module, call: Callable):
-    """Module gets its dirs from a `setup_directories()` function (txt_pdf, sql_pdf)."""
-    def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
-        with patched(module, setup_directories=lambda: (job_in, job_out)):
-            return call(staged)
-    return invoke
-
-
-def via_file_attr(module, call: Callable):
-    """Module computes `Path(__file__).resolve().parent / "input"` *inside* the
-    function body, so the globals above don't exist to patch. Pointing __file__ at a
-    fake path inside the job dir makes script_dir resolve to the job dir instead.
-
-    Applies to html_pdf, ipynb_pdf and ss_txt.
-    """
-    def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
-        fake = job_dir / Path(module.__file__).name
-        with patched(module, __file__=str(fake)):
-            return call(staged)
-    return invoke
-
+# The two ways a converter is handed the job's folders. Each returns an
+# `invoke(job_dir, job_in, job_out, staged)`. `call` receives the absolute path of the
+# staged upload.
 
 def via_dir_globals_model(module, call: Callable):
     """Module has `input_dir` / `output_dir` Path globals read at call time (llm_pdf_md),
@@ -254,9 +225,8 @@ def via_dir_globals_model(module, call: Callable):
 
 
 def via_params(call: Callable):
-    """Converter already accepts input_dir / output_dir arguments. No patching needed.
-
-    Applies to docx_pdf, R_Rmd, Rmd_pdf and the converters built on batch_convert.
+    """Converter accepts input_dir / output_dir arguments. No patching needed. This is how
+    every converter except the LLM ones is called.
     """
     def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
         return call(staged, job_in, job_out)
@@ -520,24 +490,26 @@ REGISTRY: list[Conversion] = [
     # ss_txt is the only OCR route for these formats (jpg/jpeg are served by jpg_txt,
     # so registering ss_txt for them too would just be a duplicate "Text" option).
     Conversion(IMAGE_ONLY_OCR, "img->txt", "Text", ".txt",
-               via_file_attr(ss_txt, lambda s: ss_txt.convert_screenshots_to_text()),
+               via_params(lambda s, i, o: ss_txt.convert_screenshots_to_text(
+                   input_dir=i, output_dir=o)),
                requires=("tesseract",)),
     Conversion(IMAGE_ONLY_OCR, "img->txt-tables", "Text (tables/layout)", ".txt",
-               via_file_attr(
-                   ss_txt,
-                   lambda s: ss_txt.convert_screenshots_to_text(structured=True)),
+               via_params(lambda s, i, o: ss_txt.convert_screenshots_to_text(
+                   structured=True, input_dir=i, output_dir=o)),
                requires=("tesseract",),
                note="Slower. Uses table detection, better for grids and columns"),
 
     # --- text / markup / code ------------------------------------------------
     Conversion((".md",), "md->pdf", "PDF", ".pdf",
-               via_globals(md_pdf, lambda s: md_pdf.convert_md_to_pdf(str(s))),
+               via_params(lambda s, i, o: md_pdf.convert_md_to_pdf(
+                   str(s), None, input_dir=i, output_dir=o)),
                requires=("pandoc", "latex")),
     Conversion((".txt",), "txt->pdf", "PDF", ".pdf",
-               via_setup_dirs(txt_pdf, lambda s: txt_pdf.convert_txt_to_pdf(str(s)))),
+               via_params(lambda s, i, o: txt_pdf.convert_txt_to_pdf(
+                   str(s), None, input_dir=i, output_dir=o))),
     Conversion((".html", ".htm"), "html->pdf", "PDF", ".pdf",
-               via_file_attr(html_pdf,
-                             lambda s: html_pdf.convert_html_to_pdf(str(s))),
+               via_params(lambda s, i, o: html_pdf.convert_html_to_pdf(
+                   str(s), None, input_dir=i, output_dir=o)),
                requires=("pandoc", "latex"),
                note=(None if which("wkhtmltopdf") else
                      "wkhtmltopdf is not installed, so this falls back to Pandoc and "
@@ -546,11 +518,10 @@ REGISTRY: list[Conversion] = [
                via_params(lambda s, i, o: html_svg.convert_html_to_svg(i, o)),
                requires=("chrome",)),
     Conversion((".sql",), "sql->pdf", "PDF", ".pdf",
-               via_setup_dirs(sql_pdf, lambda s: sql_pdf.convert_sql_files())),
+               via_params(lambda s, i, o: sql_pdf.convert_sql_files(i, o))),
     Conversion((".ipynb",), "ipynb->pdf", "PDF", ".pdf",
-               via_file_attr(
-                   ipynb_pdf,
-                   lambda s: ipynb_pdf.convert_notebook_to_pdf(str(s))),
+               via_params(lambda s, i, o: ipynb_pdf.convert_notebook_to_pdf(
+                   str(s), None, input_dir=i, output_dir=o)),
                requires=("latex",)),
 
     # --- R -------------------------------------------------------------------
@@ -1014,9 +985,9 @@ def combine(files: list[UploadFile] = File(...)):
 
         with _LOCK:
             try:
-                with patched(combine_files, setup_directories=lambda: (job_in, job_out)):
-                    with redirect_stdout(captured), redirect_stderr(captured):
-                        ok = combine_files.combine_files(staged_names)
+                with redirect_stdout(captured), redirect_stderr(captured):
+                    ok = combine_files.combine_files(
+                        staged_names, input_dir=job_in, output_dir=job_out)
             except Exception as exc:
                 traceback.print_exc()
                 return _error("Combining failed.", f"{exc!r}\n{_tail(captured.getvalue())}",

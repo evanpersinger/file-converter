@@ -12,12 +12,8 @@ import traceback
 from pathlib import Path
 from shutil import which
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
-
-# Config: paths (absolute, based on this script's location so it runs anywhere)
-script_dir = os.path.dirname(os.path.abspath(__file__))
-input_folder = os.path.join(script_dir, "input")
-output_folder = os.path.join(script_dir, "output")
 
 # Config: pandoc reader extensions
 # Full fidelity: math, pipe tables, raw HTML and raw LaTeX (for our injected \...)
@@ -737,12 +733,19 @@ def run_pandoc(rich_md, safe_md, output_path, input_name):
 
 
 # Orchestration
-def convert_md_to_pdf(md_path: str, output_path: str | None = None) -> bool:
+def convert_md_to_pdf(
+    md_path: str,
+    output_path: str | None = None,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+) -> bool:
     """Convert one markdown file to a PDF in output/.
 
     Args:
-        md_path: path to the .md file (relative to input/ or absolute).
+        md_path: path to the .md file (relative to input_dir or absolute).
         output_path: desired output filename; defaults to the input stem + .pdf.
+        input_dir: folder a relative md_path is looked up in.
+        output_dir: folder the PDF is written to.
 
     Returns:
         True if the conversion succeeded, False otherwise.
@@ -756,7 +759,7 @@ def convert_md_to_pdf(md_path: str, output_path: str | None = None) -> bool:
         pass
 
     full_input_path = (Path(md_path) if os.path.isabs(str(md_path))
-                       else Path(input_folder) / md_path)
+                       else Path(input_dir) / md_path)
     if not full_input_path.exists():
         print(f"Error: Markdown file '{full_input_path}' not found")
         return False
@@ -765,8 +768,8 @@ def convert_md_to_pdf(md_path: str, output_path: str | None = None) -> bool:
         pdf_name = f"{full_input_path.stem}.pdf"
     else:
         pdf_name = Path(output_path).name
-    os.makedirs(output_folder, exist_ok=True)
-    full_output_path = Path(output_folder) / pdf_name
+    os.makedirs(output_dir, exist_ok=True)
+    full_output_path = Path(output_dir) / pdf_name
 
     if not which("pandoc"):
         print("Error: pandoc not found. Please install pandoc to convert Markdown to PDF.")
@@ -802,7 +805,7 @@ def convert_md_to_pdf(md_path: str, output_path: str | None = None) -> bool:
 def main():
     if len(sys.argv) < 2:
         # No args: convert all .md files in input/
-        md_files = [Path(p) for p in find_files(input_folder, ".md")]
+        md_files = [Path(p) for p in find_files(INPUT_DIR, ".md")]
         if not md_files:
             print("No .md files found in input folder")
             print("Usage: python md_pdf.py <file.md> [output.pdf]")

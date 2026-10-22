@@ -11,17 +11,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
-
-
-def setup_directories():
-    """Return (input_dir, output_dir) next to this script, creating them if missing."""
-    script_dir = Path(__file__).resolve().parent
-    input_dir = script_dir / "input"
-    output_dir = script_dir / "output"
-    input_dir.mkdir(exist_ok=True)
-    output_dir.mkdir(exist_ok=True)
-    return input_dir, output_dir
 
 
 def create_pdf_from_sql(sql_file_path, output_path) -> bool:
@@ -65,9 +56,12 @@ def create_pdf_from_sql(sql_file_path, output_path) -> bool:
         return False
 
 
-def convert_sql_files() -> str:
+def convert_sql_files(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert every .sql in input/ to a PDF in output/. Returns a summary for the caller."""
-    input_dir, output_dir = setup_directories()
+    input_dir, output_dir = Path(input_dir), Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     sql_files = [Path(p) for p in find_files(input_dir, ".sql")]
     if not sql_files:
         return "No SQL files found in the input/ directory. Please place your .sql files in the input/ folder and try again."
@@ -107,7 +101,9 @@ def main():
             print(result)
         return
 
-    input_dir, output_dir = setup_directories()
+    input_dir, output_dir = INPUT_DIR, OUTPUT_DIR
+    input_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(exist_ok=True)
     sql_path = Path(args.sql_file)
     if not sql_path.is_absolute():
         sql_path = input_dir / sql_path

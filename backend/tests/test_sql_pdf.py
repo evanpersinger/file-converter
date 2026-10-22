@@ -6,16 +6,13 @@ read as markup), that the folder loop only picks up .sql files, and the two fail
 messages callers show verbatim.
 """
 
-from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 from pypdf import PdfReader
 
-import sql_pdf
 from sql_pdf import convert_sql_files, create_pdf_from_sql
 
-SandboxSetupDirs = Callable[[ModuleType], tuple[Path, Path]]
+WorkDirs = tuple[Path, Path]
 
 
 def pdf_text(path: Path) -> str:
@@ -41,21 +38,21 @@ def test_missing_source_returns_false_instead_of_raising(tmp_path: Path) -> None
     assert create_pdf_from_sql(tmp_path / "nope.sql", tmp_path / "nope.pdf") is False
 
 
-def test_folder_run_converts_only_sql_files(sandbox_setup_dirs: SandboxSetupDirs) -> None:
-    input_dir, output_dir = sandbox_setup_dirs(sql_pdf)
+def test_folder_run_converts_only_sql_files(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "b.sql").write_text("SELECT 2;", encoding="utf-8")
     (input_dir / "a.sql").write_text("SELECT 1;", encoding="utf-8")
     (input_dir / "notes.txt").write_text("not sql", encoding="utf-8")
 
-    summary = convert_sql_files()
+    summary = convert_sql_files(input_dir, output_dir)
 
     assert sorted(p.name for p in output_dir.iterdir()) == ["a.pdf", "b.pdf"]
     assert summary == "Converted 2 file(s) to output/: a.pdf, b.pdf"
 
 
-def test_folder_run_with_no_sql_files_says_so(sandbox_setup_dirs: SandboxSetupDirs) -> None:
-    input_dir, output_dir = sandbox_setup_dirs(sql_pdf)
+def test_folder_run_with_no_sql_files_says_so(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
     (input_dir / "notes.txt").write_text("not sql", encoding="utf-8")
 
-    assert convert_sql_files().startswith("No SQL files found")
+    assert convert_sql_files(input_dir, output_dir).startswith("No SQL files found")
     assert list(output_dir.iterdir()) == []

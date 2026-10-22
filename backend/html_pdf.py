@@ -10,12 +10,19 @@ import subprocess
 from pathlib import Path
 from shutil import which
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+
 
 def command_exists(cmd):
     return which(cmd) is not None
 
 
-def convert_html_to_pdf(html_path: str, output_path: str | None = None) -> bool:
+def convert_html_to_pdf(
+    html_path: str,
+    output_path: str | None = None,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+) -> bool:
     """
     Convert an .html file to PDF.
 
@@ -28,11 +35,8 @@ def convert_html_to_pdf(html_path: str, output_path: str | None = None) -> bool:
     Returns:
         bool: True if conversion successful, False otherwise
     """
-    # Resolve folders relative to this script for consistency
-    script_dir = Path(__file__).resolve().parent
-    input_dir = script_dir / "input"
-    output_dir = script_dir / "output"
-    output_dir.mkdir(exist_ok=True)
+    input_dir, output_dir = Path(input_dir), Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Early guard: if the provided path already points to a PDF, bail out
     try:
@@ -115,8 +119,7 @@ def convert_html_to_pdf(html_path: str, output_path: str | None = None) -> bool:
 def main():
     if len(sys.argv) < 2:
         # No args: convert all .html/.htm files in input/ (recursively)
-        script_dir = Path(__file__).resolve().parent
-        input_dir = script_dir / "input"
+        input_dir = INPUT_DIR
         input_dir.mkdir(exist_ok=True)
         html_files = sorted(
             p for p in input_dir.rglob("*")

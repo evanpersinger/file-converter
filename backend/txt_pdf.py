@@ -12,28 +12,20 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
-
-
-# Create input and output directories if they don't exist.
-# Resolved relative to this script, not the caller's working directory, so the
-# folders are always backend/input and backend/output no matter where you run from.
-def setup_directories():
-    script_dir = Path(__file__).resolve().parent
-    input_dir = script_dir / "input"
-    output_dir = script_dir / "output"
-
-    input_dir.mkdir(exist_ok=True)
-    output_dir.mkdir(exist_ok=True)
-
-    return input_dir, output_dir
-
 
 
 # Convert a .txt file to PDF
 # returns True if successful, False otherwise
-def convert_txt_to_pdf(txt_path: str, output_path: str | None = None) -> bool:
-    input_dir, output_dir = setup_directories()
+def convert_txt_to_pdf(
+    txt_path: str,
+    output_path: str | None = None,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+) -> bool:
+    input_dir, output_dir = Path(input_dir), Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # if the provided path already points to a PDF let user know and return False
     try:
@@ -136,8 +128,8 @@ def convert_txt_to_pdf(txt_path: str, output_path: str | None = None) -> bool:
 def main():
     if len(sys.argv) < 2:
         # No args: convert all .txt files in input/
-        input_dir, output_dir = setup_directories()
-        txt_files = [Path(p) for p in find_files(input_dir, ".txt")]
+        INPUT_DIR.mkdir(exist_ok=True)
+        txt_files = [Path(p) for p in find_files(INPUT_DIR, ".txt")]
         if not txt_files:
             print("No .txt files found in input folder")
             print("Usage: python txt_pdf.py <file.txt> [output.pdf]")

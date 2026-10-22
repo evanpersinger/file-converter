@@ -14,6 +14,8 @@ import numpy as np
 import pytesseract
 from PIL import Image, ImageEnhance, ImageFilter
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
+
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp'}
 
 
@@ -673,7 +675,11 @@ def find_images(input_folder):
                   if Path(f).suffix.lower() in IMAGE_EXTENSIONS)
 
 
-def convert_screenshots_to_text(structured: bool = False) -> str:
+def convert_screenshots_to_text(
+    structured: bool = False,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+) -> str:
     """Convert every screenshot/image in the input folder to text using OCR.
 
     All extracted text is combined into a single .txt file in the output folder.
@@ -681,13 +687,14 @@ def convert_screenshots_to_text(structured: bool = False) -> str:
     Args:
         structured: If True, use table/layout-aware extraction (slower, better for
             tables and complex layouts). If False, use plain-text extraction.
+        input_dir: Folder holding the images.
+        output_dir: Folder the combined text file is written to.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    input_folder = os.path.join(script_dir, "input")
-    output_folder = os.path.join(script_dir, "output")
+    input_folder = os.fspath(input_dir)
+    output_folder = os.fspath(output_dir)
 
     if not os.path.exists(input_folder):
         return f"Error: '{input_folder}' folder not found"

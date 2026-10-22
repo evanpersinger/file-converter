@@ -9,14 +9,22 @@ import sys
 import subprocess
 from pathlib import Path
 
+from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
 
 
-def convert_notebook_to_pdf(notebook_path: str, output_path: str | None = None) -> bool:
+def convert_notebook_to_pdf(
+    notebook_path: str,
+    output_path: str | None = None,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+) -> bool:
     """
     Args:
         notebook_path (str): Path to the .ipynb file (relative to input folder)
         output_path (str, optional): Output PDF filename. If None, uses same name as notebook
+        input_dir: Folder a relative notebook_path is looked up in.
+        output_dir: Folder the PDF is written to.
     
     Returns:
         bool: True if conversion successful, False otherwise
@@ -29,13 +37,10 @@ def convert_notebook_to_pdf(notebook_path: str, output_path: str | None = None) 
     except Exception:
         pass
 
-    # Set up input and output directories relative to this script
-    script_dir = Path(__file__).resolve().parent
-    input_dir = script_dir / "input"
-    output_dir = script_dir / "output"
+    input_dir, output_dir = Path(input_dir), Path(output_dir)
     
     # Create output directory if it doesn't exist
-    output_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Build full input path
     if os.path.isabs(notebook_path):
@@ -91,9 +96,7 @@ def main():
     """Main function to handle command line usage"""
     if len(sys.argv) < 2:
         # No args: convert all .ipynb files in input/
-        script_dir = Path(__file__).resolve().parent
-        input_dir = script_dir / "input"
-        notebooks = [Path(p) for p in find_files(input_dir, ".ipynb")]
+        notebooks = [Path(p) for p in find_files(INPUT_DIR, ".ipynb")]
         if not notebooks:
             print("No .ipynb files found in input folder")
             print("Usage: python ipynb_pdf.py <notebook_file> [output_file]")

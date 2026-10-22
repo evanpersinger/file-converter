@@ -1,49 +1,19 @@
 """Fixtures shared by the converter tests.
 
-Every folder-based converter reads module-level `input_folder` / `output_folder`
-globals at call time rather than taking paths as arguments, and server.py drives them
-by swapping those globals for the duration of a request (`via_globals` in server.py).
-The `sandbox` fixture does the same swap onto a tmp_path, so a test never touches the
-real backend/input and backend/output.
+The converters take their input and output folders as arguments, so a test hands them a
+tmp_path pair (`work_dirs`) and never touches the real backend/input and backend/output.
 """
 
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 from PIL import Image
 
 
 @pytest.fixture
-def sandbox(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Callable[[ModuleType], tuple[Path, Path]]:
-    """Point a converter module's folder globals at a throwaway pair of directories.
-
-    Returns a callable so each test names the module it is exercising:
-
-        input_dir, output_dir = sandbox(csv_xlsx)
-
-    Only the input directory is created. The converters are responsible for making
-    their own output directory, which leaves that behaviour testable.
-    """
-    input_dir = tmp_path / "input"
-    output_dir = tmp_path / "output"
-    input_dir.mkdir()
-
-    def redirect(module: ModuleType) -> tuple[Path, Path]:
-        monkeypatch.setattr(module, "input_folder", str(input_dir))
-        monkeypatch.setattr(module, "output_folder", str(output_dir))
-        return input_dir, output_dir
-
-    return redirect
-
-
-@pytest.fixture
 def work_dirs(tmp_path: Path) -> tuple[Path, Path]:
-    """A throwaway (input_dir, output_dir) pair for the converters that take their folders
-    as arguments (the ones built on image_convert) instead of reading module globals.
+    """A throwaway (input_dir, output_dir) pair to hand to a converter.
 
     Only the input directory is created, so a converter making its own output directory
     stays testable.
@@ -66,25 +36,3 @@ def write_image() -> Callable[..., Path]:
         return path
 
     return write
-
-
-@pytest.fixture
-def sandbox_setup_dirs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Callable[[ModuleType], tuple[Path, Path]]:
-    """The same redirect for modules that get their folders from a `setup_directories()`
-    call instead of module globals (combine_files, txt_pdf, sql_pdf).
-
-    server.py needs two mechanisms for the same reason, see `via_setup_dirs`. Both
-    directories are created here, since that is what the real setup_directories does.
-    """
-    input_dir = tmp_path / "input"
-    output_dir = tmp_path / "output"
-    input_dir.mkdir()
-    output_dir.mkdir()
-
-    def redirect(module: ModuleType) -> tuple[Path, Path]:
-        monkeypatch.setattr(module, "setup_directories", lambda: (input_dir, output_dir))
-        return input_dir, output_dir
-
-    return redirect

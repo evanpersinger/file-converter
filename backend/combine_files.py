@@ -10,6 +10,8 @@ from pathlib import Path
 
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
+
+from batch_convert import INPUT_DIR, OUTPUT_DIR
         
         
 
@@ -31,20 +33,6 @@ def canonical_suffix(path: Path) -> str:
     return SUFFIX_ALIASES.get(suffix, suffix)
 
 
-# setup file directories
-# Resolved relative to this script, not the caller's working directory, so the
-# folders are always backend/input and backend/output no matter where you run from.
-def setup_directories():
-    script_dir = Path(__file__).resolve().parent
-    input_dir = script_dir / "input"
-    output_dir = script_dir / "output"
-
-    input_dir.mkdir(exist_ok=True)
-    output_dir.mkdir(exist_ok=True)
-
-    return input_dir, output_dir
-
-
 def get_file_type(file_path: Path) -> str:
     """Detect file type from extension."""
     ext = file_path.suffix.lower()
@@ -56,8 +44,14 @@ def get_file_type(file_path: Path) -> str:
         return 'text'
 
 
-def combine_files(file_paths: list[str], output_path: str | None = None) -> bool:
-    input_dir, output_dir = setup_directories()
+def combine_files(
+    file_paths: list[str],
+    output_path: str | None = None,
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+) -> bool:
+    input_dir, output_dir = Path(input_dir), Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     if not file_paths:
         print("Error: No files specified to combine")
@@ -225,7 +219,8 @@ def combine_files(file_paths: list[str], output_path: str | None = None) -> bool
 
 
 def main():
-    input_dir, output_dir = setup_directories()
+    input_dir = INPUT_DIR
+    input_dir.mkdir(exist_ok=True)
     
     if len(sys.argv) < 2:
         # No args: combine all files in input/ folder (skip .DS_Store and other hidden files)
