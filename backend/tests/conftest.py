@@ -23,7 +23,7 @@ def sandbox(
 
     Returns a callable so each test names the module it is exercising:
 
-        input_dir, output_dir = sandbox(jpg_png)
+        input_dir, output_dir = sandbox(csv_xlsx)
 
     Only the input directory is created. The converters are responsible for making
     their own output directory, which leaves that behaviour testable.
@@ -38,6 +38,19 @@ def sandbox(
         return input_dir, output_dir
 
     return redirect
+
+
+@pytest.fixture
+def work_dirs(tmp_path: Path) -> tuple[Path, Path]:
+    """A throwaway (input_dir, output_dir) pair for the converters that take their folders
+    as arguments (the ones built on image_convert) instead of reading module globals.
+
+    Only the input directory is created, so a converter making its own output directory
+    stays testable.
+    """
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    return input_dir, tmp_path / "output"
 
 
 @pytest.fixture

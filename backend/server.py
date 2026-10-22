@@ -256,7 +256,7 @@ def via_dir_globals_model(module, call: Callable):
 def via_params(call: Callable):
     """Converter already accepts input_dir / output_dir arguments. No patching needed.
 
-    Applies to docx_pdf, R_Rmd and Rmd_pdf.
+    Applies to docx_pdf, R_Rmd, Rmd_pdf and the converters built on image_convert.
     """
     def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
         return call(staged, job_in, job_out)
@@ -466,9 +466,9 @@ REGISTRY: list[Conversion] = [
 
     # --- images --------------------------------------------------------------
     Conversion((".heic",), "heic->jpg", "JPG", ".jpg",
-               via_globals(heic_jpg, lambda s: heic_jpg.convert_heic_to_jpg())),
+               via_params(lambda s, i, o: heic_jpg.convert_heic_to_jpg(i, o))),
     Conversion((".heic",), "heic->png", "PNG", ".png",
-               via_globals(heic_png, lambda s: heic_png.convert_heic_to_png())),
+               via_params(lambda s, i, o: heic_png.convert_heic_to_png(i, o))),
     Conversion((".heic",), "heic->md", "Markdown", ".md",
                via_globals(heic_md, lambda s: heic_md.convert_heic_to_markdown()),
                requires=("tesseract",)),
@@ -483,31 +483,31 @@ REGISTRY: list[Conversion] = [
     Conversion((".jpg", ".jpeg"), "jpg->pdf", "PDF", ".pdf",
                via_globals(jpg_pdf, lambda s: jpg_pdf.convert_jpg_to_pdf())),
     Conversion((".jpg", ".jpeg"), "jpg->png", "PNG", ".png",
-               via_globals(jpg_png, lambda s: jpg_png.convert_jpg_to_png())),
+               via_params(lambda s, i, o: jpg_png.convert_jpg_to_png(i, o))),
     Conversion((".jpg", ".jpeg"), "jpg->svg", "SVG", ".svg",
                via_globals(jpg_svg, lambda s: jpg_svg.convert_jpg_to_svg())),
     Conversion((".jpg", ".jpeg"), "jpg->webp", "WEBP", ".webp",
-               via_globals(jpg_webp, lambda s: jpg_webp.convert_jpg_to_webp())),
+               via_params(lambda s, i, o: jpg_webp.convert_jpg_to_webp(i, o))),
     Conversion((".png",), "png->jpg", "JPG", ".jpg",
-               via_globals(png_jpg, lambda s: png_jpg.convert_png_to_jpg())),
+               via_params(lambda s, i, o: png_jpg.convert_png_to_jpg(i, o))),
     Conversion((".png",), "png->pdf", "PDF", ".pdf",
                via_globals(png_pdf, lambda s: png_pdf.convert_png_to_pdf())),
     Conversion((".png",), "png->svg", "SVG", ".svg",
                via_globals(png_svg, lambda s: png_svg.convert_png_to_svg())),
     Conversion((".png",), "png->webp", "WEBP", ".webp",
-               via_globals(png_webp, lambda s: png_webp.convert_png_to_webp())),
+               via_params(lambda s, i, o: png_webp.convert_png_to_webp(i, o))),
     Conversion((".webp",), "webp->jpg", "JPG", ".jpg",
-               via_globals(webp_jpg, lambda s: webp_jpg.convert_webp_to_jpg())),
+               via_params(lambda s, i, o: webp_jpg.convert_webp_to_jpg(i, o))),
     Conversion((".webp",), "webp->pdf", "PDF", ".pdf",
                via_globals(webp_pdf, lambda s: webp_pdf.convert_webp_to_pdf())),
     Conversion((".webp",), "webp->png", "PNG", ".png",
-               via_globals(webp_png, lambda s: webp_png.convert_webp_to_png())),
+               via_params(lambda s, i, o: webp_png.convert_webp_to_png(i, o))),
     Conversion((".webp",), "webp->svg", "SVG", ".svg",
                via_globals(webp_svg, lambda s: webp_svg.convert_webp_to_svg())),
     Conversion((".gif",), "gif->pdf", "PDF", ".pdf",
                via_globals(gif_pdf, lambda s: gif_pdf.convert_gif_to_pdf())),
     Conversion((".gif",), "gif->png", "PNG", ".png",
-               via_globals(gif_png, lambda s: gif_png.convert_gif_to_png())),
+               via_params(lambda s, i, o: gif_png.convert_gif_to_png(i, o))),
     Conversion((".gif",), "gif->svg", "SVG", ".svg",
                via_globals(gif_svg, lambda s: gif_svg.convert_gif_to_svg())),
     Conversion((".svg",), "svg->pdf", "PDF", ".pdf",

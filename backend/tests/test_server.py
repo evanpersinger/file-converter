@@ -18,6 +18,7 @@ import pandas as pd
 import pytest
 import requests
 from fastapi.testclient import TestClient
+from PIL import Image
 
 import server
 
@@ -690,6 +691,24 @@ def test_a_filename_that_is_only_path_is_rejected(
 
 
 # Conversions that should work
+
+
+def test_an_image_conversion_is_given_the_job_folders(
+    client: TestClient, jobs_root: Path, tmp_path: Path
+) -> None:
+    """The image converters take their folders as arguments, so the server hands them the
+    job's folders directly instead of patching module globals."""
+    image = tmp_path / "photo.jpg"
+    Image.new("RGB", (8, 8), "red").save(image)
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "jpg->png"},
+        files={"file": ("photo.jpg", image.read_bytes())},
+    )
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"\x89PNG")
 
 
 def test_a_conversion_returns_the_converted_file(
