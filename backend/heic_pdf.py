@@ -1,23 +1,17 @@
 """Convert HEIC images in input/ to PDF in output/. Each image becomes a single-page PDF."""
 
-import os
-from PIL import Image
+from pathlib import Path
 import pillow_heif
 
-from find_files import find_files
+from image_convert import INPUT_DIR, OUTPUT_DIR, convert_images, save_pdf
 
 # Register HEIF opener with Pillow so it can read .heic files
 pillow_heif.register_heif_opener()
 
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Folders
-input_folder = os.path.join(script_dir, 'input')
-output_folder = os.path.join(script_dir, 'output')
-
-
-def convert_heic_to_pdf() -> str:
+def convert_heic_to_pdf(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
     """Convert all HEIC files in the input folder to PDF files in the output folder.
 
     Note: the image is embedded at 100 DPI with no text layer, so converting the
@@ -26,50 +20,7 @@ def convert_heic_to_pdf() -> str:
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-
-    # Create output folder if it doesn't exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    heic_files = find_files(input_folder, '.heic')
-
-    if not heic_files:
-        pdf_present = find_files(input_folder, '.pdf')
-        if pdf_present:
-            return "That file is already in pdf format"
-        return "No HEIC files found in input folder"
-
-    converted = []
-    errors = []
-
-    for heic_file in heic_files:
-        try:
-            filename = os.path.splitext(os.path.basename(heic_file))[0]
-            pdf_file = os.path.join(output_folder, f"{filename}.pdf")
-
-            existed_before = os.path.exists(pdf_file)
-            print(f"Converting {os.path.basename(heic_file)} to pdf")
-
-            with Image.open(heic_file) as img:
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                img.save(pdf_file, "PDF", resolution=100.0)
-                print(f"Converted {os.path.basename(heic_file)} to {filename}.pdf")
-                if existed_before:
-                    print(f"Overwrote existing file: {filename}.pdf")
-                converted.append(f"{filename}.pdf")
-
-        except Exception as e:
-            print(f"Error converting {heic_file}: {str(e)}")
-            errors.append(f"{os.path.basename(heic_file)}: {e}")
-
-    if not converted:
-        return f"No files converted. {len(errors)} failed: {'; '.join(errors)}"
-
-    summary = f"Converted {len(converted)} file(s) to output/: {', '.join(converted)}"
-    if errors:
-        summary += f". {len(errors)} failed: {'; '.join(errors)}"
-    return summary
+    return convert_images(input_dir, output_dir, ('.heic',), ('.pdf',), save_pdf)
 
 
 if __name__ == "__main__":

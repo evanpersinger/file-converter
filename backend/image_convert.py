@@ -6,7 +6,7 @@ A converter names its source and target extensions and the one step that saves t
 from collections.abc import Callable
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageSequence
 
 from find_files import find_files
 
@@ -24,12 +24,31 @@ def saver(fmt: str, **options) -> Callable[[Image.Image, Path], None]:
     return save
 
 
-def save_jpg_on_white(img: Image.Image, dest: Path) -> None:
-    """A `save` for convert_images that writes a JPG, painting any transparency white."""
-    rgba = img.convert("RGBA")
+def _flatten_on_white(frame: Image.Image) -> Image.Image:
+    """Return the frame as an RGB image with any transparency painted white."""
+    rgba = frame.convert("RGBA")
     page = Image.new("RGB", rgba.size, "white")
     page.paste(rgba, mask=rgba.getchannel("A"))
-    page.save(dest, "JPEG", quality=95)
+    return page
+
+
+def save_jpg_on_white(img: Image.Image, dest: Path) -> None:
+    """A `save` for convert_images that writes a JPG, painting any transparency white."""
+    _flatten_on_white(img).save(dest, "JPEG", quality=95)
+
+
+def save_pdf(img: Image.Image, dest: Path) -> None:
+    """A `save` for convert_images that writes a one-page PDF at 100 DPI."""
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    img.save(dest, "PDF", resolution=100.0)
+
+
+def save_pdf_pages(img: Image.Image, dest: Path) -> None:
+    """A `save` for convert_images that writes a PDF with one page per frame, each frame
+    flattened onto white. A still image gives a single page."""
+    pages = [_flatten_on_white(frame) for frame in ImageSequence.Iterator(img)]
+    pages[0].save(dest, "PDF", save_all=True, append_images=pages[1:], resolution=100.0)
 
 
 def convert_images(
