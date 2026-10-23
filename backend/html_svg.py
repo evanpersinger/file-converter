@@ -8,17 +8,16 @@ next to the HTML in input/.
 """
 
 import os
-import subprocess
 import tempfile
 from pathlib import Path
 
 import fitz  # PyMuPDF
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
+from external_tool import run_tool
 from find_files import find_files
 
 CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-CHROME_TIMEOUT_SECONDS = 60
 
 # Text becomes outlines, so the SVG looks the same on a machine without the page's fonts,
 # at the cost of text that cannot be selected or edited. False keeps real <text> elements:
@@ -46,12 +45,7 @@ def _print_to_pdf(html_file: str, pdf_file: str, profile_dir: str) -> None:
         f"--print-to-pdf={pdf_file}",
         Path(html_file).resolve().as_uri(),
     ]
-    try:
-        result = subprocess.run(
-            command, capture_output=True, text=True, timeout=CHROME_TIMEOUT_SECONDS
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"Chrome took longer than {CHROME_TIMEOUT_SECONDS} seconds") from None
+    result = run_tool(command)
 
     if result.returncode != 0 or not os.path.exists(pdf_file):
         raise RuntimeError(f"Chrome exited with code {result.returncode} and wrote no PDF")

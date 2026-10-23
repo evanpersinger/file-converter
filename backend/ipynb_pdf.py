@@ -6,10 +6,10 @@ For each .ipynb in input/ (or a file passed as an argument), shells out to
 
 import os
 import sys
-import subprocess
 from pathlib import Path
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
+from external_tool import run_tool
 from find_files import find_files
 
 
@@ -73,7 +73,7 @@ def convert_notebook_to_pdf(
         
         existed_before = os.path.exists(full_output_path)
         print(f"Converting {Path(full_input_path).name} to pdf")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = run_tool(cmd)
 
         if result.returncode == 0:
             print(f"Converted {Path(full_input_path).name} to {full_output_path.name}")

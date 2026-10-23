@@ -3,18 +3,18 @@
 Images are saved to output/<name>_images/ and linked from the Markdown with relative paths.
 """
 
-import subprocess
 from pathlib import Path
 from shutil import which
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+from external_tool import run_tool
 
 
 def _run_pandoc(source: Path, dest: Path) -> None:
     # Runs from inside the output folder with a relative --extract-media path, because
     # pandoc writes image links exactly as given. An absolute path would break the
     # links as soon as the output is moved or zipped.
-    result = subprocess.run(
+    result = run_tool(
         [
             "pandoc", str(source.resolve()),
             "--to=gfm",                             # GitHub Markdown, pipe tables
@@ -23,8 +23,6 @@ def _run_pandoc(source: Path, dest: Path) -> None:
             "-o", dest.name,
         ],
         cwd=dest.parent,
-        capture_output=True,
-        text=True,
     )
 
     if result.returncode != 0:

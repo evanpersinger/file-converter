@@ -4,11 +4,11 @@ For each .pptx in input/, shells out to a headless LibreOffice (soffice) to rend
 the slides to PDF in output/. Requires LibreOffice to be installed.
 """
 
-import subprocess
 import tempfile
 from pathlib import Path
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+from external_tool import ToolTimeout, run_tool
 
 
 def _find_libreoffice() -> str | None:
@@ -20,10 +20,10 @@ def _find_libreoffice() -> str | None:
     ]
     for candidate in libreoffice_executables:
         try:
-            check = subprocess.run([candidate, '--version'], capture_output=True, text=True)
+            check = run_tool([candidate, '--version'])
             if check.returncode == 0 or 'LibreOffice' in check.stdout:
                 return candidate
-        except FileNotFoundError:
+        except (FileNotFoundError, ToolTimeout):
             continue
     return None
 
@@ -60,11 +60,9 @@ def convert_pptx_to_pdf(
 
         def render(source: Path, dest: Path) -> None:
             # LibreOffice names the PDF after the .pptx, which is what dest is already called.
-            result = subprocess.run(
+            result = run_tool(
                 [executable, '--headless', f'-env:UserInstallation={profile}',
                  '--convert-to', 'pdf', '--outdir', str(dest.parent), str(source)],
-                capture_output=True,
-                text=True,
             )
             if result.returncode != 0:
                 raise RuntimeError(result.stderr.strip())

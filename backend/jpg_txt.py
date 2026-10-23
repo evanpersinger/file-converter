@@ -9,6 +9,7 @@ from pathlib import Path
 from PIL import Image
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
+from external_tool import ocr_text
 from image_convert import convert_images
 
 # Dynamically find tesseract executable
@@ -31,7 +32,7 @@ def _ocr_to_text(img: Image.Image, dest: Path) -> None:
     try:
         # Use pytesseract to extract text with better settings for accuracy
         custom_config = r'--oem 3 --psm 6'
-        text = pytesseract.image_to_string(str(temp_png), config=custom_config, lang='eng')
+        text = ocr_text(str(temp_png), config=custom_config, lang='eng')
     finally:
         # Clean up temporary PNG, including when OCR fails, so it can't pass as output
         temp_png.unlink()

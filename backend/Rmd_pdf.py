@@ -7,13 +7,13 @@ with today's date, then renders it to a PDF in output/.
 
 import os
 import sys
-import subprocess
 import argparse
 from pathlib import Path
 from shutil import which
 from datetime import date
 import re
 
+from external_tool import run_tool
 from find_files import find_files
 
 # Default folders live next to this script, so `python backend/Rmd_pdf.py` finds
@@ -135,7 +135,7 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
                 r_expr,
             ]
             print(f"Converting {full_input_path.name} to pdf")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = run_tool(cmd)
             if result.returncode == 0 and full_output_path.exists():
                 print(f"Converted {full_input_path.name} to {full_output_path.name}")
                 if existed_before:
@@ -263,7 +263,7 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
                 "-H", header_path,  # Include LaTeX header for text wrapping
             ]
             print(f"Converting {full_input_path.name} to pdf")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = run_tool(cmd)
             
             # Clean up temp files
             if os.path.exists(header_path):

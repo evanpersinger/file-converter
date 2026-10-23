@@ -17,6 +17,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+from external_tool import ocr_text
 
 # Config
 OCR_DPI = 300                      # 300 is the OCR sweet spot; 600 is 4x slower for little gain
@@ -355,7 +356,7 @@ def _ocr_page(page):
     img = Image.frombytes(mode, (pix.width, pix.height), pix.samples)
     if mode == "RGBA":
         img = img.convert("RGB")
-    return pytesseract.image_to_string(img, config=TESSERACT_CONFIG, lang=TESSERACT_LANG)
+    return ocr_text(img, config=TESSERACT_CONFIG, lang=TESSERACT_LANG)
 
 
 def pdf_to_markdown(pdf_path, image_dir=None):

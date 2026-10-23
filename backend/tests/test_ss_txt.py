@@ -9,11 +9,16 @@ characters OCR habitually gets wrong.
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
+import ss_txt
+from external_tool import ToolTimeout
 from ss_txt import (
     IMAGE_EXTENSIONS,
     are_texts_similar,
     clean_text,
+    convert_simple,
+    convert_structured,
     fix_common_ocr_errors,
     find_images,
     join_continuation_lines,
@@ -171,3 +176,26 @@ def test_the_supported_extensions_are_all_lowercase_and_dotted() -> None:
     for ext in IMAGE_EXTENSIONS:
         assert ext.startswith(".")
         assert ext == ext.lower()
+
+
+# A hung tesseract
+
+
+@pytest.mark.parametrize("convert", [convert_simple, convert_structured])
+def test_a_tesseract_timeout_fails_the_image_instead_of_trying_the_next_pass(
+    convert, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed OCR pass is normally skipped for the next one, but a hung tesseract would
+    then cost a full timeout for every pass (and every table cell)."""
+    calls = []
+
+    def hung(*args, **kwargs):
+        calls.append(1)
+        raise ToolTimeout("tesseract took longer than 300 seconds")
+
+    monkeypatch.setattr(ss_txt, "ocr_text", hung)
+    image_path = tmp_path / "shot.png"
+    Image.new("RGB", (200, 100), "white").save(image_path)
+
+    assert convert(str(image_path)) is None
+    assert len(calls) == 1

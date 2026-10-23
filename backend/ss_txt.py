@@ -11,10 +11,10 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-import pytesseract
 from PIL import Image, ImageEnhance, ImageFilter
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
+from external_tool import ToolTimeout, ocr_text
 
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp'}
 
@@ -126,9 +126,12 @@ def convert_simple(image_path):
         custom_config = r'--oem 3 --psm 6'
         all_texts = []
         for processed_image in processed_images:
-            # Wrap each pass so one failing variant can't sink the whole result
+            # Wrap each pass so one failing variant can't sink the whole result. A timeout
+            # is not one failing variant: tesseract is hung, so give up on the whole image.
             try:
-                text = pytesseract.image_to_string(processed_image, config=custom_config, lang='eng')
+                text = ocr_text(processed_image, config=custom_config, lang='eng')
+            except ToolTimeout:
+                raise
             except Exception as ocr_error:
                 print(f"  OCR pass skipped: {ocr_error}")
                 continue
@@ -466,9 +469,11 @@ def extract_table_cells(image, table_cells):
             for psm in [7, 8, 6, 11]:  # line, word, block, sparse
                 try:
                     config = f'--oem 3 --psm {psm}'
-                    text = pytesseract.image_to_string(cell_pil, config=config, lang='eng').strip()
+                    text = ocr_text(cell_pil, config=config, lang='eng').strip()
                     if text:
                         cell_texts_tried.append(fix_common_ocr_errors(text, table_cells=True))
+                except ToolTimeout:
+                    raise
                 except Exception as e:
                     ocr_error = e
 
@@ -502,10 +507,12 @@ def extract_with_multiple_psm_modes(image):
     for psm, description in psm_modes:
         try:
             config = f'--oem 3 --psm {psm}'
-            text = pytesseract.image_to_string(image, config=config, lang='eng').strip()
+            text = ocr_text(image, config=config, lang='eng').strip()
             if text and len(text) > 10:
                 text = fix_common_ocr_errors(text)
                 results.append({'text': text, 'psm': psm, 'description': description, 'length': len(text)})
+        except ToolTimeout:
+            raise
         except Exception as e:
             ocr_error = e
 

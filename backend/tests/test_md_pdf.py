@@ -6,14 +6,18 @@ maps, the delimiter normalization, and the code-protection that has to survive a
 it. These are the inverse of pdf_md.py's, so the last section checks the pair lines up.
 """
 
+from pathlib import Path
+
 import pytest
 
+from external_tool import ToolTimeout
 from md_pdf import (
     _is_ascii_diagram_line,
     clean_control_chars,
     convert_symbols,
     ensure_list_spacing,
     normalize_math_delimiters,
+    run_pandoc,
     wrap_ascii_diagrams,
 )
 from pdf_md import normalize_math
@@ -371,3 +375,22 @@ def test_a_partly_mappable_script_run_converts_only_the_mappable_part() -> None:
     """Note this is the opposite of pdf_md's rule, where _map_chars refuses to convert
     a run at all unless every character in it maps. Here the run is split."""
     assert convert_symbols("x²ᵃ") == r"$x^{2}$ᵃ"
+
+
+# A hung pandoc
+
+
+def test_a_pandoc_timeout_is_not_retried_in_safe_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A render that hung would most likely hang again, and the retry would double the wait."""
+    calls = []
+
+    def hung(*args, **kwargs):
+        calls.append(1)
+        raise ToolTimeout("pandoc took longer than 300 seconds")
+
+    monkeypatch.setattr("md_pdf._pandoc_once", hung)
+
+    assert run_pandoc("# hi", "# hi", tmp_path / "out.pdf", "hi.md") is False
+    assert len(calls) == 1

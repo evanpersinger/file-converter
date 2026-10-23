@@ -6,13 +6,13 @@ Falls back to a math-disabled render if xelatex chokes, so you still get a PDF.
 import os
 import re
 import sys
-import subprocess
 import tempfile
 import traceback
 from pathlib import Path
 from shutil import which
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
+from external_tool import ToolTimeout, run_tool
 from find_files import find_files
 
 # Config: pandoc reader extensions
@@ -673,7 +673,7 @@ def _pandoc_once(md_text, output_path, from_fmt, header_path, mermaid_filter):
         cmd += ["--filter", mermaid_filter]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = run_tool(cmd)
     finally:
         try:
             os.unlink(temp_md_path)
@@ -724,6 +724,10 @@ def run_pandoc(rich_md, safe_md, output_path, input_name):
             return True
 
         print(f"pandoc failed: {err2}")
+        return False
+    except ToolTimeout as exc:
+        # A render that hung would most likely hang again in safe mode, so no retry.
+        print(f"pandoc failed: {exc}")
         return False
     finally:
         try:

@@ -6,11 +6,11 @@ Uses wkhtmltopdf, falling back to pandoc (xelatex) if it is not installed.
 
 import os
 import sys
-import subprocess
 from pathlib import Path
 from shutil import which
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
+from external_tool import run_tool
 
 
 def command_exists(cmd):
@@ -70,7 +70,7 @@ def convert_html_to_pdf(
                 str(full_output_path),
             ]
             print(f"Converting {full_input_path.name} to pdf")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = run_tool(cmd)
             if result.returncode == 0 and full_output_path.exists():
                 print(f"Converted {full_input_path.name} to {full_output_path.name}")
                 if existed_before:
@@ -94,7 +94,7 @@ def convert_html_to_pdf(
                 "--pdf-engine=xelatex",
             ]
             print(f"Converting {full_input_path.name} to pdf")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = run_tool(cmd)
             if result.returncode == 0 and full_output_path.exists():
                 print(f"Converted {full_input_path.name} to {full_output_path.name}")
                 if existed_before:

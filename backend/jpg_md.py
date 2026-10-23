@@ -3,12 +3,12 @@
 English only (lang='eng'): other languages come back as garbled English, not an error.
 """
 
-import pytesseract
 from pathlib import Path
 from PIL import Image, ImageEnhance, ImageFilter
 import re
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
+from external_tool import ocr_text
 from image_convert import convert_images
 
 
@@ -95,7 +95,7 @@ def _ocr_to_markdown(img: Image.Image, dest: Path) -> None:
 
     # OCR with better configuration for accuracy
     custom_config = r'--oem 3 --psm 6'
-    text = pytesseract.image_to_string(
+    text = ocr_text(
         processed_image,
         config=custom_config,
         lang='eng'
