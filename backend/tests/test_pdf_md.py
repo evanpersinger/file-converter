@@ -7,11 +7,19 @@ math survives with only its delimiters normalized, and code spans are never touc
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import fitz
 import pytest
 
-from pdf_md import normalize_math, pdf_to_markdown, strip_page_numbers, strip_repeated_headers
+from pdf_md import (
+    apply_scripts,
+    find_scripts,
+    normalize_math,
+    pdf_to_markdown,
+    strip_page_numbers,
+    strip_repeated_headers,
+)
 
 
 @pytest.mark.parametrize(
@@ -145,6 +153,42 @@ def test_latex_math_keeps_its_contents_and_normalizes_delimiters(
 def test_currency_is_not_treated_as_math() -> None:
     """A single $..$ only counts as math when it contains \\, ^ or _."""
     assert normalize_math("costs $5 and $10 total") == "costs $5 and $10 total"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("𝜎", "σ"),
+        ("𝑠 = 𝑥 + 𝑦", "s = x + y"),
+        ("ℎ", "h"),
+        ("𝜎^2", "σ²"),
+    ],
+)
+def test_styled_math_letters_become_plain_letters(source: str, expected: str) -> None:
+    """A typeset PDF's text layer holds math-italic letters (U+1D400 block), not plain ones."""
+    assert normalize_math(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [("𝜎 [2]", "σ²"), ("𝑠 [2] = 𝜎", "s² = σ"), ("𝑥 [10]", "x¹⁰"), ("𝑥[2]", "x²")],
+)
+def test_bracketed_exponent_after_a_styled_letter_becomes_a_superscript(
+    source: str, expected: str
+) -> None:
+    """pymupdf4llm writes an exponent as ' [2]' after its base."""
+    assert normalize_math(source) == expected
+
+
+def test_bracketed_number_after_a_word_is_left_alone() -> None:
+    """After a word, [2] is a citation, not an exponent."""
+    assert normalize_math("as shown by Smith [2]") == "as shown by Smith [2]"
+
+
+def test_only_styled_math_letters_are_normalized() -> None:
+    """NFKC would also flatten ligatures and superscripts, so it runs on the styled letters only."""
+    source = "ﬁnal x² ½"
+    assert normalize_math(source) == source
 
 
 @pytest.mark.parametrize(("source", "expected"), [("x2", "x²"), ("n2", "n²")])
@@ -295,3 +339,85 @@ def test_running_header_is_kept_once_in_the_converted_output(tmp_path: Path) -> 
     assert markdown.count("A. B. Author") == 1
     for name in ("Alpha", "Bravo", "Charlie"):
         assert name in markdown
+
+
+def _doc_with(*parts: tuple[float, float, float, str]) -> fitz.Document:
+    """A one-page PDF with each (x, y, font size, text) drawn where it says."""
+    doc = fitz.open()
+    page = doc.new_page()
+    for x, y, size, text in parts:
+        page.insert_text((x, y), text, fontsize=size)
+    return doc
+
+
+@pytest.mark.parametrize(
+    ("parts", "expected"),
+    [
+        ([(72, 100, 10, "x"), (78, 96, 7, "2")], [("x", "2", "sup")]),
+        ([(72, 100, 10, "x"), (78, 103, 7, "1")], [("x", "1", "sub")]),
+        ([(72, 100, 10, "is x"), (88, 96, 7, "2")], [(" x", "2", "sup")]),
+    ],
+)
+def test_find_scripts_reads_a_small_raised_or_lowered_span(parts, expected) -> None:
+    assert find_scripts(_doc_with(*parts)[0]) == expected
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [
+        [(72, 100, 10, "x"), (78, 96, 10, "y")],
+        [(72, 100, 10, "x"), (78, 100, 7, "note")],
+    ],
+    ids=["raised but the same size", "smaller but on the same baseline"],
+)
+def test_find_scripts_needs_a_span_to_be_both_smaller_and_shifted(parts) -> None:
+    assert find_scripts(_doc_with(*parts)[0]) == []
+
+
+def test_find_scripts_skips_spans_stacked_over_each_other() -> None:
+    """The bounds of a sum sit above and below each other, they are not exponents.
+
+    fitz puts hand-drawn stacked text on separate lines, so the line is built by hand in
+    the shape get_text("dict") returns (the numbers come from a pandoc-made PDF).
+    """
+
+    def span(text: str, x: float, y: float, size: float) -> dict:
+        return {"text": text, "size": size, "origin": (x, y), "bbox": (x, y - size, x + 5, y)}
+
+    line = {"spans": [span("∑", 278.5, 134.8, 9.96), span("𝑛", 289.0, 129.0, 6.97), span("𝑖=1", 289.0, 138.6, 6.97)]}
+    page = SimpleNamespace(get_text=lambda kind: {"blocks": [{"lines": [line]}]})
+
+    assert find_scripts(page) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "scripts", "expected"),
+    [
+        ("s [2] = 1", [("s", "2", "sup")], "s² = 1"),
+        ("(𝑋−𝜇) [2] ]", [("𝜇)", "2", "sup")], "(𝑋−𝜇)² ]"),
+        ("x1 and x2", [("x", "1", "sub"), ("x", "2", "sub")], "x₁ and x₂"),
+        ("box 2", [("x", "2", "sup")], "box 2"),
+        ("x12", [("x", "1", "sub")], "x12"),
+        ("nothing to find", [("x", "2", "sup")], "nothing to find"),
+    ],
+    ids=["bracketed", "after a paren", "inline subscripts", "prose with a space", "longer number", "not found"],
+)
+def test_apply_scripts_rewrites_only_the_scripts_it_was_told_about(text, scripts, expected) -> None:
+    assert apply_scripts(text, scripts) == expected
+
+
+def test_apply_scripts_rewrites_a_repeat_no_more_often_than_the_pdf_has_it() -> None:
+    assert apply_scripts("x2 and x2", [("x", "2", "sup")]) == "x² and x2"
+
+
+def test_a_raised_digit_after_a_paren_becomes_a_superscript(tmp_path: Path) -> None:
+    """The geometry pass reaches what the ' [2]' rule cannot: here the base is a ')'."""
+    pdf_path = tmp_path / "paren_square.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "The squared difference is (a-b)", fontsize=10)
+    page.insert_text((72 + fitz.get_text_length("The squared difference is (a-b)", fontsize=10), 96), "2", fontsize=7)
+    doc.save(pdf_path)
+    doc.close()
+
+    assert "(a-b)²" in pdf_to_markdown(str(pdf_path))

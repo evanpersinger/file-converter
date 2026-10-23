@@ -6,6 +6,7 @@ Searchable pages go through pymupdf4llm, scanned pages through Tesseract OCR (En
 import os
 import re
 import shutil
+import unicodedata
 from collections import Counter
 from pathlib import Path
 
@@ -26,6 +27,8 @@ ENABLE_MATH = True                 # normalize math notation to unicode
 EXTRACT_IMAGES = False             # if True, save embedded images and link them in the markdown
 EDGE_LINES = 3                     # page numbers/headers only sit in a page's first/last N non-blank lines
 MIN_HEADER_PAGES = 3               # an edge line repeating on this many pages is a running header
+SCRIPT_SIZE_RATIO = 0.85           # a span smaller than this share of its line's font size may be a super/subscript
+SCRIPT_MIN_SHIFT = 0.15            # ...if its baseline is also moved by this share of the line's font size
 
 # Point pytesseract at the tesseract binary if it's on PATH.
 # (Correct attribute is `tesseract_cmd`; the old code set `pytesseract_cmd`, a no-op.)
@@ -161,6 +164,18 @@ def _apply_math(text, ocr):
     return text
 
 
+# Math fonts store variables as styled letters (U+1D400 block, plus the italic h at
+# U+210E), so a typeset PDF yields 𝜎 and 𝑥 where the reader expects σ and x. pymupdf4llm
+# writes an exponent as " [2]" after its base, and that only counts as one straight after
+# a styled letter: after a word, "[2]" is more likely a citation.
+_MATH_STYLED_LETTER = re.compile(r"([\U0001d400-\U0001d7ffℎ])(?: ?\[(\d+)\])?")
+
+
+def _plain_math_letter(match):
+    letter = unicodedata.normalize("NFKC", match.group(1))
+    return letter + _to_superscript(match.group(2)) if match.group(2) else letter
+
+
 def normalize_math(text, ocr=False):
     """Normalize math notation, leaving code spans and LaTeX math intact.
 
@@ -196,6 +211,7 @@ def normalize_math(text, ocr=False):
     )
 
     # 3. convert remaining loose notation in plain text
+    text = _MATH_STYLED_LETTER.sub(_plain_math_letter, text)
     text = _apply_math(text, ocr)
 
     # 4. restore protected spans (loop in case a span nested another)
@@ -273,6 +289,64 @@ def strip_repeated_headers(pages):
     return cleaned
 
 
+def find_scripts(page):
+    """List the superscripts and subscripts on a searchable page, in reading order.
+
+    Each is `(before, script, kind)`: the (up to 2) characters just ahead of it, so it can
+    be found in the markdown, its text, and "sup" or "sub". A span counts when it is
+    smaller than the rest of its line and its baseline is raised or lowered. PyMuPDF's own
+    superscript flag is not used, it is set on ordinary spans and missed on real ones.
+    Spans stacked over each other (fraction parts, sum bounds) are not scripts, so skipped.
+    """
+    found = []
+    for block in page.get_text("dict")["blocks"]:
+        for line in block.get("lines", []):
+            spans = line["spans"]
+            real = [s for s in spans if s["text"].strip()]
+            if not real:
+                continue
+            full_size = max(s["size"] for s in real)
+            small_below = full_size * SCRIPT_SIZE_RATIO
+            baselines = Counter(round(s["origin"][1], 1) for s in real if s["size"] >= small_below)
+            baseline = baselines.most_common(1)[0][0]
+
+            # index in `spans` -> how far the baseline is raised (positive) or lowered
+            shifts = {}
+            for i, span in enumerate(spans):
+                shift = baseline - span["origin"][1]
+                if (span["text"].strip() and span["size"] < small_below
+                        and abs(shift) >= full_size * SCRIPT_MIN_SHIFT):
+                    shifts[i] = shift
+
+            for i, shift in shifts.items():
+                x0, x1 = spans[i]["bbox"][0], spans[i]["bbox"][2]
+                stacked = any(
+                    shift * other_shift < 0
+                    and x0 < spans[j]["bbox"][2] and spans[j]["bbox"][0] < x1
+                    for j, other_shift in shifts.items()
+                )
+                before = "".join(s["text"] for s in spans[:i]).rstrip()[-2:]
+                if before and not stacked:
+                    found.append((before, spans[i]["text"].strip(), "sup" if shift > 0 else "sub"))
+    return found
+
+
+def apply_scripts(text, scripts):
+    """Rewrite the scripts from find_scripts as unicode superscripts and subscripts.
+
+    A script is rewritten at most as many times as the PDF has it, wherever the text puts
+    it, so matching does not depend on pymupdf4llm keeping the page's reading order. One
+    that is not found (written differently, like `(x][i]`) is left alone. pymupdf4llm
+    brackets some scripts (`x [2]`) and writes the rest inline (`x1`); only the bracketed
+    form may have a space, or the prose "box 2" would match.
+    """
+    for (before, script, kind), count in Counter(scripts).items():
+        convert = _to_superscript if kind == "sup" else _to_subscript
+        pattern = re.escape(before) + r"(?: ?\[" + re.escape(script) + r"\]|" + re.escape(script) + r"(?!\d))"
+        text = re.sub(pattern, lambda _: before + convert(script), text, count=count)
+    return text
+
+
 # PDF -> markdown
 def _ocr_page(page):
     """Render a page to an image and OCR it."""
@@ -314,6 +388,8 @@ def pdf_to_markdown(pdf_path, image_dir=None):
         chunks = pymupdf4llm.to_markdown(doc, **md_kwargs)
         texts = strip_repeated_headers([strip_page_numbers(chunk["text"].strip()) for chunk in chunks])
         for page_no, text in zip(text_pages, texts):
+            if ENABLE_MATH:
+                text = apply_scripts(text, find_scripts(doc[page_no]))
             md_by_page[page_no] = normalize_math(text, ocr=False)
 
     # Scanned/image pages -> OCR
