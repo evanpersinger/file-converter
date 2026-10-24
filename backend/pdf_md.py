@@ -151,10 +151,11 @@ def _apply_math(text, ocr):
         # OCR often reads a minus sign as an em/en dash. Searchable pages keep their
         # dashes, since in prose and page ranges they are real dashes.
         text = text.replace("—", "-").replace("–", "-")
-        # A lone variable letter followed by a single digit at a token boundary
-        # (x2 -> x²) but never inside a word (COVID19, GPT4 stay put).
+        # A lone lowercase variable letter followed by a single digit at a token
+        # boundary (x2 -> x²) but never inside a word (COVID19, GPT4 stay put). Uppercase
+        # is left alone: B2, Q4 and A1 are table, quarter and cell labels.
         text = re.sub(
-            r"(?<![A-Za-z0-9])([A-Za-z])(\d)(?![A-Za-z0-9])",
+            r"(?<![A-Za-z0-9])([a-z])(\d)(?![A-Za-z0-9])",
             lambda m: m.group(1) + _to_superscript(m.group(2)),
             text,
         )

@@ -197,6 +197,11 @@ def test_ocr_mode_promotes_a_lone_trailing_digit(source: str, expected: str) -> 
     assert normalize_math(source, ocr=False) == source
 
 
+@pytest.mark.parametrize("source", ["Table B2", "Q4 results", "cell A1"])
+def test_ocr_mode_leaves_uppercase_labels(source: str) -> None:
+    assert normalize_math(source, ocr=True) == source
+
+
 @pytest.mark.parametrize("source", ["COVID19", "GPT4"])
 def test_ocr_mode_leaves_digits_inside_words(source: str) -> None:
     assert normalize_math(source, ocr=True) == source
