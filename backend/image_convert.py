@@ -6,7 +6,7 @@ Builds on batch_convert: each converter names its extensions and the step that s
 from collections.abc import Callable
 from pathlib import Path
 
-from PIL import Image, ImageSequence
+from PIL import Image, ImageOps, ImageSequence
 
 from batch_convert import convert_files
 
@@ -47,6 +47,15 @@ def save_pdf_pages(img: Image.Image, dest: Path) -> None:
     pages[0].save(dest, "PDF", save_all=True, append_images=pages[1:], resolution=100.0)
 
 
+def upright(img: Image.Image) -> Image.Image:
+    """Apply the EXIF orientation tag, so a phone photo stored rotated comes out the
+    right way up. An image with no orientation to apply is returned as is, since
+    exif_transpose would hand back a copy that loses an animation's other frames."""
+    if img.getexif().get(0x0112, 1) == 1:
+        return img
+    return ImageOps.exif_transpose(img)
+
+
 def convert_images(
     input_dir: str | Path,
     output_dir: str | Path,
@@ -60,7 +69,7 @@ def convert_images(
 
     def convert(source: Path, dest: Path) -> None:
         with Image.open(source) as img:
-            save(img, dest)
+            save(upright(img), dest)
 
     return convert_files(
         input_dir, output_dir, source_exts, target_exts, convert, source_label, target_label
