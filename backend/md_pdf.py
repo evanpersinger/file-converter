@@ -673,7 +673,9 @@ def _pandoc_once(md_text, output_path, from_fmt, header_path, mermaid_filter):
         cmd += ["--filter", mermaid_filter]
 
     try:
-        result = run_tool(cmd)
+        # openin_any=p makes xelatex refuse absolute and parent-directory paths, so a
+        # \input{/some/file} in an upload can't pull a local file into the PDF.
+        result = run_tool(cmd, env={**os.environ, "openin_any": "p"})
     finally:
         try:
             os.unlink(temp_md_path)
