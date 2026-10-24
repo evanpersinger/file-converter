@@ -4,6 +4,16 @@
 
 Convert files between formats from a local web UI or from standalone Python scripts.
 
+## Demo
+
+Converting a PDF to Markdown:
+
+![Converting a PDF to Markdown in the web UI](docs/convert.gif)
+
+The same PDF on the Convert Files (LLM) tab, with a local model:
+
+![Converting a PDF to Markdown with a local model](docs/llm.gif)
+
 ## Run it
 
 ```bash
