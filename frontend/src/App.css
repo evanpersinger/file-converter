@@ -854,6 +854,12 @@ button:disabled {
   transition: clip-path 0.4s ease;
 }
 
+/* index.css colors every span the text color, which would paint this label the same as the
+   fill behind it. Naming the label itself keeps it inverted, readable on the filled part. */
+.progress-fill .progress-label {
+  color: var(--bg);
+}
+
 .progress.indeterminate .progress-label {
   animation: progress-pulse 1.4s ease-in-out infinite;
 }
