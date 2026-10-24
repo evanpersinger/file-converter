@@ -9,7 +9,12 @@ next to the HTML in input/.
 
 import os
 import tempfile
+import threading
+from contextlib import contextmanager
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import quote
 
 import fitz  # PyMuPDF
 
@@ -26,6 +31,27 @@ CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 TEXT_AS_PATH = True
 
 
+class _QuietHandler(SimpleHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass
+
+
+@contextmanager
+def _serve_folder(folder: Path):
+    """Serve a folder over http on localhost while the with block runs, yielding its base URL.
+
+    Chrome won't load file:// URLs from an http page, so an uploaded page can use the CSS
+    and images next to it but not an iframe or <img> that names some other local file.
+    """
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(_QuietHandler, directory=str(folder)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def _print_to_pdf(html_file: str, pdf_file: str, profile_dir: str) -> None:
     """Print one HTML file to a PDF with headless Chrome.
 
@@ -36,16 +62,18 @@ def _print_to_pdf(html_file: str, pdf_file: str, profile_dir: str) -> None:
     Raises:
         RuntimeError: If Chrome times out, fails, or writes no PDF.
     """
-    command = [
-        CHROME_PATH,
-        "--headless",
-        "--disable-gpu",
-        "--no-pdf-header-footer",
-        f"--user-data-dir={profile_dir}",
-        f"--print-to-pdf={pdf_file}",
-        Path(html_file).resolve().as_uri(),
-    ]
-    result = run_tool(command)
+    html_path = Path(html_file).resolve()
+    with _serve_folder(html_path.parent) as base_url:
+        command = [
+            CHROME_PATH,
+            "--headless",
+            "--disable-gpu",
+            "--no-pdf-header-footer",
+            f"--user-data-dir={profile_dir}",
+            f"--print-to-pdf={pdf_file}",
+            f"{base_url}/{quote(html_path.name)}",
+        ]
+        result = run_tool(command)
 
     if result.returncode != 0 or not os.path.exists(pdf_file):
         raise RuntimeError(f"Chrome exited with code {result.returncode} and wrote no PDF")

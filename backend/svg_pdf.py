@@ -69,7 +69,8 @@ def svg_size(svg_file: str) -> tuple[float, float]:
 def svg_to_pdf(svg_file: str, pdf_file: str, work_dir: str) -> None:
     """Print one SVG to a one-page PDF the size of the SVG with headless Chrome.
 
-    work_dir holds the wrapper page and Chrome's throwaway profile.
+    work_dir holds the wrapper page, a copy of the SVG next to it (Chrome loads the page over
+    http, which can't reach a file:// path) and Chrome's throwaway profile.
 
     Raises:
         ValueError: If the SVG's size is unknown.
@@ -77,11 +78,10 @@ def svg_to_pdf(svg_file: str, pdf_file: str, work_dir: str) -> None:
     """
     width, height = svg_size(svg_file)
 
+    shutil.copyfile(svg_file, os.path.join(work_dir, "source.svg"))
     wrapper_file = os.path.join(work_dir, "wrapper.html")
     with open(wrapper_file, 'w', encoding='utf-8') as f:
-        f.write(WRAPPER.format(
-            width=width, height=height, src=Path(svg_file).resolve().as_uri()
-        ))
+        f.write(WRAPPER.format(width=width, height=height, src="source.svg"))
 
     html_svg._print_to_pdf(wrapper_file, pdf_file, os.path.join(work_dir, "profile"))
 
