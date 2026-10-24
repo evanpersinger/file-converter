@@ -167,6 +167,28 @@ def test_a_narrower_image_is_centred(work_dirs: WorkDirs) -> None:
         assert img.size == (10, 16)
 
 
+def test_transparent_areas_come_out_white_not_black(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    Image.new("RGBA", (4, 4), (0, 0, 0, 0)).save(input_dir / "one.png", "PNG")
+    Image.new("RGB", (4, 4), "red").save(input_dir / "two.png", "PNG")
+
+    assert combine(work_dirs, ["one.png", "two.png"]) is True
+    with Image.open(output_dir / "combined.png") as img:
+        assert img.getpixel((1, 1)) == (255, 255, 255)
+
+
+def test_exif_orientation_is_applied(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    Image.new("RGB", (20, 10), "red").save(input_dir / "one.jpg", "JPEG", exif=exif)
+    Image.new("RGB", (10, 20), "blue").save(input_dir / "two.jpg", "JPEG")
+
+    assert combine(work_dirs, ["one.jpg", "two.jpg"]) is True
+    with Image.open(output_dir / "combined.jpg") as img:
+        assert img.size == (10, 40)
+
+
 def test_text_files_keep_the_order_they_were_passed(work_dirs: WorkDirs) -> None:
     """The list order is deliberately left alone rather than sorted, so the caller
     decides the merge order."""
