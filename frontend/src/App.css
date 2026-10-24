@@ -44,6 +44,9 @@
   max-width: 97rem;
   margin: 0 auto;
   padding: 0 2rem;
+  /* How far the content sits from the page edge: the 2rem padding, plus the margin on
+     each side once the window is wider than the layout. Column titles run out to it. */
+  --page-edge: calc(2rem + max(0px, (100cqw - 97rem) / 2));
 }
 
 .sidebar {
@@ -106,14 +109,13 @@
    with the divider on its left instead. */
 .log-panel {
   flex: none;
+  /* On a very wide window main stops growing, so this keeps Result at the right edge, where
+     its title line meets the page edge, instead of floating after main. */
+  margin-left: auto;
   box-sizing: border-box;
   width: 15rem;
   padding: 2.5rem 0 2.5rem 1.5rem;
   border-left: 8px solid var(--text);
-}
-
-.log-panel h2 {
-  font-size: 1.5rem;
 }
 
 .log-entry {
@@ -190,11 +192,40 @@ main.compact .action {
   height: 3.2rem;
 }
 
+/* The title of a column: Convert to, Model, Markdown (MD) and Result all share it. The line
+   under it is one of the 8px column lines, so it runs out to whatever it meets: the divider
+   beside its column, the previous column's divider across the gap, or the page edge. */
 h2 {
   font-size: 1.05rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin: 0 0 1rem;
+  margin: 0 0 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 8px solid var(--text);
+}
+
+/* Right into the column's own divider (past its 1.5rem of padding), left to the page edge.
+   Each negative margin comes with the same padding, so the line reaches out and the text
+   stays where it was. */
+.sidebar h2 {
+  margin-left: calc(-1 * var(--page-edge));
+  margin-right: -1.5rem;
+  padding-left: var(--page-edge);
+  padding-right: 1.5rem;
+}
+
+/* A sidebar next to another one starts at that one's divider, across the 2.5rem gap. */
+.sidebar:not([hidden]) ~ .sidebar h2 {
+  margin-left: -2.5rem;
+  padding-left: 2.5rem;
+}
+
+/* The mirror image for Result: left into its own divider, right to the page edge. */
+.log-panel h2 {
+  margin-left: -1.5rem;
+  margin-right: calc(-1 * var(--page-edge));
+  padding-left: 1.5rem;
+  padding-right: var(--page-edge);
 }
 
 /* File picker. The real input is visually hidden and the label is both the click
@@ -924,6 +955,12 @@ button:disabled {
     border-left: none;
     border-top: 8px solid var(--text);
   }
+
+  /* Its title line runs across the row, like the line above it. */
+  .layout[data-tab='llm'] .log-panel h2 {
+    margin-inline: -2rem;
+    padding-inline: 2rem;
+  }
 }
 
 /* Convert tab: Result drops under the rest. */
@@ -945,6 +982,11 @@ button:disabled {
     border-left: none;
     border-top: 8px solid var(--text);
   }
+
+  .layout[data-tab='convert'] .log-panel h2 {
+    margin-inline: -2rem;
+    padding-inline: 2rem;
+  }
 }
 
 /* LLM tab: everything stacks. */
@@ -964,6 +1006,12 @@ button:disabled {
 
   .layout[data-tab='llm'] main {
     max-width: none;
+  }
+
+  /* Each title line runs across its row, from page edge to page edge. */
+  .layout[data-tab='llm'] .sidebar h2 {
+    margin-inline: -2rem;
+    padding-inline: 2rem;
   }
 
   .layout[data-tab='llm'] .formats {
@@ -994,6 +1042,11 @@ button:disabled {
 
   .layout[data-tab='convert'] main {
     max-width: none;
+  }
+
+  .layout[data-tab='convert'] .sidebar h2 {
+    margin-inline: -2rem;
+    padding-inline: 2rem;
   }
 
   .layout[data-tab='convert'] .formats {
