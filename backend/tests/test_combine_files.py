@@ -201,3 +201,20 @@ def test_an_input_prefix_on_the_path_is_tolerated(work_dirs: WorkDirs) -> None:
 
     assert combine(work_dirs, ["input/a.txt", "input/b.txt"]) is True
     assert (output_dir / "combined.txt").exists()
+
+
+def test_a_cp1252_text_file_is_decoded_not_dropped(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "a.txt").write_text("one", encoding="utf-8")
+    (input_dir / "b.txt").write_bytes("caf\xe9".encode("cp1252"))
+
+    assert combine(work_dirs, ["a.txt", "b.txt"]) is True
+    assert "café" in (output_dir / "combined.txt").read_text(encoding="utf-8")
+
+
+def test_an_unreadable_text_file_fails_the_combine(work_dirs: WorkDirs) -> None:
+    input_dir, _ = work_dirs
+    (input_dir / "a.txt").write_text("one", encoding="utf-8")
+    (input_dir / "b.txt").mkdir()  # exists but cannot be read as a file
+
+    assert combine(work_dirs, ["a.txt", "b.txt"]) is False
