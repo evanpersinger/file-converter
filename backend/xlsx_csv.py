@@ -31,6 +31,18 @@ def _safe_name(sheet_name: str) -> str:
     return cleaned or "sheet"
 
 
+# pandas stringifies a date-only cell as "2024-01-05 00:00:00" under dtype=str.
+_MIDNIGHT = r" 00:00:00(?:\.0+)?$"
+
+
+def _trim_midnight(sheets: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    """Show date-only cells as YYYY-MM-DD instead of with a 00:00:00 time part."""
+    return {
+        name: df.replace(to_replace=r"^(\d{4}-\d{2}-\d{2})" + _MIDNIGHT, value=r"\1", regex=True)
+        for name, df in sheets.items()
+    }
+
+
 def _read_excel_with_compression(path: str) -> dict[str, pd.DataFrame]:
     """Read every sheet of `path`, compressing a throwaway copy first when it has
     images worth downscaling, so a large image-heavy workbook is cheaper to load.
@@ -39,7 +51,7 @@ def _read_excel_with_compression(path: str) -> dict[str, pd.DataFrame]:
     """
     file_path = Path(path)
     if not compress.has_compressible_media(file_path, _MEDIA_PREFIX):
-        return pd.read_excel(path, sheet_name=None, dtype=str)
+        return _trim_midnight(pd.read_excel(path, sheet_name=None, dtype=str))
 
     with tempfile.TemporaryDirectory() as tmp:
         staged = Path(tmp) / file_path.name
@@ -48,7 +60,7 @@ def _read_excel_with_compression(path: str) -> dict[str, pd.DataFrame]:
             staged, _MEDIA_PREFIX,
             sanity_check=lambda payload: openpyxl.load_workbook(io.BytesIO(payload), read_only=True),
         )
-        return pd.read_excel(staged, sheet_name=None, dtype=str)
+        return _trim_midnight(pd.read_excel(staged, sheet_name=None, dtype=str))
 
 
 def convert_xlsx_to_csv(
