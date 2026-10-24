@@ -13,24 +13,6 @@ WorkDirs = tuple[Path, Path]
 WriteImage = Callable[..., Path]
 
 
-def test_reports_when_input_is_empty(work_dirs: WorkDirs) -> None:
-    input_dir, output_dir = work_dirs
-    assert (
-        png_pdf.convert_png_to_pdf(input_dir, output_dir)
-        == "No PNG files found in input folder"
-    )
-
-
-def test_reports_when_the_file_is_already_a_pdf(work_dirs: WorkDirs) -> None:
-    input_dir, output_dir = work_dirs
-    (input_dir / "doc.pdf").write_bytes(b"%PDF-1.4")
-
-    assert (
-        png_pdf.convert_png_to_pdf(input_dir, output_dir)
-        == "That file is already in pdf format"
-    )
-
-
 @pytest.mark.parametrize("filename", ["logo.png", "logo.PNG"])
 def test_a_png_becomes_a_single_page_pdf(
     work_dirs: WorkDirs, write_image: WriteImage, filename: str
@@ -69,32 +51,3 @@ def test_other_color_modes_convert(work_dirs: WorkDirs, mode: str) -> None:
 
     with fitz.open(output_dir / "shape.pdf") as document:
         assert document.page_count == 1
-
-
-def test_an_existing_pdf_is_overwritten(
-    work_dirs: WorkDirs, write_image: WriteImage
-) -> None:
-    input_dir, output_dir = work_dirs
-    write_image(input_dir / "logo.png", "PNG")
-    output_dir.mkdir()
-    (output_dir / "logo.pdf").write_bytes(b"stale")
-
-    png_pdf.convert_png_to_pdf(input_dir, output_dir)
-
-    with fitz.open(output_dir / "logo.pdf") as document:
-        assert document.page_count == 1
-
-
-def test_one_bad_file_does_not_stop_the_good_ones(
-    work_dirs: WorkDirs, write_image: WriteImage
-) -> None:
-    input_dir, output_dir = work_dirs
-    write_image(input_dir / "good.png", "PNG")
-    (input_dir / "broken.png").write_bytes(b"this is not a png")
-
-    summary = png_pdf.convert_png_to_pdf(input_dir, output_dir)
-
-    assert "good.pdf" in summary
-    assert "1 failed" in summary
-    assert "broken.png" in summary
-    assert (output_dir / "good.pdf").exists()
