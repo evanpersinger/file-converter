@@ -279,8 +279,8 @@ function Converter({ tab }: { tab: Tab }) {
   const llmScripts = llmScriptsIn(formats)
   const modelGroups = [
     localGroup(localModels),
-    cloudGroup('openai', 'OpenAI models (costs money)', cloudModels),
-    cloudGroup('anthropic', 'Anthropic models (costs money)', cloudModels),
+    cloudGroup('openai', 'OpenAI models', cloudModels),
+    cloudGroup('anthropic', 'Anthropic models', cloudModels),
   ]
 
   // What Convert runs, and what is still missing when it can't.
@@ -558,7 +558,7 @@ function Converter({ tab }: { tab: Tab }) {
       </aside>
 
       <aside className="sidebar" hidden={tab !== 'llm'}>
-        <h2>Markdown format</h2>
+        <h2>Markdown (MD)</h2>
 
         <div className="llm-routes">
           {llmScripts.map(({ script: name, caption }) => {

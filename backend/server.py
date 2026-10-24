@@ -431,7 +431,7 @@ REGISTRY: list[Conversion] = [
                    llm_md.convert_handwriting_to_markdown_local(model, i, o, cancel))),
                requires=("ollama",), takes_model=True, group="llm",
                script="Handwriting", provider="local",
-               caption="Used for converting pictures of handwriting",
+               caption="Used for pictures of handwriting",
                note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first"),
     Conversion((".jpg", ".jpeg", ".pdf"), "handwriting->md-ai", "Markdown (handwriting, OpenAI, costs money)", ".md",
                via_model_params(lambda s, model, i, o, cancel: (

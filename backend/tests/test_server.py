@@ -418,7 +418,7 @@ def test_a_model_note_from_the_handwriting_route_shows_up_in_the_log_not_the_fil
     ]
 
 
-_HANDWRITING_CAPTION = "Used for converting pictures of handwriting"
+_HANDWRITING_CAPTION = "Used for pictures of handwriting"
 
 
 @pytest.mark.parametrize("ext", [".jpg", ".jpeg", ".pdf"])
