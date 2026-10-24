@@ -7,6 +7,7 @@ import type {
   CloudProvider, FormatMap, LocalModel, Mismatch, ModelGroupData, PickedModel,
 } from './types'
 import FileViewer from './FileViewer'
+import { combineLimitMessage, convertLimitMessage, overConvertLimit } from './limits'
 import ModelGroup from './ModelGroup'
 import ProgressBar from './ProgressBar'
 import { useProgress } from './useProgress'
@@ -298,6 +299,9 @@ function Converter({ tab }: { tab: Tab }) {
 
   function runDetect(file: File) {
     latestPick.current = file
+    // The server refuses to inspect a file over the convert limit, and only after taking the
+    // whole upload, so don't send one just to be turned away.
+    if (overConvertLimit(file)) return
     // Advisory only. If the check itself fails there is nothing useful to say, so
     // it stays silent rather than showing an error for a file that may convert fine.
     detect(file)
@@ -404,6 +408,12 @@ function Converter({ tab }: { tab: Tab }) {
   // time anyway. A failed file doesn't stop the rest, and the ones that worked stay
   // downloadable next to the error naming the ones that didn't.
   async function convertAll(targetId: string) {
+    const limitMessage = convertLimitMessage(files)
+    if (limitMessage) {
+      setStatus({ kind: 'error', message: limitMessage })
+      return
+    }
+
     const downloads: Download[] = []
     const failures: string[] = []
     cancelledBatch.current = false
@@ -446,6 +456,15 @@ function Converter({ tab }: { tab: Tab }) {
       setResult((current) => ({ downloads: mergeDownloads(current?.downloads ?? [], downloads) }))
     }
     setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
+  }
+
+  function combineAll() {
+    const limitMessage = combineLimitMessage(files)
+    if (limitMessage) {
+      setStatus({ kind: 'error', message: limitMessage })
+      return
+    }
+    run(() => combine(files), { kind: 'combining' })
   }
 
   // Stops the batch from picking up the next file. For the local-model route the
@@ -708,7 +727,7 @@ function Converter({ tab }: { tab: Tab }) {
           >
             <button
               className="action"
-              onClick={() => run(() => combine(files), { kind: 'combining' })}
+              onClick={combineAll}
               disabled={!canCombine || busy}
             >
               {status.kind === 'combining' ? 'Combining...' : 'Combine Files'}
