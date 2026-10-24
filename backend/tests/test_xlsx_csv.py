@@ -222,3 +222,19 @@ def test_the_original_workbook_is_not_modified(work_dirs: WorkDirs) -> None:
     xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
 
     assert path.read_bytes() == before
+
+
+def test_date_only_cells_have_no_time_part(work_dirs: WorkDirs) -> None:
+    import datetime
+
+    input_dir, output_dir = work_dirs
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["when", "stamp"])
+    ws.append([datetime.datetime(2024, 1, 5), datetime.datetime(2024, 1, 5, 13, 30)])
+    wb.save(input_dir / "d.xlsx")
+
+    xlsx_csv.convert_xlsx_to_csv(input_dir, output_dir)
+
+    lines = (output_dir / "d.csv").read_text().splitlines()
+    assert lines[1] == "2024-01-05,2024-01-05 13:30:00"
