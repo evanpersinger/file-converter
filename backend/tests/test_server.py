@@ -707,6 +707,48 @@ def test_an_empty_upload_is_rejected(client: TestClient, jobs_root: Path) -> Non
     assert "empty" in response.json()["error"]
 
 
+def test_a_file_over_the_convert_limit_is_rejected(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server, "MAX_CONVERT_BYTES", 1024 * 1024)
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->xlsx"},
+        files={"file": ("a.csv", b"a" * (1024 * 1024 + 1))},
+    )
+    assert response.status_code == 400
+    assert "1 MB limit" in response.json()["error"]
+
+
+def test_a_body_far_over_the_convert_limit_is_refused_before_it_is_read(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The overhead allowance is 1 MB, so 3 MB against a 1 MB limit is turned away by the
+    Content-Length check rather than by staging the file."""
+    monkeypatch.setattr(server, "MAX_CONVERT_BYTES", 1024 * 1024)
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->xlsx"},
+        files={"file": ("a.csv", b"a" * (3 * 1024 * 1024))},
+    )
+    assert response.status_code == 413
+    assert "1 MB limit" in response.json()["error"]
+
+
+def test_combine_takes_more_than_the_convert_limit(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Combine has its own, bigger limit, so a request the convert limit would turn away
+    still goes through."""
+    monkeypatch.setattr(server, "MAX_CONVERT_BYTES", 1024 * 1024)
+    chunk = b"a" * (3 * 1024 * 1024 // 2)
+    response = client.post(
+        "/api/combine",
+        files=[("files", ("one.txt", chunk)), ("files", ("two.txt", chunk))],
+    )
+    assert response.status_code == 200
+
+
 def test_an_upload_with_an_empty_filename_never_reaches_the_handler(
     client: TestClient,
 ) -> None:

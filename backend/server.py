@@ -93,9 +93,12 @@ import xlsx_csv
 BACKEND = Path(__file__).resolve().parent
 REPO = BACKEND.parent
 JOBS_ROOT = (REPO / ".webui_jobs").resolve()
-MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
+# The largest file a conversion takes, and the most a combine takes across all its files.
+# Combine only merges, so it gets the bigger limit.
+MAX_CONVERT_BYTES = 100 * 1024 * 1024  # 100 MB
+MAX_COMBINE_BYTES = 500 * 1024 * 1024  # 500 MB
 UPLOAD_CHUNK_BYTES = 1024 * 1024
-# Room above MAX_UPLOAD_BYTES for the multipart framing and form fields around the files.
+# Room above the limits for the multipart framing and form fields around the files.
 MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 STALE_JOB_SECONDS = 24 * 60 * 60
 # Conversions that run at once. A job past this waits for a free slot (and shows as
@@ -690,12 +693,13 @@ class RejectOversizeBody:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and scope["method"] == "POST":
+            limit = MAX_COMBINE_BYTES if scope["path"] == "/api/combine" else MAX_CONVERT_BYTES
             declared = dict(scope["headers"]).get(b"content-length", b"")
-            if declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES:
+            if declared.isdigit() and int(declared) > limit + MULTIPART_OVERHEAD_BYTES:
                 while (await receive()).get("more_body"):
                     pass
                 response = _error(
-                    f"The upload is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
+                    f"The upload is larger than the {limit // (1024 * 1024)} MB limit.",
                     status=413,
                 )
                 await response(scope, receive, send)
@@ -835,8 +839,8 @@ def _stage_upload(upload: UploadFile, dest: Path, limit: int) -> int:
 
 def _upload_size_problem(size: int) -> JSONResponse | None:
     """The error response for a single upload that is too big or empty, else None."""
-    if size > MAX_UPLOAD_BYTES:
-        return _error(f"File is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.")
+    if size > MAX_CONVERT_BYTES:
+        return _error(f"File is larger than the {MAX_CONVERT_BYTES // (1024 * 1024)} MB limit.")
     if not size:
         return _error("The uploaded file is empty.")
     return None
@@ -857,7 +861,7 @@ def detect(file: UploadFile = File(...)):
     # Staged to disk because libmagic needs a real file to identify these formats.
     with job_workspace() as (_job_dir, job_in, _job_out):
         staged = job_in / raw_name
-        if problem := _upload_size_problem(_stage_upload(file, staged, MAX_UPLOAD_BYTES)):
+        if problem := _upload_size_problem(_stage_upload(file, staged, MAX_CONVERT_BYTES)):
             return problem
         mismatch = sniff_mismatch(staged)
 
@@ -909,7 +913,7 @@ def convert(
         # ext was lowercased above, so the staged name is lowercase whatever the upload
         # was called.
         staged = job_in / f"{stem}{ext}"
-        if problem := _upload_size_problem(_stage_upload(file, staged, MAX_UPLOAD_BYTES)):
+        if problem := _upload_size_problem(_stage_upload(file, staged, MAX_CONVERT_BYTES)):
             return problem
 
         if job_id:
@@ -999,12 +1003,12 @@ def combine(files: list[UploadFile] = File(...)):
                 name = f"{stem}_{counter}{suffix}"
                 counter += 1
 
-            size = _stage_upload(item, job_in / name, MAX_UPLOAD_BYTES - total)
+            size = _stage_upload(item, job_in / name, MAX_COMBINE_BYTES - total)
             total += size
-            if total > MAX_UPLOAD_BYTES:
+            if total > MAX_COMBINE_BYTES:
                 return _error(
                     f"Files add up to more than the "
-                    f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit."
+                    f"{MAX_COMBINE_BYTES // (1024 * 1024)} MB limit."
                 )
             if not size:
                 return _error(f"'{raw_name}' is empty.")
