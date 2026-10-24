@@ -8,9 +8,19 @@ from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
 
 # Rendering resolution. PDF pages are vector, so this is a choice rather than a
-# property of the file: 200 keeps body text sharp on screen without turning every
-# page into a multi-megabyte PNG the way 300+ does.
-RENDER_DPI = 200
+# property of the file: 600 is the sharpest the converter makes.
+RENDER_DPI = 600
+
+# The most pixels one page may render to, so an oversize page (a poster) can't exhaust
+# memory. A Letter page at 600 DPI is about 34 million and a tabloid page about 67 million,
+# so only larger pages are rendered below RENDER_DPI.
+MAX_PAGE_PIXELS = 80_000_000
+
+
+def _page_dpi(page: fitz.Page) -> int:
+    """RENDER_DPI, or lower for a page that would render to more than MAX_PAGE_PIXELS."""
+    area_in_square_inches = (page.rect.width / 72) * (page.rect.height / 72)
+    return min(RENDER_DPI, int((MAX_PAGE_PIXELS / area_in_square_inches) ** 0.5))
 
 
 def convert_pdf_to_png(
@@ -58,7 +68,7 @@ def convert_pdf_to_png(
                     if os.path.exists(png_file):
                         overwritten.append(png_name)
 
-                    page.get_pixmap(dpi=RENDER_DPI).save(png_file)
+                    page.get_pixmap(dpi=_page_dpi(page)).save(png_file)
                     output_names.append(png_name)
                     converted.append(png_name)
 
