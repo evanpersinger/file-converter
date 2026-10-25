@@ -3,15 +3,19 @@
 The decks are built with python-pptx in each test, so there are no binary fixtures.
 """
 
+import io
+import random
 import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from PIL import Image
 from pptx import Presentation
 from pptx.util import Inches, Pt
 
+import compress
 import pptx_md
 import pptx_pdf
 
@@ -252,6 +256,43 @@ def test_a_ppt_without_libreoffice_fails_alone_and_a_pptx_still_converts(
 
     assert "NEWDECK" in (output_dir / "new.md").read_text(encoding="utf-8")
     assert "1 failed: old.ppt: LibreOffice not found in PATH" in summary
+
+
+def test_a_picture_in_the_deck_does_not_change_the_markdown(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    prs, slide = new_slide()
+    slide.shapes.title.text = "TITLETEXT"
+    add_textbox(slide, "BODYTEXT")
+    size = (2000, 1200)
+    noise = Image.frombytes("RGB", size, random.Random(0).randbytes(size[0] * size[1] * 3))
+    picture = io.BytesIO()
+    noise.save(picture, "JPEG")
+    slide.shapes.add_picture(picture, Inches(1), Inches(3), Inches(2))
+    deck = input_dir / "deck.pptx"
+    prs.save(deck)
+    original = deck.read_bytes()
+    expected = pptx_md.extract_text_from_pptx(str(deck))
+
+    # Without this the test would still pass if compression silently did nothing
+    sizes: list[tuple[int, int]] = []
+    real_compress = compress.compress_office_zip
+
+    def spy(path: Path, *args: object, **kwargs: object) -> None:
+        before = path.stat().st_size
+        real_compress(path, *args, **kwargs)
+        sizes.append((before, path.stat().st_size))
+
+    monkeypatch.setattr(compress, "compress_office_zip", spy)
+
+    pptx_md.convert_pptx_to_markdown(input_dir, output_dir)
+
+    assert (output_dir / "deck.md").read_text(encoding="utf-8") == expected
+    assert deck.read_bytes() == original
+    assert len(sizes) == 1
+    before, after = sizes[0]
+    assert after < before
 
 
 @needs_libreoffice
