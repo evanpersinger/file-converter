@@ -347,6 +347,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     // across several picks. The backend merges in exactly this order.
     if (files.length === 0) {
       clearFormatPicks()
+      pickOnlyScript(added[0])
       setMismatch(null)
       runDetect(added[0])
     }
@@ -393,6 +394,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       // The first file drives everything, so dropping it invalidates the target and
       // the mismatch answer.
       clearFormatPicks()
+      pickOnlyScript(next[0])
       setMismatch(null)
       runDetect(next[0])
     }
@@ -403,6 +405,18 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   function clearFormatPicks() {
     setTarget(null)
     setScript(null)
+  }
+
+  // A Markdown format that is the only one the file can use is picked for the user, there is
+  // nothing to choose between. Only the LLM tab has these formats.
+  function pickOnlyScript(file: File) {
+    if (tab !== 'llm') return
+    const scripts = new Set(
+      (formats?.byExtension[extensionOf(file.name)] ?? [])
+        .filter((t) => t.group === 'llm')
+        .map((t) => t.script),
+    )
+    if (scripts.size === 1) setScript([...scripts][0])
   }
 
   // Clicking a picked model again deselects it.
