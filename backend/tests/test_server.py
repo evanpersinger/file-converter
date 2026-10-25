@@ -548,6 +548,57 @@ def test_the_handwriting_converters_progress_output_is_readable_as_a_percentage(
     assert server._latest_percent(capsys.readouterr().out) == 100
 
 
+def test_a_video_conversion_uses_the_whisper_model_the_user_chose(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(server.DEPS, "tesseract", lambda: True)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        server.mp4_md, "convert_mp4_to_markdown", lambda chosen, *_: calls.append(chosen) or "done"
+    )
+
+    client.post(
+        "/api/convert",
+        data={"target": "mp4->md", "model": "tiny"},
+        files={"file": ("clip.mp4", b"not really an mp4")},
+    )
+
+    assert calls == ["tiny"]
+
+
+def test_a_video_conversion_refuses_a_model_that_is_not_a_whisper_size(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(server.DEPS, "tesseract", lambda: True)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        server.mp4_md, "convert_mp4_to_markdown", lambda chosen, *_: calls.append(chosen) or "done"
+    )
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "mp4->md", "model": "gemma4:12b"},
+        files={"file": ("clip.mp4", b"not really an mp4")},
+    )
+
+    assert response.status_code == 400
+    assert "not a model this conversion can use" in response.json()["error"]
+    assert calls == []
+
+
+def test_the_video_converters_progress_output_is_readable_as_a_percentage(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pins the print in mp4_md to the pattern /api/progress parses."""
+    server.mp4_md._report(42)
+
+    assert server._latest_percent(capsys.readouterr().out) == 42
+
+
+def test_speech_models_lists_the_whisper_sizes(client: TestClient) -> None:
+    assert client.get("/api/speech-models").json() == {"models": list(server.mp4_md.WHISPER_MODELS)}
+
+
 def test_local_models_flags_which_curated_models_are_downloaded(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -724,8 +775,10 @@ def test_a_body_far_over_the_convert_limit_is_refused_before_it_is_read(
     client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The overhead allowance is 1 MB, so 3 MB against a 1 MB limit is turned away by the
-    Content-Length check rather than by staging the file."""
+    Content-Length check rather than by staging the file. The convert route lets through
+    the biggest limit any conversion has, so the video one comes down too."""
     monkeypatch.setattr(server, "MAX_CONVERT_BYTES", 1024 * 1024)
+    monkeypatch.setattr(server, "MAX_VIDEO_BYTES", 1024 * 1024)
     response = client.post(
         "/api/convert",
         data={"target": "csv->xlsx"},
@@ -733,6 +786,73 @@ def test_a_body_far_over_the_convert_limit_is_refused_before_it_is_read(
     )
     assert response.status_code == 413
     assert "1 MB limit" in response.json()["error"]
+
+
+def test_a_video_over_the_convert_limit_is_taken(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(server.DEPS, "tesseract", lambda: True)
+    monkeypatch.setattr(server, "MAX_CONVERT_BYTES", 1024 * 1024)
+    monkeypatch.setattr(server, "MAX_VIDEO_BYTES", 10 * 1024 * 1024)
+
+    def fake_convert(model: str, input_dir: Path, output_dir: Path, should_cancel: object) -> str:
+        (Path(output_dir) / "clip.md").write_text("done")
+        return "ok"
+
+    monkeypatch.setattr(server.mp4_md, "convert_mp4_to_markdown", fake_convert)
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "mp4->md", "model": "tiny"},
+        files={"file": ("clip.mp4", b"a" * (2 * 1024 * 1024))},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"done"
+
+
+def test_a_video_over_the_video_limit_is_rejected(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(server.DEPS, "tesseract", lambda: True)
+    monkeypatch.setattr(server, "MAX_VIDEO_BYTES", 1024 * 1024)
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "mp4->md", "model": "tiny"},
+        files={"file": ("clip.mp4", b"a" * (1024 * 1024 + 1))},
+    )
+
+    assert response.status_code == 400
+    assert "1 MB limit" in response.json()["error"]
+
+
+def test_the_video_limit_does_not_loosen_the_limit_for_other_files(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The convert route lets a video-sized body through, so the handler has to be the one
+    that turns a big CSV away."""
+    monkeypatch.setattr(server, "MAX_CONVERT_BYTES", 1024 * 1024)
+    monkeypatch.setattr(server, "MAX_VIDEO_BYTES", 10 * 1024 * 1024)
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->xlsx"},
+        files={"file": ("a.csv", b"a" * (2 * 1024 * 1024))},
+    )
+
+    assert response.status_code == 400
+    assert "1 MB limit" in response.json()["error"]
+
+
+@pytest.mark.parametrize(
+    ("size", "label"),
+    [(100 * 1024**2, "100 MB"), (1024**3, "1 GB"), (5 * 1024**3, "5 GB"), (1536 * 1024**2, "1536 MB")],
+)
+def test_a_limit_reads_in_gigabytes_only_when_it_is_a_whole_number_of_them(
+    size: int, label: str
+) -> None:
+    assert server._size_label(size) == label
 
 
 def test_combine_takes_more_than_the_convert_limit(

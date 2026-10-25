@@ -62,7 +62,7 @@ HTML to SVG and SVG to PDF or PNG need Google Chrome. Mermaid diagrams in Markdo
   (don't start it with `--host 0.0.0.0`) and don't convert files you don't trust.
 - Converting a file again overwrites the old output, and the script prints a message when it does.
 - Combine only works on files that share one extension, and keeps the order you added them.
-- A file to convert is capped at 100 MB. Combine takes up to 500 MB across all its files.
+- A file to convert is capped at 100 MB, and a video at 5 GB. Combine takes up to 500 MB across all its files.
 - The web UI runs up to 4 conversions at once. A fifth (another tab, say) waits for a free
   slot, and the progress bar says "Waiting for another conversion...".
 - Long PDFs on the LLM tab: the Claude path caps at about 100 pages (32 MB), and the

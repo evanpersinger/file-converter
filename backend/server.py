@@ -65,6 +65,7 @@ import llm_md
 import llm_pdf_md
 import md_pdf
 import md_toon
+import mp4_md
 import pdf_md
 import pdf_png
 import pdf_toon
@@ -94,9 +95,11 @@ BACKEND = Path(__file__).resolve().parent
 REPO = BACKEND.parent
 JOBS_ROOT = (REPO / ".webui_jobs").resolve()
 # The largest file a conversion takes, and the most a combine takes across all its files.
-# Combine only merges, so it gets the bigger limit.
+# Combine only merges, so it gets the bigger limit. Video gets its own, since a few minutes
+# of it is already over the convert limit.
 MAX_CONVERT_BYTES = 100 * 1024 * 1024  # 100 MB
 MAX_COMBINE_BYTES = 500 * 1024 * 1024  # 500 MB
+MAX_VIDEO_BYTES = 5 * 1024 * 1024 * 1024  # 5 GB
 UPLOAD_CHUNK_BYTES = 1024 * 1024
 # Room above the limits for the multipart framing and form fields around the files.
 MULTIPART_OVERHEAD_BYTES = 1024 * 1024
@@ -363,6 +366,20 @@ class Conversion:
     # conversion for a pair of picks by matching these two.
     script: str | None = None
     provider: str | None = None
+    # True for a conversion that takes uploads up to MAX_VIDEO_BYTES instead of
+    # MAX_CONVERT_BYTES. A flag rather than a number, so the limit is read when a request
+    # comes in and not frozen into the registry.
+    large_upload: bool = False
+
+
+def _upload_limit(conv: Conversion) -> int:
+    return MAX_VIDEO_BYTES if conv.large_upload else MAX_CONVERT_BYTES
+
+
+def _size_label(size: int) -> str:
+    """A limit as it reads in a message: whole gigabytes as GB, anything else as MB."""
+    gigabytes, remainder = divmod(size, 1024**3)
+    return f"{gigabytes} GB" if gigabytes and not remainder else f"{size // (1024 * 1024)} MB"
 
 
 IMAGE_ONLY_OCR = (".png", ".gif", ".bmp", ".tiff", ".webp")
@@ -447,6 +464,15 @@ REGISTRY: list[Conversion] = [
                model_names=CLOUD_MODELS["anthropic"], group="llm",
                script="Handwriting", provider="anthropic",
                note="Sends the file to Anthropic's Claude. Slower, and it bills your key"),
+    # Video: Whisper for what is said, Tesseract for the screen. Local only, so one provider.
+    Conversion((".mp4",), "mp4->md", "Markdown (video, Whisper, free)", ".md",
+               via_model_params(lambda s, model, i, o, cancel: (
+                   mp4_md.convert_mp4_to_markdown(model, i, o, cancel))),
+               requires=("tesseract",), takes_model=True, large_upload=True,
+               model_names=mp4_md.WHISPER_MODELS, group="llm",
+               script="Video", provider="whisper",
+               caption="Used for what a video says and shows on screen",
+               note="Runs on your machine. Free, but slow, and a model downloads the first time it is used"),
 
     # --- office --------------------------------------------------------------
     Conversion((".pptx", ".ppt"), "pptx->md", "Markdown", ".md",
@@ -657,6 +683,13 @@ def local_models() -> dict:
     return {"models": sorted(models, key=lambda m: (llm_pdf_md.model_size(m["name"]), m["name"]))}
 
 
+@app.get("/api/speech-models")
+def speech_models() -> dict:
+    """The Whisper sizes the UI offers for video, smallest first. They download the first
+    time one is used, so unlike /api/local-models there is no installed flag to report."""
+    return {"models": list(mp4_md.WHISPER_MODELS)}
+
+
 @app.get("/api/cloud-models")
 def cloud_models() -> dict:
     """The fixed models each cloud provider offers, for the picker in the LLM tab.
@@ -694,13 +727,20 @@ class RejectOversizeBody:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and scope["method"] == "POST":
-            limit = MAX_COMBINE_BYTES if scope["path"] == "/api/combine" else MAX_CONVERT_BYTES
+            if scope["path"] == "/api/combine":
+                limit = MAX_COMBINE_BYTES
+            elif scope["path"] == "/api/convert":
+                # Which conversion this is sits in the form, which is not read yet. The most
+                # any of them takes gets through, and the handler holds it to its own limit.
+                limit = max(MAX_CONVERT_BYTES, MAX_VIDEO_BYTES)
+            else:
+                limit = MAX_CONVERT_BYTES
             declared = dict(scope["headers"]).get(b"content-length", b"")
             if declared.isdigit() and int(declared) > limit + MULTIPART_OVERHEAD_BYTES:
                 while (await receive()).get("more_body"):
                     pass
                 response = _error(
-                    f"The upload is larger than the {limit // (1024 * 1024)} MB limit.",
+                    f"The upload is larger than the {_size_label(limit)} limit.",
                     status=413,
                 )
                 await response(scope, receive, send)
@@ -755,7 +795,7 @@ def _model_problem(conv: Conversion, model: str | None) -> JSONResponse | None:
     return None
 
 
-_PAGE_PROGRESS = re.compile(r"Converting page \d+/\d+ \((\d+)%\)")
+_PAGE_PROGRESS = re.compile(r"Converting (?:page \d+/\d+|video) \((\d+)%\)")
 
 _SKIPPED_PAGE = re.compile(r"Skipping page (\d+)/(\d+), failed to convert: (.*)")
 _CANCELLED_AT = re.compile(r"Cancelled after page (\d+)/(\d+)")
@@ -790,7 +830,8 @@ def _plain_log(output: str) -> list[str]:
 
 
 def _latest_percent(output: str) -> int | None:
-    """The last percentage a converter printed (`Converting page 3/12 (25%)`), or None."""
+    """The last percentage a converter printed (`Converting page 3/12 (25%)` or
+    `Converting video (25%)`), or None."""
     matches = _PAGE_PROGRESS.findall(output)
     return int(matches[-1]) if matches else None
 
@@ -801,7 +842,7 @@ def progress(job_id: str) -> dict:
 
     The percent is None when the job isn't running (not started yet, still waiting for
     a free slot, or finished) or its converter prints no percentage, which is every
-    converter except the local-model one. `queued` is True while the job waits for a
+    converter except the local-model and video ones. `queued` is True while the job waits for a
     free slot behind other conversions.
     """
     output = _JOB_OUTPUT.get(job_id)
@@ -813,8 +854,8 @@ def progress(job_id: str) -> dict:
 
 @app.post("/api/convert/{job_id}/cancel")
 def cancel_convert(job_id: str):
-    """Signal a running conversion to stop. Only the local-model converter actually
-    checks the flag; other conversions ignore it and just run to completion."""
+    """Signal a running conversion to stop. Only the local-model and video converters
+    actually check the flag; other conversions ignore it and just run to completion."""
     event = _JOB_CANCEL.get(job_id)
     if event is None:
         return _error("No conversion is running for that job.", status=404)
@@ -838,10 +879,10 @@ def _stage_upload(upload: UploadFile, dest: Path, limit: int) -> int:
     return copied
 
 
-def _upload_size_problem(size: int) -> JSONResponse | None:
-    """The error response for a single upload that is too big or empty, else None."""
-    if size > MAX_CONVERT_BYTES:
-        return _error(f"File is larger than the {MAX_CONVERT_BYTES // (1024 * 1024)} MB limit.")
+def _upload_size_problem(size: int, limit: int) -> JSONResponse | None:
+    """The error response for a single upload that is over `limit` or empty, else None."""
+    if size > limit:
+        return _error(f"File is larger than the {_size_label(limit)} limit.")
     if not size:
         return _error("The uploaded file is empty.")
     return None
@@ -862,7 +903,9 @@ def detect(file: UploadFile = File(...)):
     # Staged to disk because libmagic needs a real file to identify these formats.
     with job_workspace() as (_job_dir, job_in, _job_out):
         staged = job_in / raw_name
-        if problem := _upload_size_problem(_stage_upload(file, staged, MAX_CONVERT_BYTES)):
+        if problem := _upload_size_problem(
+            _stage_upload(file, staged, MAX_CONVERT_BYTES), MAX_CONVERT_BYTES
+        ):
             return problem
         mismatch = sniff_mismatch(staged)
 
@@ -914,7 +957,8 @@ def convert(
         # ext was lowercased above, so the staged name is lowercase whatever the upload
         # was called.
         staged = job_in / f"{stem}{ext}"
-        if problem := _upload_size_problem(_stage_upload(file, staged, MAX_CONVERT_BYTES)):
+        limit = _upload_limit(conv)
+        if problem := _upload_size_problem(_stage_upload(file, staged, limit), limit):
             return problem
 
         if job_id:
