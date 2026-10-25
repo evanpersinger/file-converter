@@ -53,15 +53,30 @@ def run_tool(command: list[str], **kwargs) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
+def _ocr(read, image, **kwargs):
+    """Call a pytesseract reader with a time limit, turning its timeout into a ToolTimeout."""
+    try:
+        return read(image, timeout=TOOL_TIMEOUT_SECONDS, **kwargs)
+    except RuntimeError as exc:
+        if str(exc) == _PYTESSERACT_TIMEOUT_MESSAGE:
+            raise ToolTimeout(f"tesseract took longer than {TOOL_TIMEOUT_SECONDS} seconds") from None
+        raise
+
+
 def ocr_text(image, **kwargs) -> str:
     """pytesseract.image_to_string with a time limit.
 
     Raises:
         ToolTimeout: If tesseract runs longer than TOOL_TIMEOUT_SECONDS.
     """
-    try:
-        return pytesseract.image_to_string(image, timeout=TOOL_TIMEOUT_SECONDS, **kwargs)
-    except RuntimeError as exc:
-        if str(exc) == _PYTESSERACT_TIMEOUT_MESSAGE:
-            raise ToolTimeout(f"tesseract took longer than {TOOL_TIMEOUT_SECONDS} seconds") from None
-        raise
+    return _ocr(pytesseract.image_to_string, image, **kwargs)
+
+
+def ocr_data(image, **kwargs) -> dict:
+    """pytesseract.image_to_data with a time limit: every word tesseract found, with its
+    confidence (0-100) and where it sits, as lists keyed by column name.
+
+    Raises:
+        ToolTimeout: If tesseract runs longer than TOOL_TIMEOUT_SECONDS.
+    """
+    return _ocr(pytesseract.image_to_data, image, output_type=pytesseract.Output.DICT, **kwargs)

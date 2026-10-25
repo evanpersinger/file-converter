@@ -12,7 +12,7 @@ import pytesseract
 from PIL import Image
 
 import external_tool
-from external_tool import ToolTimeout, ocr_text, run_tool
+from external_tool import ToolTimeout, ocr_data, ocr_text, run_tool
 
 
 def test_run_tool_captures_output_and_exit_code() -> None:
@@ -77,6 +77,20 @@ def test_ocr_text_stops_a_hung_tesseract_with_a_clear_error(
 
     with pytest.raises(ToolTimeout, match="tesseract took longer than 1 seconds"):
         ocr_text(Image.new("RGB", (10, 10)))
+
+
+def test_ocr_data_stops_a_hung_tesseract_with_a_clear_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # image_to_data asks for the version before it reads anything, so the fake has to answer.
+    _fake_tesseract(
+        tmp_path, monkeypatch,
+        'if [ "$1" = "--version" ]; then echo "tesseract 5.3.0"; exit 0; fi\nexec sleep 30',
+    )
+    monkeypatch.setattr(external_tool, "TOOL_TIMEOUT_SECONDS", 1)
+
+    with pytest.raises(ToolTimeout, match="tesseract took longer than 1 seconds"):
+        ocr_data(Image.new("RGB", (10, 10)))
 
 
 def test_ocr_text_leaves_other_tesseract_errors_alone(
