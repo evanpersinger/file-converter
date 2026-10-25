@@ -449,8 +449,9 @@ REGISTRY: list[Conversion] = [
                note="Sends the file to Anthropic's Claude. Slower, and it bills your key"),
 
     # --- office --------------------------------------------------------------
-    Conversion((".pptx",), "pptx->md", "Markdown", ".md",
-               via_params(lambda s, i, o: pptx_md.convert_pptx_to_markdown(i, o))),
+    Conversion((".pptx", ".ppt"), "pptx->md", "Markdown", ".md",
+               via_params(lambda s, i, o: pptx_md.convert_pptx_to_markdown(i, o)),
+               note="An old .ppt needs LibreOffice installed, a .pptx does not"),
     Conversion((".pptx", ".ppt"), "pptx->pdf", "PDF", ".pdf",
                via_params(lambda s, i, o: pptx_pdf.convert_pptx_to_pdf(i, o)),
                requires=("libreoffice",)),

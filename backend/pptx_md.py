@@ -1,7 +1,8 @@
-"""Convert PowerPoint (.pptx) files to Markdown.
+"""Convert PowerPoint (.pptx and the older .ppt) files to Markdown.
 
-For each .pptx in input/, walks every slide with python-pptx, adds a `## Slide N`
-heading, promotes large-font text to subheadings, and writes the text to output/.
+For each .pptx or .ppt in input/, walks every slide with python-pptx, adds a `## Slide N`
+heading, promotes large-font text to subheadings, and writes the text to output/. A .ppt is
+first saved as a .pptx by LibreOffice, since python-pptx can't read the old format.
 """
 
 import io
@@ -14,7 +15,9 @@ from pptx import Presentation
 from pptx.shapes.group import GroupShape
 
 import compress
+import pptx_pdf
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+from external_tool import run_tool
 
 # Where python-pptx keeps embedded pictures inside the .pptx zip.
 _MEDIA_PREFIX = "ppt/media/"
@@ -151,21 +154,45 @@ def _extract_with_compression(pptx_file: str) -> str:
         return extract_text_from_pptx(str(staged))
 
 
+def _ppt_to_pptx(source: Path, outdir: Path) -> Path:
+    """Have headless LibreOffice save an old .ppt as a .pptx in `outdir`, and return its path."""
+    executable = pptx_pdf._find_libreoffice()
+    if not executable:
+        raise RuntimeError(pptx_pdf.LIBREOFFICE_NOT_FOUND)
+
+    # A throwaway profile per call, because two LibreOffice runs sharing the default one
+    # collide and one of them fails.
+    with tempfile.TemporaryDirectory() as profile_dir:
+        result = run_tool(
+            [executable, '--headless', f'-env:UserInstallation={Path(profile_dir).as_uri()}',
+             '--convert-to', 'pptx', '--outdir', str(outdir), str(source)],
+        )
+    converted = outdir / f"{source.stem}.pptx"
+    if result.returncode != 0 or not converted.exists():
+        raise RuntimeError(result.stderr.strip() or "LibreOffice could not open the file")
+    return converted
+
+
 def _write_markdown(source: Path, dest: Path) -> None:
-    # Extract text and format as markdown
-    dest.write_text(_extract_with_compression(str(source)), encoding='utf-8')
+    with tempfile.TemporaryDirectory() as tmp:
+        if source.suffix.lower() == '.ppt':
+            source = _ppt_to_pptx(source, Path(tmp))
+        # Extract text and format as markdown
+        dest.write_text(_extract_with_compression(str(source)), encoding='utf-8')
 
 
 def convert_pptx_to_markdown(
     input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
 ) -> str:
-    """Convert all PPTX files in the input folder to Markdown files in the output folder.
+    """Convert all PPTX and PPT files in the input folder to Markdown files in the output folder.
+
+    A .ppt needs LibreOffice installed, a .pptx does not.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
     return convert_files(
-        input_dir, output_dir, ('.pptx',), ('.md',), _write_markdown, target_label="markdown"
+        input_dir, output_dir, ('.pptx', '.ppt'), ('.md',), _write_markdown, target_label="markdown"
     )
 
 

@@ -10,6 +10,13 @@ from pathlib import Path
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 from external_tool import ToolTimeout, run_tool
 
+LIBREOFFICE_NOT_FOUND = (
+    "LibreOffice not found in PATH. On macOS (Homebrew cask): "
+    "brew install --cask libreoffice. If already installed via .app, add a "
+    "symlink: sudo ln -s /Applications/LibreOffice.app/Contents/MacOS/soffice "
+    "/usr/local/bin/soffice"
+)
+
 
 def _find_libreoffice() -> str | None:
     """Resolve the LibreOffice executable across platforms, or None if there isn't one."""
@@ -44,12 +51,7 @@ def convert_pptx_to_pdf(
         nonlocal executable
         executable = _find_libreoffice()
         if not executable:
-            return (
-                "LibreOffice not found in PATH. On macOS (Homebrew cask): "
-                "brew install --cask libreoffice. If already installed via .app, add a "
-                "symlink: sudo ln -s /Applications/LibreOffice.app/Contents/MacOS/soffice "
-                "/usr/local/bin/soffice"
-            )
+            return LIBREOFFICE_NOT_FOUND
         print(f"Using LibreOffice executable: {executable}")
         return None
 
