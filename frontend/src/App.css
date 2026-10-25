@@ -49,6 +49,11 @@
   --page-edge: calc(2rem + max(0px, (100cqw - 97rem) / 2));
 }
 
+/* Display: flex above would otherwise win over the hidden attribute. */
+.layout[hidden] {
+  display: none;
+}
+
 .sidebar {
   flex: none;
   box-sizing: border-box;

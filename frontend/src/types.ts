@@ -8,7 +8,7 @@ export interface Target {
   note?: string
   /** A short sentence under its Markdown format button in the LLM tab. */
   caption?: string
-  /** The LLM tab's Markdown format ("Typed PDF") and the provider running it ("local", "openai", "anthropic"). Null outside the LLM tab. */
+  /** The LLM tab's Markdown format ("Typed PDF") and the provider running it ("local", "openai", "anthropic", "whisper"). Null outside the LLM tab. */
   script: string | null
   provider: string | null
 }

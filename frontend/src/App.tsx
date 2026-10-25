@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   cancelConversion, combine, convert, detect, extensionOf, getCloudModels, getFormats, getLocalModels,
+  getSpeechModels,
 } from './api'
 import type {
   CloudProvider, FormatMap, LocalModel, Mismatch, ModelGroupData, PickedModel,
 } from './types'
 import FileViewer from './FileViewer'
-import { combineLimitMessage, convertLimitMessage, overConvertLimit } from './limits'
+import { combineLimitMessage, convertLimitMessage, overDetectLimit } from './limits'
 import ModelGroup from './ModelGroup'
 import ProgressBar from './ProgressBar'
 import { useProgress } from './useProgress'
@@ -128,6 +129,26 @@ function cloudGroup(
   }
 }
 
+// The Whisper sizes, which run on this machine like the Ollama models do. They download the
+// first time one is used, so unlike those there is nothing to say about whether one is there.
+function speechGroup(models: string[] | null): ModelGroupData {
+  return {
+    provider: 'whisper',
+    title: 'Speech models',
+    message:
+      models === null ? 'Loading models...'
+        : models.length === 0 ? 'Could not load models'
+          : undefined,
+    models: (models ?? []).map((name) => ({ name })),
+  }
+}
+
+// Greys out every model in a group, saying why on hover. The reason replaces any a model
+// already had, since fixing that one would not make the group able to run this file.
+function blockGroup(group: ModelGroupData, reason: string): ModelGroupData {
+  return { ...group, models: group.models.map((m) => ({ ...m, blocked: reason })) }
+}
+
 type Tab = 'convert' | 'llm'
 
 const TABS: { id: Tab; label: string }[] = [
@@ -135,8 +156,9 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'llm', label: 'Convert Files (LLM)' },
 ]
 
-// The tab bar and the converter under it. The converter stays mounted across tabs, so the
-// picked files and the Result column carry over, only the format column changes.
+// The tab bar and a converter for each tab. Both stay mounted and the inactive one is hidden,
+// so each tab keeps its own files, results and picks, and a conversion keeps running while
+// the other tab is showing.
 export default function App() {
   const [tab, setTab] = useState<Tab>('convert')
 
@@ -157,12 +179,14 @@ export default function App() {
         ))}
       </div>
 
-      <Converter tab={tab} />
+      {TABS.map((t) => (
+        <Converter key={t.id} tab={t.id} active={tab === t.id} />
+      ))}
     </div>
   )
 }
 
-function Converter({ tab }: { tab: Tab }) {
+function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   const [formats, setFormats] = useState<FormatMap | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
@@ -178,20 +202,12 @@ function Converter({ tab }: { tab: Tab }) {
   const [localModels, setLocalModels] = useState<LocalModel[] | null>(null)
   // Same idea for the cloud providers' models, by provider name.
   const [cloudModels, setCloudModels] = useState<Record<string, CloudProvider> | null>(null)
+  // The Whisper sizes for video, null while loading.
+  const [speechModels, setSpeechModels] = useState<string[] | null>(null)
   // The two picks in the LLM tab. They are independent, and together decide the route: the
   // Markdown format names the script, the model's provider names which of its routes runs.
   const [script, setScript] = useState<string | null>(null)
   const [model, setModel] = useState<PickedModel | null>(null)
-  // Switching tabs drops the pick made in the other one, so a format chosen under Convert
-  // can't be run from the LLM tab, or the reverse. Adjusted during render rather than in
-  // an effect, so the old pick never gets a frame on screen.
-  const [shownTab, setShownTab] = useState(tab)
-  if (tab !== shownTab) {
-    setShownTab(tab)
-    setTarget(null)
-    setScript(null)
-    setModel(null)
-  }
   // Set while a conversion is running, so the backend can be asked how far along it is.
   const [jobId, setJobId] = useState<string | null>(null)
   // True once Cancel has been clicked for the current job, so the button can't be
@@ -219,6 +235,7 @@ function Converter({ tab }: { tab: Tab }) {
     getFormats().then(setFormats).catch((e: Error) => setLoadError(e.message))
     getLocalModels().then(setLocalModels).catch(() => setLocalModels([]))
     getCloudModels().then(setCloudModels).catch(() => setCloudModels({}))
+    getSpeechModels().then(setSpeechModels).catch(() => setSpeechModels([]))
   }, [])
 
   // Release a blob URL once it is no longer in `result`, whether a new conversion
@@ -277,11 +294,20 @@ function Converter({ tab }: { tab: Tab }) {
   // The LLM tab's route, once both a Markdown format and a model are picked.
   const llmRoute = llmTargets.find((t) => t.script === script && t.provider === model?.provider) ?? null
   const llmScripts = llmScriptsIn(formats)
+  // With a file loaded, a group with no route for its type is greyed out, since picking one
+  // of its models could never run. A route that is only blocked (no API key, Ollama off)
+  // still counts, that group has its own reason to show.
+  const providersForFile = new Set([...llmTargets, ...llmBlocked].map((t) => t.provider))
   const modelGroups = [
     localGroup(localModels),
     cloudGroup('openai', 'OpenAI models', cloudModels),
     cloudGroup('anthropic', 'Anthropic models', cloudModels),
-  ]
+    speechGroup(speechModels),
+  ].map((g) =>
+    formats && files.length > 0 && !providersForFile.has(g.provider)
+      ? blockGroup(g, `These models cannot convert ${ext || 'this file'}`)
+      : g,
+  )
 
   // What Convert runs, and what is still missing when it can't.
   const runTarget = tab === 'llm' ? (llmRoute?.id ?? null) : target
@@ -301,7 +327,7 @@ function Converter({ tab }: { tab: Tab }) {
     latestPick.current = file
     // The server refuses to inspect a file over the convert limit, and only after taking the
     // whole upload, so don't send one just to be turned away.
-    if (overConvertLimit(file)) return
+    if (overDetectLimit(file)) return
     // Advisory only. If the check itself fails there is nothing useful to say, so
     // it stays silent rather than showing an error for a file that may convert fine.
     detect(file)
@@ -491,7 +517,7 @@ function Converter({ tab }: { tab: Tab }) {
         : `${files.length} files`
 
   return (
-    <div className="layout" data-tab={tab}>
+    <div className="layout" data-tab={tab} hidden={!active}>
       <aside className="sidebar" hidden={tab !== 'convert'}>
         <h2>Convert to</h2>
 
@@ -525,7 +551,11 @@ function Converter({ tab }: { tab: Tab }) {
         </div>
 
         {files.length > 0 && targets.length === 0 && (
-          <p className="muted">Nothing can convert {ext || 'this file'} yet</p>
+          <p className="muted">
+            {llmTargets.length > 0 || llmBlocked.length > 0
+              ? `${ext} can only be converted in the LLM tab`
+              : `Nothing can convert ${ext || 'this file'} yet`}
+          </p>
         )}
 
         {variants.map((v) => (

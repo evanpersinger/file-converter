@@ -18,6 +18,16 @@ export async function getLocalModels(): Promise<LocalModel[]> {
   return payload.models
 }
 
+/** The Whisper sizes to offer for video. */
+export async function getSpeechModels(): Promise<string[]> {
+  const response = await fetch('/api/speech-models')
+  if (!response.ok) {
+    throw new Error('Could not load the speech models.')
+  }
+  const payload: { models: string[] } = await response.json()
+  return payload.models
+}
+
 /** The models each cloud provider offers, by provider name. */
 export async function getCloudModels(): Promise<Record<string, CloudProvider>> {
   const response = await fetch('/api/cloud-models')
