@@ -10,6 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 import jpg_svg
 
@@ -56,6 +57,22 @@ def test_the_traced_output_contains_vector_paths(
     svg = (output_dir / "logo.svg").read_text()
     assert "<svg" in svg
     assert "<path" in svg
+
+
+def test_a_phone_photo_is_traced_the_way_up_it_displays(work_dirs: WorkDirs) -> None:
+    """A phone photo is stored sideways with an orientation tag, and vtracer ignores the
+    tag, so the canvas would come out sideways."""
+    input_dir, output_dir = work_dirs
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    Image.new("RGB", (8, 4), "red").save(input_dir / "phone.jpg", "JPEG", exif=exif)
+
+    jpg_svg.convert_jpg_to_svg(input_dir, output_dir)
+
+    svg = (output_dir / "phone.svg").read_text()
+    assert svg.lstrip().startswith("<?xml")
+    assert 'width="4"' in svg
+    assert 'height="8"' in svg
 
 
 @pytest.mark.parametrize("filename", ["logo.jpg", "logo.jpeg", "logo.JPG", "logo.JPEG"])
