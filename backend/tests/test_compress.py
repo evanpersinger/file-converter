@@ -6,12 +6,19 @@ about zip entries and a media prefix, not any particular Office format.
 
 import io
 import random
+import shutil
 import zipfile
 from pathlib import Path
 
-from PIL import Image
+import pytest
+from PIL import Image, ImageDraw, ImageFont
 
 import compress
+from external_tool import ocr_text
+
+needs_tesseract = pytest.mark.skipif(
+    shutil.which("tesseract") is None, reason="tesseract is not installed"
+)
 
 
 def _write_zip(path: Path, entries: dict[str, bytes]) -> None:
@@ -130,3 +137,28 @@ def test_has_compressible_media_false_for_vector_only(tmp_path: Path) -> None:
     path = tmp_path / "deck.pptx"
     _write_zip(path, {"ppt/media/image1.svg": b"<svg/>"})
     assert compress.has_compressible_media(path, "ppt/media/") is False
+
+
+@needs_tesseract
+def test_text_in_a_downscaled_picture_still_reads_the_same(tmp_path: Path) -> None:
+    # A 4K screenshot of a slide, with body-sized text, is the case the cap has to survive
+    original = Image.new("RGB", (3840, 2160), "white")
+    ImageDraw.Draw(original).text(
+        (200, 900), "Quarterly revenue report", fill="black",
+        font=ImageFont.load_default(size=50),
+    )
+    buffer = io.BytesIO()
+    original.save(buffer, "PNG")
+    path = tmp_path / "deck.pptx"
+    _write_zip(path, {"ppt/media/image1.png": buffer.getvalue()})
+
+    compress.compress_office_zip(path, "ppt/media/", _noop_sanity_check)
+
+    with zipfile.ZipFile(path) as archive:
+        shrunk = Image.open(io.BytesIO(archive.read("ppt/media/image1.png")))
+        shrunk.load()
+    assert max(shrunk.size) <= compress._MAX_DIMENSION
+    before = " ".join(ocr_text(original).lower().split())
+    after = " ".join(ocr_text(shrunk).lower().split())
+    assert "quarterly revenue report" in before
+    assert after == before
