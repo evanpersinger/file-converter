@@ -51,10 +51,13 @@ def words(text: str, confidence: float = 95) -> Words:
 
 
 class FakeWhisper:
-    def __init__(self, segments: list[Segment]) -> None:
+    def __init__(self, model: str, segments: list[Segment]) -> None:
+        self.model = model
         self.segments = segments
+        self.hotwords: object = "not asked"
 
     def transcribe(self, path: str, **kwargs: object) -> tuple:
+        self.hotwords = kwargs.get("hotwords")
         return iter(self.segments), SimpleNamespace(duration=6.0)
 
 
@@ -62,17 +65,17 @@ def use_fakes(
     monkeypatch: pytest.MonkeyPatch,
     segments: list[Segment],
     reading: Callable[[np.ndarray], Words],
-) -> list[str]:
-    """Swap in the fake Whisper and OCR. Returns the model names Whisper is asked to load."""
-    loaded: list[str] = []
+) -> list[FakeWhisper]:
+    """Swap in the fake Whisper and OCR. Returns the fake models Whisper was asked to load."""
+    whispers: list[FakeWhisper] = []
 
     def load(model: str, **kwargs: object) -> FakeWhisper:
-        loaded.append(model)
-        return FakeWhisper(segments)
+        whispers.append(FakeWhisper(model, segments))
+        return whispers[-1]
 
     monkeypatch.setattr(mp4_md, "WhisperModel", load)
     monkeypatch.setattr(mp4_md, "ocr_data", lambda image, **kwargs: reading(image))
-    return loaded
+    return whispers
 
 
 def slide_text(image: np.ndarray) -> str:
@@ -110,6 +113,54 @@ def test_ocr_noise_lines_are_dropped_and_the_rest_joined() -> None:
     assert mp4_md._clean("Hello\n|\nx\n  World  \n") == "Hello / World"
 
 
+def test_hint_words_are_the_names_on_screen_most_seen_first() -> None:
+    shown = [
+        (0.0, "Welcome Kirsten Moisey and Demyon Plekhov"),
+        (9.0, "Kirsten Moisey on power"),
+        (20.0, "Power matters. Moisey’s view"),
+    ]
+
+    # "Power" is left out because "power" also appears, and "Moisey’s" counts as Moisey.
+    assert mp4_md._hint_words(shown) == "Moisey Kirsten Welcome Demyon Plekhov"
+
+
+def test_hint_words_skip_short_words_and_stop_at_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mp4_md, "MAX_HINT_WORDS", 2)
+
+    assert mp4_md._hint_words([(0.0, "Q3 Ann Alpha Bravo Charlie")]) == "Alpha Bravo"
+
+
+def test_there_are_no_hint_words_without_screen_text() -> None:
+    assert mp4_md._hint_words([]) == ""
+
+
+def test_names_on_screen_are_handed_to_whisper_as_hints(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_video(input_dir / "clip.mp4")
+    whispers = use_fakes(
+        monkeypatch, [Segment(start=1.0, end=2.0, text="Hello")],
+        lambda image: words("Kirsten Moisey presents" if image.mean() > 128 else "Demyon Plekhov follows"),
+    )
+
+    mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+
+    assert whispers[0].hotwords == "Kirsten Moisey Demyon Plekhov"
+
+
+def test_whisper_gets_no_hints_when_nothing_is_on_screen(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_video(input_dir / "clip.mp4")
+    whispers = use_fakes(monkeypatch, [Segment(start=1.0, end=2.0, text="Hello")], lambda image: words(""))
+
+    mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+
+    assert whispers[0].hotwords is None
+
+
 def test_a_frame_is_read_line_by_line(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mp4_md, "ocr_data", lambda image: words("Title\nBody text"))
 
@@ -122,6 +173,15 @@ def test_words_tesseract_is_unsure_of_are_left_out(monkeypatch: pytest.MonkeyPat
     )
 
     assert mp4_md._read_frame(None) == "Hello Agenda"
+
+
+def test_a_word_between_the_two_cutoffs_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dropping "isn't" would turn "Power isn't just for leaders" into its opposite."""
+    monkeypatch.setattr(
+        mp4_md, "ocr_data", lambda image: rows([("Power", 95), ("isn't", 65), ("just", 90)])
+    )
+
+    assert mp4_md._read_frame(None) == "Power isn't just"
 
 
 def test_a_frame_that_is_mostly_unsure_words_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -143,12 +203,12 @@ def test_an_unknown_model_is_refused_before_anything_loads(
 ) -> None:
     input_dir, output_dir = work_dirs
     write_video(input_dir / "clip.mp4")
-    loaded = use_fakes(monkeypatch, [], slide)
+    whispers = use_fakes(monkeypatch, [], slide)
 
     summary = mp4_md.convert_mp4_to_markdown("gpt-4", input_dir, output_dir)
 
     assert summary.startswith("Error: 'gpt-4' is not a Whisper model")
-    assert loaded == []
+    assert whispers == []
 
 
 def test_speech_and_screen_text_land_on_one_timeline(
@@ -160,12 +220,12 @@ def test_speech_and_screen_text_land_on_one_timeline(
         Segment(start=1.0, end=2.0, text=" Hello there "),
         Segment(start=5.0, end=6.0, text="Goodbye"),
     ]
-    loaded = use_fakes(monkeypatch, segments, slide)
+    whispers = use_fakes(monkeypatch, segments, slide)
 
     summary = mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
 
     assert "clip.md" in summary
-    assert loaded == ["tiny"]
+    assert [whisper.model for whisper in whispers] == ["tiny"]
     assert (output_dir / "clip.md").read_text(encoding="utf-8") == (
         "**00:00** On screen: SLIDE ONE\n\n**00:01** Said: Hello there\n\n"
         "**00:04** On screen: SLIDE TWO\n\n**00:05** Said: Goodbye"

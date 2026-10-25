@@ -5,6 +5,7 @@
 import difflib
 import re
 import sys
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
@@ -27,18 +28,25 @@ SAME_PICTURE_DIFF = 2.0
 # How alike two readings of a screen must be (0-1) to count as the same text. OCR reads one
 # slide a little differently from frame to frame.
 SAME_TEXT_RATIO = 0.9
-# Tesseract rates each word it reads from 0 to 100. Below MIN_WORD_CONFIDENCE a word is not
-# trusted and is left out. A frame where fewer than MIN_CONFIDENT_SHARE of the words are
-# trusted, such as a fade between two slides, is not used at all. Clean slide text reads in
-# the 90s, and the garbled words of a half-faded slide anywhere from 9 to 77.
-MIN_WORD_CONFIDENCE = 80
-MIN_CONFIDENT_SHARE = 0.5
+# Tesseract rates each word it reads from 0 to 100. A frame is used only if at least
+# MIN_SURE_SHARE of its words reach SURE_CONFIDENCE, which a fade between two slides does not
+# manage: clean slide text reads in the 90s and the garbled words of a half-faded slide in the
+# 9 to 77 range. Within a frame that passes, a word under MIN_WORD_CONFIDENCE is left out.
+# That one is kept low on purpose, real words like "isn't" or "what is" often land between 50
+# and 80, and losing one can flip a sentence.
+SURE_CONFIDENCE = 80
+MIN_SURE_SHARE = 0.5
+MIN_WORD_CONFIDENCE = 50
 # Frames are compared at this size, which is enough to tell pictures apart.
 COMPARE_SIZE = (64, 36)
 # Screen reading is the first half of the progress, transcribing the second.
 SCREEN_SHARE = 50
+# The most words handed to Whisper as spelling hints. They share its prompt (about 224 tokens)
+# with the text it has just written.
+MAX_HINT_WORDS = 30
 
 _MARKDOWN_SPECIALS = re.compile(r"([\\`*_\[\]<])")
+_WORD = re.compile(r"[A-Za-z]+(?:[-'’][A-Za-z]+)*")
 
 
 def _report(percent: int) -> None:
@@ -55,7 +63,7 @@ def _read_frame(gray) -> str | None:
     """The text on a frame, "" when there is none, or None when Tesseract cannot read it well."""
     data = ocr_data(gray)
     lines: dict[tuple[int, int, int], list[str]] = {}
-    seen = confident = 0
+    seen = sure = 0
     for text, conf, block, paragraph, line in zip(
         data["text"], data["conf"], data["block_num"], data["par_num"], data["line_num"]
     ):
@@ -63,10 +71,10 @@ def _read_frame(gray) -> str | None:
         if not word:
             continue
         seen += 1
+        sure += float(conf) >= SURE_CONFIDENCE
         if float(conf) >= MIN_WORD_CONFIDENCE:
-            confident += 1
             lines.setdefault((block, paragraph, line), []).append(word)
-    if confident < MIN_CONFIDENT_SHARE * seen:
+    if sure < MIN_SURE_SHARE * seen:
         return None
     return _clean("\n".join(" ".join(words) for words in lines.values()))
 
@@ -112,11 +120,32 @@ def _screen_text(path: Path, should_cancel: Callable[[], bool]) -> list[tuple[fl
         video.release()
 
 
+def _hint_words(shown: list[tuple[float, str]]) -> str:
+    """Names and terms from the on-screen text, to hand Whisper so it spells them the way the
+    slides do. Only words that are capitalized everywhere they appear count: one that also
+    shows up lowercase ("Power" and "power") is an ordinary word. The ones seen most often
+    come first, since a name comes back on slide after slide.
+    """
+    words = [re.sub(r"['’]s$", "", w) for w in _WORD.findall(" ".join(text for _, text in shown))]
+    words = [w for w in words if len(w) >= 4]
+    lowercase = {w for w in words if w == w.lower()}
+    forms: dict[str, str] = {}
+    counts: Counter[str] = Counter()
+    for word in words:
+        if word[0].isupper() and word.lower() not in lowercase:
+            forms.setdefault(word.lower(), word)
+            counts[word.lower()] += 1
+    # sorted is stable, so words seen equally often stay in the order they first appeared
+    ranked = sorted(counts, key=lambda key: -counts[key])
+    return " ".join(forms[key] for key in ranked[:MAX_HINT_WORDS])
+
+
 def _speech(
-    path: Path, whisper: WhisperModel, should_cancel: Callable[[], bool]
+    path: Path, whisper: WhisperModel, should_cancel: Callable[[], bool], hints: str = ""
 ) -> list[tuple[float, str]]:
-    """What was said, as (seconds, text) for each stretch of speech Whisper found."""
-    segments, info = whisper.transcribe(str(path), vad_filter=True)
+    """What was said, as (seconds, text) for each stretch of speech Whisper found. `hints` are
+    words it should spell the way they are written there, or "" for none."""
+    segments, info = whisper.transcribe(str(path), vad_filter=True, hotwords=hints or None)
     said = []
     for segment in segments:
         if should_cancel():
@@ -174,7 +203,7 @@ def convert_mp4_to_markdown(
         # Loaded first, so a model that can't load fails before minutes of screen reading.
         whisper = WhisperModel(model, device="cpu", compute_type="int8")
         shown = _screen_text(source, should_cancel)
-        said = _speech(source, whisper, should_cancel)
+        said = _speech(source, whisper, should_cancel, _hint_words(shown))
         print("\rConverting video (100%)")
         if not shown and not said:
             raise ValueError("no speech or on-screen text found")
