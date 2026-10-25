@@ -15,6 +15,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
 from external_tool import ToolTimeout, ocr_text
+from image_convert import upright
 
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp'}
 
@@ -120,7 +121,7 @@ def clean_text(text):
 def convert_simple(image_path):
     """Convert a plain-text screenshot to text using multiple preprocessing passes."""
     try:
-        image = Image.open(image_path)
+        image = upright(Image.open(image_path))
         processed_images = preprocess_image(image)
 
         custom_config = r'--oem 3 --psm 6'
@@ -642,7 +643,7 @@ def clean_structured_text(text, is_table=False):
 def convert_structured(image_path):
     """Convert an image with tables/structured content to formatted text."""
     try:
-        image = Image.open(image_path)
+        image = upright(Image.open(image_path))
         processed_image, table_cells = detect_table_structure(image)
 
         # Extract from detected cells first

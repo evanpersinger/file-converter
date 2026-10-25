@@ -6,10 +6,11 @@ and that is where the guessing happens: rejoining split lines and correcting the
 characters OCR habitually gets wrong.
 """
 
+import shutil
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 import ss_txt
 from external_tool import ToolTimeout
@@ -199,3 +200,25 @@ def test_a_tesseract_timeout_fails_the_image_instead_of_trying_the_next_pass(
 
     assert convert(str(image_path)) is None
     assert len(calls) == 1
+
+
+# A photo stored sideways
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract is not installed")
+@pytest.mark.parametrize("convert", [convert_simple, convert_structured])
+def test_a_sideways_phone_photo_of_text_is_read_the_right_way_up(
+    convert, tmp_path: Path
+) -> None:
+    """A phone stores a portrait photo sideways plus an orientation tag, and Tesseract
+    reads the sideways pixels as garbage."""
+    page = Image.new("RGB", (900, 200), "white")
+    ImageDraw.Draw(page).text(
+        (30, 60), "Quarterly revenue report", fill="black", font=ImageFont.load_default(size=60)
+    )
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    image_path = tmp_path / "phone.jpg"
+    page.rotate(90, expand=True).save(image_path, "JPEG", exif=exif)
+
+    assert "quarterly revenue report" in convert(str(image_path)).lower()
