@@ -167,6 +167,20 @@ def test_a_narrower_image_is_centred(work_dirs: WorkDirs) -> None:
         assert img.size == (10, 16)
 
 
+def test_a_phone_photo_is_stacked_the_way_up_it_displays(work_dirs: WorkDirs) -> None:
+    """A phone photo is stored sideways with an orientation tag, so stacking it as stored
+    gives the wrong canvas."""
+    input_dir, output_dir = work_dirs
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    for name in ("one.jpg", "two.jpg"):
+        Image.new("RGB", (8, 4), "red").save(input_dir / name, "JPEG", exif=exif)
+
+    assert combine(work_dirs, ["one.jpg", "two.jpg"]) is True
+    with Image.open(output_dir / "combined.jpg") as img:
+        assert img.size == (4, 16)
+
+
 def test_text_files_keep_the_order_they_were_passed(work_dirs: WorkDirs) -> None:
     """The list order is deliberately left alone rather than sorted, so the caller
     decides the merge order."""

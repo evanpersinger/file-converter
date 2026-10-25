@@ -12,7 +12,8 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
-        
+from image_convert import upright
+
         
 
 
@@ -148,7 +149,7 @@ def combine_files(
             
             # Load all images
             for img_path in file_types['image']:
-                img = Image.open(img_path)
+                img = upright(Image.open(img_path))
                 images.append(img)
                 max_width = max(max_width, img.width)
                 total_height += img.height
