@@ -3,6 +3,9 @@
 The decks are built with python-pptx in each test, so there are no binary fixtures.
 """
 
+import shutil
+import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -10,8 +13,16 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 
 import pptx_md
+import pptx_pdf
 
 TITLE_ONLY_LAYOUT = 5
+
+WorkDirs = tuple[Path, Path]
+
+needs_libreoffice = pytest.mark.skipif(
+    not any(shutil.which(name) for name in ("libreoffice", "soffice")),
+    reason="LibreOffice is not on PATH",
+)
 
 
 def new_slide():
@@ -200,3 +211,57 @@ def test_text_inside_a_nested_group_is_kept(tmp_path: Path) -> None:
     inner.shapes.add_textbox(Inches(5), Inches(1.5), Inches(3), Inches(1)).text_frame.text = "NESTEDTEXT"
 
     assert "NESTEDTEXT" in extract(prs, tmp_path)
+
+
+def test_an_old_ppt_is_saved_as_pptx_by_libreoffice_then_read(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "deck.ppt").write_bytes(b"placeholder")
+    commands: list[list[str]] = []
+
+    def fake_libreoffice(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        commands.append(command)
+        prs, slide = new_slide()
+        slide.shapes.title.text = "FROMOLDDECK"
+        prs.save(Path(command[command.index("--outdir") + 1]) / "deck.pptx")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pptx_pdf, "_find_libreoffice", lambda: "soffice")
+    monkeypatch.setattr(pptx_md, "run_tool", fake_libreoffice)
+
+    pptx_md.convert_pptx_to_markdown(input_dir, output_dir)
+
+    command = commands[0]
+    assert command[command.index("--convert-to") + 1] == "pptx"
+    assert command[-1] == str(input_dir / "deck.ppt")
+    assert "FROMOLDDECK" in (output_dir / "deck.md").read_text(encoding="utf-8")
+
+
+def test_a_ppt_without_libreoffice_fails_alone_and_a_pptx_still_converts(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "old.ppt").write_bytes(b"placeholder")
+    prs, slide = new_slide()
+    slide.shapes.title.text = "NEWDECK"
+    prs.save(input_dir / "new.pptx")
+    monkeypatch.setattr(pptx_pdf, "_find_libreoffice", lambda: None)
+
+    summary = pptx_md.convert_pptx_to_markdown(input_dir, output_dir)
+
+    assert "NEWDECK" in (output_dir / "new.md").read_text(encoding="utf-8")
+    assert "1 failed: old.ppt: LibreOffice not found in PATH" in summary
+
+
+@needs_libreoffice
+def test_real_libreoffice_lets_an_old_ppt_be_read(
+    work_dirs: WorkDirs, write_ppt: Callable[..., Path]
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_ppt(input_dir / "deck.ppt", "OLDDECKTITLE")
+
+    summary = pptx_md.convert_pptx_to_markdown(input_dir, output_dir)
+
+    assert "deck.md" in summary
+    assert "OLDDECKTITLE" in (output_dir / "deck.md").read_text(encoding="utf-8")

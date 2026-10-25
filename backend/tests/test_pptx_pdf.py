@@ -14,7 +14,6 @@ import pytest
 from pptx import Presentation
 
 import pptx_pdf
-from external_tool import run_tool
 
 WorkDirs = tuple[Path, Path]
 
@@ -161,19 +160,11 @@ def test_real_libreoffice_renders_the_slide(work_dirs: WorkDirs) -> None:
 
 
 @needs_libreoffice
-def test_real_libreoffice_renders_an_old_ppt(work_dirs: WorkDirs, tmp_path: Path) -> None:
+def test_real_libreoffice_renders_an_old_ppt(
+    work_dirs: WorkDirs, write_ppt: Callable[..., Path]
+) -> None:
     input_dir, output_dir = work_dirs
-    deck = Presentation()
-    slide = deck.slides.add_slide(deck.slide_layouts[5])
-    slide.shapes.title.text = "Hello old deck"
-    deck.save(tmp_path / "deck.pptx")
-    # LibreOffice is the only thing here that can write the old binary format.
-    run_tool([
-        pptx_pdf._find_libreoffice(), "--headless",
-        f"-env:UserInstallation={(tmp_path / 'profile').as_uri()}",
-        "--convert-to", "ppt", "--outdir", str(input_dir), str(tmp_path / "deck.pptx"),
-    ])
-    assert (input_dir / "deck.ppt").exists()
+    write_ppt(input_dir / "deck.ppt", "Hello old deck")
 
     summary = pptx_pdf.convert_pptx_to_pdf(input_dir, output_dir)
 
