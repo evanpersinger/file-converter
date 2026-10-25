@@ -12,7 +12,7 @@ import cv2
 from faster_whisper import WhisperModel
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
-from external_tool import ocr_text
+from external_tool import ocr_data
 from llm_pdf_md import not_cancelled
 
 # The Whisper sizes on offer. Anything else is refused instead of handed to faster-whisper,
@@ -27,6 +27,12 @@ SAME_PICTURE_DIFF = 2.0
 # How alike two readings of a screen must be (0-1) to count as the same text. OCR reads one
 # slide a little differently from frame to frame.
 SAME_TEXT_RATIO = 0.9
+# Tesseract rates each word it reads from 0 to 100. Below MIN_WORD_CONFIDENCE a word is not
+# trusted and is left out. A frame where fewer than MIN_CONFIDENT_SHARE of the words are
+# trusted, such as a fade between two slides, is not used at all. Clean slide text reads in
+# the 90s, and the garbled words of a half-faded slide anywhere from 9 to 77.
+MIN_WORD_CONFIDENCE = 80
+MIN_CONFIDENT_SHARE = 0.5
 # Frames are compared at this size, which is enough to tell pictures apart.
 COMPARE_SIZE = (64, 36)
 # Screen reading is the first half of the progress, transcribing the second.
@@ -43,6 +49,26 @@ def _clean(text: str) -> str:
     """One line of the words OCR found, with the one- and no-letter noise lines dropped."""
     lines = [line.strip() for line in text.splitlines()]
     return " / ".join(line for line in lines if sum(c.isalnum() for c in line) >= 2)
+
+
+def _read_frame(gray) -> str | None:
+    """The text on a frame, "" when there is none, or None when Tesseract cannot read it well."""
+    data = ocr_data(gray)
+    lines: dict[tuple[int, int, int], list[str]] = {}
+    seen = confident = 0
+    for text, conf, block, paragraph, line in zip(
+        data["text"], data["conf"], data["block_num"], data["par_num"], data["line_num"]
+    ):
+        word = text.strip()
+        if not word:
+            continue
+        seen += 1
+        if float(conf) >= MIN_WORD_CONFIDENCE:
+            confident += 1
+            lines.setdefault((block, paragraph, line), []).append(word)
+    if confident < MIN_CONFIDENT_SHARE * seen:
+        return None
+    return _clean("\n".join(" ".join(words) for words in lines.values()))
 
 
 def _screen_text(path: Path, should_cancel: Callable[[], bool]) -> list[tuple[float, str]]:
@@ -71,12 +97,15 @@ def _screen_text(path: Path, should_cancel: Callable[[], bool]) -> list[tuple[fl
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             picture = cv2.resize(gray, COMPARE_SIZE)
             if last_picture is None or cv2.absdiff(picture, last_picture).mean() >= SAME_PICTURE_DIFF:
-                last_picture = picture
-                text = _clean(ocr_text(gray))
-                same = difflib.SequenceMatcher(None, text.lower(), last_text.lower()).ratio()
-                if text and same < SAME_TEXT_RATIO:
-                    shown.append((second, text))
-                last_text = text
+                text = _read_frame(gray)
+                # A frame Tesseract could not read well changes nothing, so the next one is
+                # compared with the last frame that did read, not with this one.
+                if text is not None:
+                    last_picture = picture
+                    same = difflib.SequenceMatcher(None, text.lower(), last_text.lower()).ratio()
+                    if text and same < SAME_TEXT_RATIO:
+                        shown.append((second, text))
+                    last_text = text
             second += FRAME_INTERVAL_SECONDS
         return shown
     finally:
