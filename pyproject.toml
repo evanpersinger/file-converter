@@ -75,6 +75,10 @@ dependencies = [
     "python-magic>=0.4.27",
     "requests>=2.32.3",
     "tqdm>=4.67.1",
+
+    # Speech to text (mp4_md.py)
+    "faster-whisper>=1.2.1",
+    "av<19",  # faster-whisper passes av.open() an argument that PyAV 19 removed
 ]
 
 [project.urls]
@@ -114,6 +118,7 @@ only-include = [
     "backend/json_toon.py",
     "backend/md_pdf.py",
     "backend/md_toon.py",
+    "backend/mp4_md.py",
     "backend/llm_md.py",
     "backend/llm_pdf_md.py",
     "backend/pdf_md.py",
@@ -176,6 +181,7 @@ only-include = [
     "backend/json_toon.py",
     "backend/md_pdf.py",
     "backend/md_toon.py",
+    "backend/mp4_md.py",
     "backend/llm_md.py",
     "backend/llm_pdf_md.py",
     "backend/pdf_md.py",
