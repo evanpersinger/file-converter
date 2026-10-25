@@ -1,6 +1,6 @@
-"""Convert PowerPoint (.pptx) files to PDF.
+"""Convert PowerPoint (.pptx and the older .ppt) files to PDF.
 
-For each .pptx in input/, shells out to a headless LibreOffice (soffice) to render
+For each .pptx or .ppt in input/, shells out to a headless LibreOffice (soffice) to render
 the slides to PDF in output/. Requires LibreOffice to be installed.
 """
 
@@ -31,7 +31,7 @@ def _find_libreoffice() -> str | None:
 def convert_pptx_to_pdf(
     input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
 ) -> str:
-    """Convert all PPTX files in the input folder to PDF files in the output folder.
+    """Convert all PPTX and PPT files in the input folder to PDF files in the output folder.
 
     Requires LibreOffice to be installed.
 
@@ -59,7 +59,7 @@ def convert_pptx_to_pdf(
         profile = Path(profile_dir).as_uri()
 
         def render(source: Path, dest: Path) -> None:
-            # LibreOffice names the PDF after the .pptx, which is what dest is already called.
+            # LibreOffice names the PDF after the source, which is what dest is already called.
             result = run_tool(
                 [executable, '--headless', f'-env:UserInstallation={profile}',
                  '--convert-to', 'pdf', '--outdir', str(dest.parent), str(source)],
@@ -68,7 +68,7 @@ def convert_pptx_to_pdf(
                 raise RuntimeError(result.stderr.strip())
 
         return convert_files(
-            input_dir, output_dir, ('.pptx',), ('.pdf',), render, precheck=find_executable
+            input_dir, output_dir, ('.pptx', '.ppt'), ('.pdf',), render, precheck=find_executable
         )
 
 

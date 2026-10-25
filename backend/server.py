@@ -451,7 +451,7 @@ REGISTRY: list[Conversion] = [
     # --- office --------------------------------------------------------------
     Conversion((".pptx",), "pptx->md", "Markdown", ".md",
                via_params(lambda s, i, o: pptx_md.convert_pptx_to_markdown(i, o))),
-    Conversion((".pptx",), "pptx->pdf", "PDF", ".pdf",
+    Conversion((".pptx", ".ppt"), "pptx->pdf", "PDF", ".pdf",
                via_params(lambda s, i, o: pptx_pdf.convert_pptx_to_pdf(i, o)),
                requires=("libreoffice",)),
     Conversion((".docx",), "docx->md", "Markdown", ".md",
