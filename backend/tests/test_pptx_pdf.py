@@ -14,6 +14,7 @@ import pytest
 from pptx import Presentation
 
 import pptx_pdf
+from external_tool import run_tool
 
 WorkDirs = tuple[Path, Path]
 
@@ -107,6 +108,21 @@ def test_libreoffice_is_told_to_write_into_the_output_folder(
     assert "deck.pdf" in summary
 
 
+def test_an_old_ppt_is_handed_to_libreoffice_too(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "deck.ppt").write_bytes(b"placeholder")
+    commands: list[list[str]] = []
+    monkeypatch.setattr(pptx_pdf, "_find_libreoffice", lambda: "soffice")
+    monkeypatch.setattr(pptx_pdf, "run_tool", fake_libreoffice(commands))
+
+    summary = pptx_pdf.convert_pptx_to_pdf(input_dir, output_dir)
+
+    assert commands[0][-1] == str(input_dir / "deck.ppt")
+    assert "deck.pdf" in summary
+
+
 def test_each_call_gets_its_own_libreoffice_profile(
     work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -142,3 +158,25 @@ def test_real_libreoffice_renders_the_slide(work_dirs: WorkDirs) -> None:
     with fitz.open(output_dir / "deck.pdf") as pdf:
         assert pdf.page_count == 1
         assert "Hello deck" in pdf[0].get_text()
+
+
+@needs_libreoffice
+def test_real_libreoffice_renders_an_old_ppt(work_dirs: WorkDirs, tmp_path: Path) -> None:
+    input_dir, output_dir = work_dirs
+    deck = Presentation()
+    slide = deck.slides.add_slide(deck.slide_layouts[5])
+    slide.shapes.title.text = "Hello old deck"
+    deck.save(tmp_path / "deck.pptx")
+    # LibreOffice is the only thing here that can write the old binary format.
+    run_tool([
+        pptx_pdf._find_libreoffice(), "--headless",
+        f"-env:UserInstallation={(tmp_path / 'profile').as_uri()}",
+        "--convert-to", "ppt", "--outdir", str(input_dir), str(tmp_path / "deck.pptx"),
+    ])
+    assert (input_dir / "deck.ppt").exists()
+
+    summary = pptx_pdf.convert_pptx_to_pdf(input_dir, output_dir)
+
+    assert "deck.pdf" in summary
+    with fitz.open(output_dir / "deck.pdf") as pdf:
+        assert "Hello old deck" in pdf[0].get_text()
