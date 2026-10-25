@@ -45,6 +45,15 @@ def get_file_type(file_path: Path) -> str:
         return 'text'
 
 
+def _read_text(path: Path) -> str:
+    """Read a text file as UTF-8 (BOM allowed), falling back to Windows-1252 for the
+    older files that are not valid UTF-8."""
+    try:
+        return path.read_text(encoding='utf-8-sig')
+    except UnicodeDecodeError:
+        return path.read_text(encoding='cp1252', errors='replace')
+
+
 def combine_files(
     file_paths: list[str],
     output_path: str | None = None,
@@ -193,17 +202,14 @@ def combine_files(
                         outfile.write(f"File: {input_path.name}\n")
                         outfile.write("=" * 80 + "\n\n")
                     
-                    # Read and write file content
-                    try:
-                        with open(input_path, 'r', encoding='utf-8') as infile:
-                            content = infile.read()
-                            outfile.write(content)
-                            # Add newline at end if file doesn't end with one
-                            if content and not content.endswith('\n'):
-                                outfile.write('\n')
-                    except Exception as e:
-                        print(f"Warning: Error reading '{input_path.name}': {e}")
-                        continue
+                    # Read and write file content. A file that cannot be read raises
+                    # out to the handler below, so it is reported as a failure instead
+                    # of being left out of a "successful" result.
+                    content = _read_text(input_path)
+                    outfile.write(content)
+                    # Add newline at end if file doesn't end with one
+                    if content and not content.endswith('\n'):
+                        outfile.write('\n')
         
         if full_output_path.exists():
             print(f"Successfully combined {len(full_input_paths)} file(s) into '{full_output_path}'")
