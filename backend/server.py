@@ -427,6 +427,7 @@ REGISTRY: list[Conversion] = [
                    llm_pdf_md.convert_pdf_to_markdown_local(model, i, o, cancel))),
                requires=("ollama",), takes_model=True, group="llm",
                script="Typed PDF", provider="local",
+               caption="Used for regular PDFs",
                note="Runs on your machine through Ollama. Free, but slow, and the model has to be downloaded first"),
     Conversion((".pdf",), "pdf->md-ai", "Markdown (LLM: OpenAI, costs money)", ".md",
                via_model_params(lambda s, model, i, o, cancel: (

@@ -435,14 +435,14 @@ def test_the_handwriting_conversion_is_offered_for_jpg_jpeg_and_pdf(
     assert route["caption"] == _HANDWRITING_CAPTION
 
 
-def test_only_the_handwriting_conversion_has_a_caption(
+def test_the_typed_pdf_and_handwriting_conversions_each_have_their_own_caption(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["gemma4:12b"])
 
     pdf_routes = {t["id"]: t for t in client.get("/api/formats").json()["byExtension"][".pdf"]}
 
-    assert "caption" not in pdf_routes["pdf->md-local"]
+    assert pdf_routes["pdf->md-local"]["caption"] == "Used for regular PDFs"
     assert pdf_routes["handwriting->md"]["caption"] == _HANDWRITING_CAPTION
 
 
