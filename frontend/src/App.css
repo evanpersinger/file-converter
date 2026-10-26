@@ -17,9 +17,9 @@
   box-sizing: border-box;
   width: 100%;
   /* Full width, so the line under it reaches both edges of the page, and the column
-     dividers below hang from it. The side padding is the 2rem gutter, or more once the
-     window is wider than the 97rem column, so the tabs still line up with the content. */
-  padding: 0.75rem max(2rem, calc((100% - 93rem) / 2)) 1rem;
+     dividers below hang from it. The side padding is the 1rem gutter, or more once the
+     window is wider than the 95rem column, so the tabs still line up with the content. */
+  padding: 0.75rem max(1rem, calc((100% - 93rem) / 2)) 1rem;
   border-bottom: 8px solid var(--text); /* same 8px as the column dividers */
 }
 
@@ -33,20 +33,20 @@
    than pinned to the viewport edge. align-items: stretch is what lets the divider
    run the full height of the taller column, and flex: 1 keeps it running to the
    bottom of the screen when the content is shorter than the viewport. The max-width
-   counts the 2rem of padding on each side, so the content is still 93rem wide. */
+   counts the 1rem of padding on each side, so the content is still 93rem wide. */
 .layout {
   display: flex;
   align-items: stretch;
-  gap: 2.5rem;
+  gap: 1rem;
   flex: 1;
   box-sizing: border-box;
   width: 100%;
-  max-width: 97rem;
+  max-width: 95rem;
   margin: 0 auto;
-  padding: 0 2rem;
-  /* How far the content sits from the page edge: the 2rem padding, plus the margin on
+  padding: 0 1rem;
+  /* How far the content sits from the page edge: the 1rem padding, plus the margin on
      each side once the window is wider than the layout. Column titles run out to it. */
-  --page-edge: calc(2rem + max(0px, (100cqw - 97rem) / 2));
+  --page-edge: calc(1rem + max(0px, (100cqw - 95rem) / 2));
 }
 
 /* Display: flex above would otherwise win over the hidden attribute. */
@@ -234,10 +234,10 @@ h2 {
   padding-right: 1.5rem;
 }
 
-/* A sidebar next to another one starts at that one's divider, across the 2.5rem gap. */
+/* A sidebar next to another one starts at that one's divider, across the 1rem gap. */
 .sidebar:not([hidden]) ~ .sidebar h2 {
-  margin-left: -2.5rem;
-  padding-left: 2.5rem;
+  margin-left: -1rem;
+  padding-left: 1rem;
 }
 
 /* The mirror image for Result: left into its own divider, right to the page edge. */
