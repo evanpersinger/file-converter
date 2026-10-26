@@ -127,14 +127,24 @@
   border-left: 8px solid var(--text);
 }
 
+/* Entries are told apart by a line like the column titles': 8px, running from this
+   column's own divider out to the page edge. It is drawn below the entry instead of being
+   its border, so the failed entry's panel can't swallow it. --edge is that panel's border,
+   since the line is positioned from the inside of it. */
 .log-entry {
-  padding-bottom: 1rem;
-  margin-bottom: 1rem;
-  border-bottom: var(--line-dashed) solid var(--border);
+  --edge: 0px;
+  position: relative;
+  margin-bottom: 2rem;
 }
 
-.log-entry:last-child {
-  border-bottom: none;
+.log-entry:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: calc(100% + var(--edge) + 1rem - 4px);
+  left: calc(-1.5rem - var(--edge));
+  right: calc(-1 * var(--page-edge) - var(--edge));
+  height: 8px;
+  background: var(--text);
 }
 
 .log-entry p {
@@ -151,6 +161,7 @@
 
 /* A file that failed outright gets the same dark panel as the error block. */
 .log-entry.failed {
+  --edge: var(--line-thin);
   padding: 0.6rem 0.75rem;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.42);
