@@ -73,7 +73,6 @@ HTML to SVG and SVG to PDF or PNG need Google Chrome. Mermaid diagrams in Markdo
   slot, and the progress bar says "Waiting for another conversion...".
 - Long PDFs on the LLM tab: the Claude path caps at about 100 pages (32 MB), and the
   OpenAI path can hit a rate limit and fail with no output. Use Claude for long ones.
-- Local models are slow, often over a minute per page.
 - The LLM scripts convert every file in `backend/input/`, one at a time. If the files add up to
   more than 100 MB, they wait 30 seconds between files to go easy on memory.
 - Markdown and PDF to TOON convert tables only, and a file with none fails. A PDF table needs ruling
