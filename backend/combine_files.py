@@ -152,28 +152,29 @@ def combine_files(
                 return False
             
             
+            # Open each image only long enough to read it: a loaded copy (EXIF
+            # orientation applied, alpha kept as a mask) is kept, the file is closed.
             images = []
-            max_width = 0
-            total_height = 0
-            
-            # Load all images
             for img_path in file_types['image']:
-                img = upright(Image.open(img_path))
+                with Image.open(img_path) as opened:
+                    img = upright(opened)
+                    img = img.convert('RGBA') if 'A' in img.getbands() or 'transparency' in img.info else img.convert('RGB')
                 images.append(img)
-                max_width = max(max_width, img.width)
-                total_height += img.height
-            
+            max_width = max(img.width for img in images)
+            total_height = sum(img.height for img in images)
+
             # Create new image with combined dimensions
             combined = Image.new('RGB', (max_width, total_height), color='white')
-            
-            # Paste images vertically
+
+            # Paste images vertically; transparent areas stay white instead of black
             y_offset = 0
             for img in images:
                 # Center image if narrower than max width
                 x_offset = (max_width - img.width) // 2
-                combined.paste(img, (x_offset, y_offset))
+                mask = img.getchannel('A') if img.mode == 'RGBA' else None
+                combined.paste(img.convert('RGB'), (x_offset, y_offset), mask)
                 y_offset += img.height
-            
+
             # Save combined image
             combined.save(full_output_path)
             
