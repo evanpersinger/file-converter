@@ -122,8 +122,10 @@
      its title line meets the page edge, instead of floating after main. */
   margin-left: auto;
   box-sizing: border-box;
-  width: 15rem;
-  padding: 1rem 0 2.5rem 1.5rem;
+  width: 12rem;
+  /* Space between the column's divider and its text. */
+  --pad-left: 1rem;
+  padding: 1rem 0 2.5rem var(--pad-left);
   border-left: 8px solid var(--text);
 }
 
@@ -133,15 +135,17 @@
    since the line is positioned from the inside of it. */
 .log-entry {
   --edge: 0px;
+  /* The space between entries. The line below sits in the middle of it. */
+  --gap: 1.25rem;
   position: relative;
-  margin-bottom: 2rem;
+  margin-bottom: var(--gap);
 }
 
 .log-entry:not(:last-child)::after {
   content: '';
   position: absolute;
-  top: calc(100% + var(--edge) + 1rem - 4px);
-  left: calc(-1.5rem - var(--edge));
+  top: calc(100% + var(--edge) + var(--gap) / 2 - 4px);
+  left: calc(-1 * var(--pad-left) - var(--edge));
   right: calc(-1 * var(--page-edge) - var(--edge));
   height: 8px;
   background: var(--text);
@@ -168,35 +172,24 @@
   border: var(--line-thin) solid #ffc9c0;
 }
 
-/* The last conversions under the Result log: the file name, then the format it became. A
-   plain list, since it keeps no files to open or download. */
+/* The last conversions under the Result log, by file name. A plain list, since it keeps no
+   files to open or download. */
 .history h3 {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.3rem;
   font-size: 1rem;
 }
 
 .history ul {
-  margin: 0 0 1rem;
+  margin: 0 0 0.5rem;
   padding: 0;
   list-style: none;
 }
 
 .history li {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.3rem;
-}
-
-.history-file {
-  min-width: 0;
+  margin-bottom: 0.15rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.history li .muted {
-  flex: none;
 }
 
 .history button {
@@ -279,9 +272,10 @@ h2 {
 
 /* The mirror image for Result: left into its own divider, right to the page edge. */
 .log-panel h2 {
-  margin-left: -1.5rem;
+  margin-bottom: 0.75rem;
+  margin-left: calc(-1 * var(--pad-left));
   margin-right: calc(-1 * var(--page-edge));
-  padding-left: 1.5rem;
+  padding-left: var(--pad-left);
   padding-right: var(--page-edge);
 }
 
@@ -1014,6 +1008,7 @@ button:disabled {
     flex: 1 0 calc(100% + 4rem);
     width: auto;
     margin: 0 -2rem;
+    --pad-left: 1.5rem;
     padding: 2.5rem 2rem;
     border-left: none;
     border-top: 8px solid var(--text);
@@ -1041,6 +1036,7 @@ button:disabled {
     flex: 1 0 calc(100% + 4rem);
     width: auto;
     margin: 0 -2rem;
+    --pad-left: 1.5rem;
     padding: 2.5rem 2rem;
     border-left: none;
     border-top: 8px solid var(--text);
