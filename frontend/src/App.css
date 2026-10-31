@@ -198,17 +198,13 @@ main {
   flex: 1;
   min-width: 0;
   max-width: 56rem;
-  margin: 1.25rem 0 2.5rem;
+  margin: 0.75rem 0 2.5rem;
   text-align: left;
 }
 
 /* Convert Files tab only: tighter heights and gaps, so the Convert and Combine buttons
    sit closer to the top and need less scrolling. The LLM tab shares this markup and
    keeps the sizes set on the plain rules below. */
-main.compact {
-  margin-top: 1.5rem;
-}
-
 main.compact .filepicker {
   height: 4rem;
   font-size: 1.5rem;
