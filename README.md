@@ -56,6 +56,7 @@ brew install pandoc                     # Word and Markdown conversions
 brew install --cask mactex              # Markdown and Jupyter to PDF
 brew install --cask libreoffice         # PowerPoint
 brew install wkhtmltopdf                # HTML to PDF
+brew install r                          # R Markdown, plus the rmarkdown R package
 brew install ollama                     # local LLM
 ```
 
