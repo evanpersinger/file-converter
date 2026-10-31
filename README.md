@@ -41,8 +41,9 @@ OpenAI, or Anthropic (the last two cost money and need `OPENAI_API_KEY` or
   the Video option on the LLM tab
 - Combine several files of one type into one
 
-Every script is in `backend/<from>_<to>.py`. Each runs on its own: drop files in
-`backend/input/`, run it, and find the results in `backend/output/`.
+Every script is in `backend/<from>_<to>.py`. Each runs on its own: create `backend/input/` (it is
+gitignored, so a fresh clone doesn't have it), drop files in, run the script, and find the results
+in `backend/output/`.
 
 ## System tools
 
