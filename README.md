@@ -80,6 +80,5 @@ HTML to SVG and SVG to PDF or PNG need Google Chrome. Mermaid diagrams in Markdo
   of printing boxes.
 - OCR is English-only on purpose. Other languages come back as garbled English, not an error.
 - Handwriting reads better from a scan than from a phone photo.
-- `md_pdf.py` uses the Menlo font (ships with macOS). On Linux, change `\setmonofont` in the script.
 
 Some chains give bad output, see [CONVERSIONS.md](CONVERSIONS.md).
