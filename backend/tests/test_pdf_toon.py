@@ -5,9 +5,11 @@ reading tables back out of a PDF: the PDFs are drawn in each test (with toon_pdf
 reportlab for layouts toon_pdf does not make), so there are no binary fixtures.
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import fitz
+import pytest
 import toon_format
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -52,6 +54,16 @@ def convert(work_dirs: WorkDirs) -> str:
 
     assert summary.startswith("Converted"), summary
     return (output_dir / "data.toon").read_text(encoding="utf-8")
+
+
+@pytest.fixture
+def quad_corrections_on() -> Iterator[None]:
+    """Turn on the PyMuPDF setting that importing pymupdf4llm turns on for the whole server,
+    and put it back afterwards."""
+    previous = fitz.TOOLS.unset_quad_corrections()
+    fitz.TOOLS.unset_quad_corrections(True)
+    yield
+    fitz.TOOLS.unset_quad_corrections(previous)
 
 
 def failure(work_dirs: WorkDirs) -> str:
@@ -178,6 +190,22 @@ def test_a_table_is_only_joined_to_the_one_on_the_page_right_before(
     pdf_from_tables(input_dir / "data.pdf", [same_header, [["x", "y"], ["9", "8"]], same_header])
 
     assert list(toon_format.loads(convert(work_dirs))) == ["table_1", "table_2", "table_3"]
+
+
+def test_a_minus_sign_survives_the_setting_pymupdf4llm_turns_on(
+    work_dirs: WorkDirs, quad_corrections_on: None
+) -> None:
+    """With that setting on, PyMuPDF reads a cell of -38% as 38%, a newline and a minus, which
+    is not a number. The server has it on, since pdf_md imports pymupdf4llm."""
+    input_dir, _ = work_dirs
+    pdf_from_tables(
+        input_dir / "data.pdf", [[["Metric", "Change"], ["Users", "+54%"], ["Latency", "-38%"]]]
+    )
+
+    assert toon_format.loads(convert(work_dirs)) == [
+        {"Metric": "Users", "Change": "+54%"},
+        {"Metric": "Latency", "Change": "-38%"},
+    ]
 
 
 # PDFs that cannot be read
