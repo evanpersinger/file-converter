@@ -18,8 +18,7 @@ uv sync
 uv run uvicorn server:app --app-dir backend --reload --port 8019 --loop asyncio
 ```
 
-Open http://localhost:3004. Both have to be running. The ports are set in
-`frontend/vite.config.ts` (3004 for the page, 8019 for the backend), change both if you move the backend.
+Open the address Vite prints. Both have to be running.
 
 Pick files, pick a target format, convert, download. **View** previews a file before or
 after converting. The **Convert Files (LLM)** tab turns PDFs and handwriting photos into
