@@ -17,9 +17,9 @@
   box-sizing: border-box;
   width: 100%;
   /* Full width, so the line under it reaches both edges of the page, and the column
-     dividers below hang from it. The side padding is the 1rem gutter, or more once the
-     window is wider than the 95rem column, so the tabs still line up with the content. */
-  padding: 0.75rem max(1rem, calc((100% - 93rem) / 2)) 1rem;
+     dividers below hang from it. The side padding is the same 1rem gutter as the layout's,
+     so the tabs line up with the content. */
+  padding: 0.75rem 1rem 1rem;
   border-bottom: 8px solid var(--text); /* same 8px as the column dividers */
 }
 
@@ -29,11 +29,9 @@
   font-size: 1.3rem;
 }
 
-/* Format list on the left, main column beside it. The whole pair is centred rather
-   than pinned to the viewport edge. align-items: stretch is what lets the divider
-   run the full height of the taller column, and flex: 1 keeps it running to the
-   bottom of the screen when the content is shorter than the viewport. The max-width
-   counts the 1rem of padding on each side, so the content is still 93rem wide. */
+/* Format list on the left, main column beside it, filling the window. align-items: stretch
+   is what lets the divider run the full height of the taller column, and flex: 1 keeps it
+   running to the bottom of the screen when the content is shorter than the viewport. */
 .layout {
   display: flex;
   align-items: stretch;
@@ -41,12 +39,10 @@
   flex: 1;
   box-sizing: border-box;
   width: 100%;
-  max-width: 95rem;
-  margin: 0 auto;
   padding: 0 1rem;
-  /* How far the content sits from the page edge: the 1rem padding, plus the margin on
-     each side once the window is wider than the layout. Column titles run out to it. */
-  --page-edge: calc(1rem + max(0px, (100cqw - 95rem) / 2));
+  /* How far the content sits from the page edge, which is the 1rem padding. Column titles
+     run out to it. */
+  --page-edge: 1rem;
 }
 
 /* Display: flex above would otherwise win over the hidden attribute. */
