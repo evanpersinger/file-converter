@@ -19,6 +19,7 @@ from docx.text.hyperlink import Hyperlink
 import io
 
 from find_files import find_files
+from image_convert import upright
 
 # Default folders live next to this script, so `python backend/docx_pdf.py` finds
 # backend/input regardless of the shell's working directory.
@@ -204,8 +205,14 @@ def convert_docx_to_pdf(docx_path: str, output_path: str | None = None, input_di
                                     # Get image dimensions if available
                                     try:
                                         from PIL import Image as PILImage
-                                        pil_img = PILImage.open(io.BytesIO(img_data))
-                                        img_width, img_height = pil_img.size
+                                        with PILImage.open(io.BytesIO(img_data)) as opened:
+                                            pil_img = upright(opened)
+                                            if pil_img is not opened:
+                                                # A phone photo stored sideways: reportlab ignores the tag
+                                                upright_bytes = io.BytesIO()
+                                                pil_img.save(upright_bytes, "PNG")
+                                                img_data = upright_bytes.getvalue()
+                                            img_width, img_height = pil_img.size
                                         # Scale to fit page width (max 5 inches)
                                         max_width = 5 * inch
                                         if img_width > max_width:

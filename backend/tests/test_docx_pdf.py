@@ -11,6 +11,7 @@ import pytest
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.shared import Inches
+from PIL import Image
 
 import docx_pdf
 
@@ -95,6 +96,23 @@ def test_an_embedded_image_is_drawn(
 
     with fitz.open(convert(work_dirs, document)) as pdf:
         assert len(pdf[0].get_images()) == 1
+
+
+def test_a_phone_photo_is_drawn_the_way_up_it_displays(
+    work_dirs: WorkDirs, tmp_path: Path
+) -> None:
+    """A phone photo is stored sideways with an orientation tag, which reportlab ignores."""
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    photo = tmp_path / "phone.jpg"
+    Image.new("RGB", (20, 40), "red").save(photo, "JPEG", exif=exif)
+    document = Document()
+    document.add_picture(str(photo))
+
+    with fitz.open(convert(work_dirs, document)) as pdf:
+        box = fitz.Rect(pdf[0].get_image_info()[0]["bbox"])
+
+    assert box.width > box.height
 
 
 def test_markup_characters_are_printed_as_text(work_dirs: WorkDirs) -> None:
