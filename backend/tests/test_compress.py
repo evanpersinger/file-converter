@@ -99,6 +99,49 @@ def test_vector_image_is_left_untouched(tmp_path: Path) -> None:
         assert archive.read("ppt/media/image1.svg") == svg
 
 
+def test_a_transparent_png_keeps_its_transparency(tmp_path: Path) -> None:
+    # Noise, so the downscaled copy is smaller and actually gets written. The left half is
+    # fully transparent, the right half opaque.
+    size = (2000, 1200)
+    picture = Image.frombytes("RGB", size, random.Random(0).randbytes(size[0] * size[1] * 3))
+    picture = picture.convert("RGBA")
+    picture.paste(0, (0, 0, size[0] // 2, size[1]))
+    buffer = io.BytesIO()
+    picture.save(buffer, "PNG")
+    path = tmp_path / "deck.pptx"
+    _write_zip(path, {"ppt/media/image1.png": buffer.getvalue()})
+
+    compress.compress_office_zip(path, "ppt/media/", _noop_sanity_check)
+
+    with zipfile.ZipFile(path) as archive:
+        shrunk = Image.open(io.BytesIO(archive.read("ppt/media/image1.png")))
+        shrunk.load()
+    assert max(shrunk.size) <= compress._MAX_DIMENSION
+    assert shrunk.mode == "RGBA"
+    assert shrunk.getpixel((0, 0))[3] == 0
+    assert shrunk.getpixel((shrunk.width - 1, 0))[3] == 255
+
+
+def test_an_animated_gif_is_left_untouched(tmp_path: Path) -> None:
+    # Re-encoding would drop every frame but the first. Noise frames, so the downscaled
+    # copy would be smaller and written if the animation weren't skipped.
+    size = (2000, 1200)
+    frames = [
+        Image.frombytes("RGB", size, random.Random(seed).randbytes(size[0] * size[1] * 3))
+        for seed in (0, 1)
+    ]
+    buffer = io.BytesIO()
+    frames[0].save(buffer, "GIF", save_all=True, append_images=frames[1:])
+    gif = buffer.getvalue()
+    path = tmp_path / "deck.pptx"
+    _write_zip(path, {"ppt/media/image1.gif": gif})
+
+    compress.compress_office_zip(path, "ppt/media/", _noop_sanity_check)
+
+    with zipfile.ZipFile(path) as archive:
+        assert archive.read("ppt/media/image1.gif") == gif
+
+
 def test_failed_sanity_check_leaves_file_untouched(tmp_path: Path) -> None:
     path = tmp_path / "deck.pptx"
     _write_zip(path, {"ppt/media/image1.jpg": _big_jpeg()})
