@@ -37,6 +37,8 @@ OpenAI, or Anthropic (the last two cost money and need `OPENAI_API_KEY` or
 - **JSON and TOON** to each other, TOON to Markdown or PDF, and the tables in Markdown or PDF to TOON
 - **JPG, PNG, GIF, WebP, HEIC** to PDF, PNG, JPG, WebP, SVG, Markdown or text (which ones depends on the source)
 - **SVG** to PDF, PNG
+- **MP4** to Markdown: speech (Whisper, downloaded on first use) and on-screen text (OCR), under
+  the Video option on the LLM tab
 - Combine several files of one type into one
 
 Every script is in `backend/<from>_<to>.py`. Each runs on its own: drop files in
