@@ -11,6 +11,7 @@ import FileViewer from './FileViewer'
 import { combineLimitMessage, convertLimitMessage, overDetectLimit } from './limits'
 import ModelGroup from './ModelGroup'
 import ProgressBar from './ProgressBar'
+import { useHistory, type HistoryState } from './useHistory'
 import { useProgress } from './useProgress'
 import './App.css'
 
@@ -161,6 +162,8 @@ const TABS: { id: Tab; label: string }[] = [
 // the other tab is showing.
 export default function App() {
   const [tab, setTab] = useState<Tab>('convert')
+  // One list for both tabs, so each tab's Result panel shows the same recent conversions.
+  const history = useHistory()
 
   return (
     <div className="app">
@@ -180,13 +183,13 @@ export default function App() {
       </div>
 
       {TABS.map((t) => (
-        <Converter key={t.id} tab={t.id} active={tab === t.id} />
+        <Converter key={t.id} tab={t.id} active={tab === t.id} history={history} />
       ))}
     </div>
   )
 }
 
-function Converter({ tab, active }: { tab: Tab; active: boolean }) {
+function Converter({ tab, active, history }: { tab: Tab; active: boolean; history: HistoryState }) {
   const [formats, setFormats] = useState<FormatMap | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
@@ -425,6 +428,12 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     setModel(same ? null : { provider, name })
   }
 
+  // The registry's name for the format a file came out as ("PDF", "Markdown").
+  function formatNameOf(filename: string) {
+    const outExt = extensionOf(filename)
+    return formats?.allFormats.find((f) => f.ext === outExt)?.name ?? (outExt.slice(1).toUpperCase() || filename)
+  }
+
   async function run(action: (jobId: string) => Promise<{ blob: Blob; filename: string }>,
                      running: Status) {
     const id = crypto.randomUUID()
@@ -433,6 +442,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     try {
       const { blob, filename } = await action(id)
       const download = { url: URL.createObjectURL(blob), filename, blob }
+      history.record(filename, formatNameOf(filename))
       // Hold the result and let the user click Download, rather than firing the
       // download automatically.
       setResult((current) => ({ downloads: mergeDownloads(current?.downloads ?? [], [download]) }))
@@ -479,9 +489,9 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       try {
         const { blob, filename, log } = await convert(file, targetId, modelName, id, controller.signal)
         downloads.push({ url: URL.createObjectURL(blob), filename, blob })
-        const outExt = extensionOf(filename)
-        const formatName = formats?.allFormats.find((f) => f.ext === outExt)?.name ?? outExt.slice(1).toUpperCase()
-        addLog(file.name, formatName || filename, log)
+        const formatName = formatNameOf(filename)
+        history.record(filename, formatName)
+        addLog(file.name, formatName, log)
       } catch (e) {
         // A cancelled file is meant to disappear, not show up as a failure.
         if (!(e instanceof DOMException && e.name === 'AbortError')) {
@@ -849,6 +859,24 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
             ))}
           </div>
         ))}
+
+        {history.entries.length > 0 && (
+          <section className="history">
+            <h3>Recent</h3>
+            <ul>
+              {history.entries.map((entry) => (
+                <li key={entry.id}>
+                  <span className="history-file" title={entry.fileName}>{entry.fileName}</span>
+                  <span className="muted">{entry.format}</span>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onDoubleClick={history.clear}>
+              Clear history
+              <span className="clear-hint">Click twice to clear</span>
+            </button>
+          </section>
+        )}
       </aside>
 
       {/* In a portal, so the layout's container query below can't pin the overlay to the
