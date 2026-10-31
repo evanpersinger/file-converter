@@ -54,7 +54,7 @@
   flex: none;
   box-sizing: border-box;
   width: 12rem;
-  padding: 1rem 1.5rem 2.5rem 0;
+  padding: 0.5rem 1.5rem 2.5rem 0;
   border-right: 8px solid var(--text);
 }
 
@@ -121,7 +121,7 @@
   width: 12rem;
   /* Space between the column's divider and its text. */
   --pad-left: 1rem;
-  padding: 1rem 0 2.5rem var(--pad-left);
+  padding: 0.5rem 0 2.5rem var(--pad-left);
   border-left: 8px solid var(--text);
 }
 
@@ -246,7 +246,7 @@ h2 {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin: 0 0 1.5rem;
-  padding-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
   border-bottom: 8px solid var(--text);
 }
 
