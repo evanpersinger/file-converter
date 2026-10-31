@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 
-/** One finished conversion. Only this info is kept, never the file itself. */
+/** One finished conversion. Only the name of the file that came out is kept, never the file itself. */
 export interface HistoryEntry {
   id: string
-  /** Name of the file that came out. */
   fileName: string
-  /** Name of the format it became (PDF, Markdown). */
-  format: string
 }
 
 const STORAGE_KEY = 'file-converter-history'
@@ -15,11 +12,7 @@ export const MAX_HISTORY_ENTRIES = 20
 function isEntry(value: unknown): value is HistoryEntry {
   if (typeof value !== 'object' || value === null) return false
   const entry = value as Record<string, unknown>
-  return (
-    typeof entry.id === 'string' &&
-    typeof entry.fileName === 'string' &&
-    typeof entry.format === 'string'
-  )
+  return typeof entry.id === 'string' && typeof entry.fileName === 'string'
 }
 
 /** The saved entries, newest first. Empty when nothing is saved or the storage is blocked or unreadable. */
@@ -47,8 +40,8 @@ export function useHistory() {
 
   useEffect(() => saveHistory(entries), [entries])
 
-  const record = useCallback((fileName: string, format: string) => {
-    const entry: HistoryEntry = { id: crypto.randomUUID(), fileName, format }
+  const record = useCallback((fileName: string) => {
+    const entry: HistoryEntry = { id: crypto.randomUUID(), fileName }
     setEntries((current) => [entry, ...current].slice(0, MAX_HISTORY_ENTRIES))
   }, [])
 
