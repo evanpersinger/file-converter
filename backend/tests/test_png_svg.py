@@ -5,6 +5,7 @@ tracing. The error-isolation cases matter most here: this module makes the same
 vtracer call, which panics rather than raising on an unreadable file.
 """
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -127,3 +128,17 @@ def test_transparency_does_not_break_the_trace(work_dirs: WorkDirs) -> None:
 
     assert "clear.svg" in summary
     assert "<svg" in (output_dir / "clear.svg").read_text()
+
+
+def test_a_tagged_png_is_traced_the_way_up_it_displays(work_dirs: WorkDirs) -> None:
+    """vtracer ignores the orientation tag, so a PNG stored sideways would trace as stored."""
+    from PIL import Image
+
+    input_dir, output_dir = work_dirs
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    Image.new("RGB", (20, 40), "red").save(input_dir / "tagged.png", "PNG", exif=exif)
+
+    png_svg.convert_png_to_svg(input_dir, output_dir)
+
+    assert re.search(r'width="40"\s+height="20"', (output_dir / "tagged.svg").read_text())
