@@ -170,32 +170,6 @@
   border: var(--line-thin) solid #ffc9c0;
 }
 
-/* The last conversions under the Result log, by file name. A plain list, since it keeps no
-   files to open or download. */
-.history h3 {
-  margin: 0 0 0.3rem;
-  font-size: 1rem;
-}
-
-.history ul {
-  margin: 0 0 0.5rem;
-  padding: 0;
-  list-style: none;
-}
-
-.history li {
-  margin-bottom: 0.15rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history button {
-  box-sizing: border-box;
-  padding: 0.4rem 1.25rem;
-  font-size: 1rem;
-}
-
 main {
   flex: 1;
   min-width: 0;
