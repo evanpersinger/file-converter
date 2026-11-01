@@ -125,26 +125,29 @@
   border-left: 8px solid var(--text);
 }
 
-/* Entries are told apart by a line like the column titles': 8px, running from this
-   column's own divider out to the page edge. It is drawn below the entry instead of being
-   its border, so the failed entry's panel can't swallow it. --edge is that panel's border,
-   since the line is positioned from the inside of it. */
-.log-entry {
-  --edge: 0px;
-  /* The space between entries. The line below sits in the middle of it. */
+/* Runs (one click of Convert) are told apart by a line like the column titles': 8px,
+   running from this column's own divider out to the page edge. It is drawn below the run
+   instead of being its border. */
+.log-run {
+  /* The space between runs. The line below sits in the middle of it. */
   --gap: 1.25rem;
   position: relative;
   margin-bottom: var(--gap);
 }
 
-.log-entry:not(:last-child)::after {
+.log-run:not(:last-child)::after {
   content: '';
   position: absolute;
-  top: calc(100% + var(--edge) + var(--gap) / 2 - 4px);
-  left: calc(-1 * var(--pad-left) - var(--edge));
-  right: calc(-1 * var(--page-edge) - var(--edge));
+  top: calc(100% + var(--gap) / 2 - 4px);
+  left: calc(-1 * var(--pad-left));
+  right: calc(-1 * var(--page-edge));
   height: 8px;
   background: var(--text);
+}
+
+/* The files of one run sit together with only a little space between them. */
+.log-entry:not(:last-child) {
+  margin-bottom: 0.9rem;
 }
 
 .log-entry p {
@@ -161,7 +164,6 @@
 
 /* A file that failed outright gets the same dark panel as the error block. */
 .log-entry.failed {
-  --edge: var(--line-thin);
   padding: 0.6rem 0.75rem;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.42);

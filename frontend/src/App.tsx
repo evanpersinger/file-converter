@@ -32,7 +32,7 @@ interface Result {
   downloads: Download[]
 }
 
-// What the far-right panel says about one file of the latest LLM conversion.
+// What the far-right panel says about one file of a conversion.
 interface LogEntry {
   id: string
   fileName: string
@@ -42,6 +42,15 @@ interface LogEntry {
   // A whole-file failure, drawn like the red error block instead of a plain note.
   failed: boolean
 }
+
+// One click of Convert. Every file from it sits in the same section of the Result panel.
+interface ConversionRun {
+  id: string
+  files: LogEntry[]
+}
+
+// How many runs the Result panel keeps, newest first.
+const MAX_LOG_RUNS = 10
 
 // Different spellings of one format. Kept in step with SUFFIX_ALIASES in
 // combine_files.py, so the button enables exactly when the backend would accept.
@@ -216,9 +225,9 @@ function Converter({ tab, active, history }: { tab: Tab; active: boolean; histor
   // True once Cancel has been clicked for the current job, so the button can't be
   // clicked twice while the backend is still winding the job down.
   const [cancelling, setCancelling] = useState(false)
-  // The sentences about the latest LLM conversion, one entry per file. It stays up while the
-  // files sit there and is replaced when the next LLM conversion starts.
-  const [conversionLog, setConversionLog] = useState<LogEntry[]>([])
+  // The sentences about each conversion run, newest first: one section per run, one entry
+  // per file. They stay until the page is reloaded.
+  const [conversionRuns, setConversionRuns] = useState<ConversionRun[]>([])
   const { percent, queued, elapsed } = useProgress(jobId)
   // Which file the newest detect() call was for. Adding a second file while the
   // first check is in flight would otherwise let the stale answer win.
@@ -463,17 +472,31 @@ function Converter({ tab, active, history }: { tab: Tab; active: boolean; histor
     cancelledBatch.current = false
     localModelRun.current = llmRoute?.provider === 'local'
     const modelName = llmRoute ? (model?.name ?? null) : null
-    setConversionLog([])
+    const runId = crypto.randomUUID()
 
+    // The first file of the run starts its section, so no empty section shows while the
+    // first file is still converting. The rest join it.
     const addLog = (fileName: string, convertedTo: string | null, lines: string[]) => {
-      setConversionLog((current) => [
-        ...current,
-        { id: crypto.randomUUID(), fileName, convertedTo, lines, failed: convertedTo === null },
-      ])
+      const entry: LogEntry = {
+        id: crypto.randomUUID(),
+        fileName,
+        convertedTo,
+        lines,
+        failed: convertedTo === null,
+      }
+      setConversionRuns((current) => {
+        const [latest, ...older] = current
+        return latest?.id === runId
+          ? [{ ...latest, files: [...latest.files, entry] }, ...older]
+          : [{ id: runId, files: [entry] }, ...current].slice(0, MAX_LOG_RUNS)
+      })
     }
 
     for (const [index, file] of files.entries()) {
-      if (cancelledBatch.current) break
+      if (cancelledBatch.current) {
+        addLog(file.name, null, ['Not converted: the batch was cancelled.'])
+        continue
+      }
       const id = crypto.randomUUID()
       const controller = new AbortController()
       currentAbort.current = controller
@@ -488,8 +511,10 @@ function Converter({ tab, active, history }: { tab: Tab; active: boolean; histor
         const formatName = formats?.allFormats.find((f) => f.ext === outExt)?.name ?? outExt.slice(1).toUpperCase()
         addLog(file.name, formatName || filename, log)
       } catch (e) {
-        // A cancelled file is meant to disappear, not show up as a failure.
-        if (!(e instanceof DOMException && e.name === 'AbortError')) {
+        // A cancelled file is listed in the Result panel, but isn't a failure to report.
+        if (e instanceof DOMException && e.name === 'AbortError') {
+          addLog(file.name, null, ['Conversion cancelled.'])
+        } else {
           failures.push(`${file.name}: ${(e as Error).message}`)
           addLog(file.name, null, [(e as Error).message])
         }
@@ -845,14 +870,18 @@ function Converter({ tab, active, history }: { tab: Tab; active: boolean; histor
       <aside className="log-panel">
         <h2>Result</h2>
 
-        {conversionLog.map((entry) => (
-          <div key={entry.id} className={entry.failed ? 'log-entry failed' : 'log-entry'}>
-            <p className="log-file" title={entry.fileName}>{entry.fileName}</p>
-            {entry.convertedTo && <p className="muted">Converted to {entry.convertedTo}</p>}
-            {entry.lines.map((line, i) => (
-              <p key={`${entry.id}-${i}`} className="muted">{line}</p>
+        {conversionRuns.map((run) => (
+          <section key={run.id} className="log-run">
+            {run.files.map((entry) => (
+              <div key={entry.id} className={entry.failed ? 'log-entry failed' : 'log-entry'}>
+                <p className="log-file" title={entry.fileName}>{entry.fileName}</p>
+                {entry.convertedTo && <p className="muted">Converted to {entry.convertedTo}</p>}
+                {entry.lines.map((line, i) => (
+                  <p key={`${entry.id}-${i}`} className="muted">{line}</p>
+                ))}
+              </div>
             ))}
-          </div>
+          </section>
         ))}
 
         {history.entries.length > 0 && (
