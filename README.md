@@ -9,6 +9,9 @@
 Built and tested on macOS only. Several converters depend on macOS paths and tools (Chrome,
 LibreOffice, the Menlo font, `brew` installs), so on Linux or Windows expect some of them to fail.
 
+Install the [system tools](#system-tools) first. `uv sync` and `pnpm install` only cover the
+Python and frontend packages, and the backend won't start without libmagic.
+
 ```bash
 # Terminal 1: frontend
 cd frontend && pnpm install && pnpm dev
