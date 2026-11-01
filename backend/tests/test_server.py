@@ -13,9 +13,10 @@ import sys
 import threading
 import time
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import fitz
 import pandas as pd
@@ -970,6 +971,57 @@ def test_conversions_past_the_limit_wait_for_a_free_slot(
 
     assert peak == slots
     assert statuses == [200] * len(job_ids)
+
+
+def test_cancelling_a_queued_conversion_stops_it_before_it_runs(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server, "_JOB_SLOTS", threading.BoundedSemaphore(1))
+    release = threading.Event()
+    runs: list[str] = []
+
+    def convert_slowly(input_dir: Path, output_dir: Path) -> str:
+        runs.append("ran")
+        release.wait(timeout=10)
+        (Path(output_dir) / "data.xlsx").write_bytes(b"x")
+        return "Converted 1 file(s)"
+
+    monkeypatch.setattr(server.csv_xlsx, "convert_csv_to_xlsx", convert_slowly)
+    responses: dict[str, Any] = {}
+
+    def post(job_id: str) -> None:
+        responses[job_id] = client.post(
+            "/api/convert",
+            data={"target": "csv->xlsx", "job_id": job_id},
+            files={"file": ("data.csv", b"a\n1\n")},
+        )
+
+    def wait_until(condition: Callable[[], bool]) -> None:
+        deadline = time.monotonic() + 5
+        while not condition() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert condition()
+
+    running_job = threading.Thread(target=post, args=("running",))
+    queued_job = threading.Thread(target=post, args=("queued",))
+    running_job.start()
+    try:
+        wait_until(lambda: runs == ["ran"])
+        queued_job.start()
+        wait_until(lambda: client.get("/api/progress/queued").json()["queued"])
+
+        cancel = client.post("/api/convert/queued/cancel")
+    finally:
+        release.set()
+        running_job.join()
+        if queued_job.is_alive():
+            queued_job.join()
+
+    assert cancel.status_code == 200
+    assert responses["running"].status_code == 200
+    assert responses["queued"].status_code == 409
+    assert responses["queued"].json()["error"] == "Conversion cancelled."
+    assert runs == ["ran"]
 
 
 def test_json_and_toon_convert_both_ways_through_the_api(

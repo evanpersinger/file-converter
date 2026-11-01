@@ -855,8 +855,9 @@ def progress(job_id: str) -> dict:
 
 @app.post("/api/convert/{job_id}/cancel")
 def cancel_convert(job_id: str):
-    """Signal a running conversion to stop. Only the local-model and video converters
-    actually check the flag; other conversions ignore it and just run to completion."""
+    """Signal a conversion to stop. A job still waiting for a slot never starts. A running
+    one stops only if its converter checks the flag (the LLM and video converters do,
+    before each page or file); the others ignore it and run to completion."""
     event = _JOB_CANCEL.get(job_id)
     if event is None:
         return _error("No conversion is running for that job.", status=404)
@@ -964,11 +965,14 @@ def convert(
 
         if job_id:
             _JOB_QUEUED.add(job_id)
-        with _JOB_SLOTS:
+        # tracked() comes before the slot, so a job that is still queued can be cancelled
+        with tracked(job_id, captured) as cancel_event, _JOB_SLOTS:
             if job_id:
                 _JOB_QUEUED.discard(job_id)
+            if cancel_event.is_set():
+                return _error("Conversion cancelled.", status=409)
             try:
-                with tracked(job_id, captured) as cancel_event, capture_output(captured):
+                with capture_output(captured):
                     extra = (model, cancel_event.is_set) if conv.takes_model else ()
                     result = conv.invoke(job_dir, job_in, job_out, staged, *extra)
             except Exception as exc:
