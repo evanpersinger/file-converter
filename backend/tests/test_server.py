@@ -9,6 +9,7 @@ should be rejected, and the ones that should work end to end.
 import contextvars
 import io
 import json
+import re
 import sys
 import threading
 import time
@@ -417,6 +418,64 @@ def test_a_model_note_from_the_handwriting_route_shows_up_in_the_log_not_the_fil
         "Model note on page 1: Some words were unclear",
         "1 of 1 pages converted.",
     ]
+
+
+
+def test_a_long_log_is_cut_down_to_fit_in_the_response_header(
+    client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ollama_reachable: None,
+) -> None:
+    """A long PDF where most pages fail prints a line per page. Sent whole, that pushes the
+    header past the 16 KB the Vite proxy's HTTP parser takes, and the user gets a 502 instead
+    of the pages that did convert."""
+    monkeypatch.setattr(server.llm_pdf_md, "list_ollama_models", lambda: ["qwen3.5:9b"])
+
+    def convert_page(image_b64, model, prompt):
+        convert_page.calls += 1
+        if convert_page.calls % 10:
+            raise RuntimeError("The model timed out reading this page. " + "x" * 150)
+        return "page text"
+
+    convert_page.calls = 0
+    monkeypatch.setattr(server.llm_md, "_convert_page_ollama", convert_page)
+
+    pdf_path = tmp_path / "long.pdf"
+    doc = fitz.open()
+    for _ in range(150):
+        doc.new_page(width=100, height=100)
+    doc.save(pdf_path)
+    doc.close()
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "handwriting->md", "model": "qwen3.5:9b"},
+        files={"file": ("long.pdf", pdf_path.read_bytes())},
+    )
+
+    assert response.status_code == 200
+    header = response.headers["X-Conversion-Log"]
+    assert len(header) <= server._LOG_HEADER_MAX_BYTES
+    log = json.loads(header)
+    assert log[0].startswith("Page 1 of 150 could not be converted")
+    assert re.fullmatch(r"\.\.\.and \d+ more lines not shown\.", log[-2])
+    assert log[-1] == "15 of 150 pages converted."
+
+
+def test_a_short_log_is_sent_whole() -> None:
+    lines = ["Page 1 of 2 could not be converted: boom", "1 of 2 pages converted."]
+    assert server._cap_log(lines) == lines
+
+
+def test_a_capped_log_keeps_the_cancel_line() -> None:
+    output = "".join(
+        f"Skipping page {i}/90, failed to convert: {'x' * 100}\n" for i in range(1, 80)
+    )
+    output += "Cancelled after page 80/90\n"
+    output += "Converted a.pdf to a.md (1/80 pages succeeded)\n"
+    capped = server._cap_log(server._plain_log(output), budget=1000)
+    assert len(json.dumps(capped)) <= 1000
+    assert capped[-2:] == ["Cancelled after page 80 of 90.", "1 of 80 pages converted."]
+    assert capped[-3].startswith("...and ")
 
 
 _HANDWRITING_CAPTION = "Used for pictures of handwriting"

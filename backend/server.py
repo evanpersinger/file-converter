@@ -829,6 +829,42 @@ def _plain_log(output: str) -> list[str]:
     return lines
 
 
+# Most the X-Conversion-Log header may hold, as sent (JSON, non-ASCII escaped). Node's HTTP
+# parser, which the Vite dev proxy runs on, rejects a response whose headers pass 16 KB, and
+# the browser then gets a 502 instead of the converted file. This leaves room for the rest.
+_LOG_HEADER_MAX_BYTES = 8 * 1024
+
+
+def _is_summary_line(line: str) -> bool:
+    return line.startswith("Cancelled after page") or bool(
+        re.fullmatch(r"\d+ of \d+ pages converted\.", line)
+    )
+
+
+def _cap_log(lines: list[str], budget: int = _LOG_HEADER_MAX_BYTES) -> list[str]:
+    """`lines`, cut down to fit in `budget` bytes of JSON.
+
+    A long PDF where many pages fail (a rate limit, a model that keeps timing out) prints
+    one line per page, enough to push the header past what the proxy accepts and lose the
+    whole file. The per-page lines are kept in order until the budget runs out and the rest
+    are counted in one line. The summary lines (pages converted, where a cancel stopped)
+    are always kept.
+    """
+    if len(json.dumps(lines)) <= budget:
+        return lines
+
+    summary = [line for line in lines if _is_summary_line(line)]
+    details = [line for line in lines if not _is_summary_line(line)]
+    kept: list[str] = []
+    for index, line in enumerate(details):
+        dropped = len(details) - index
+        note = f"...and {dropped} more {'line' if dropped == 1 else 'lines'} not shown."
+        if len(json.dumps([*kept, line, note, *summary])) > budget:
+            return [*kept, note, *summary]
+        kept.append(line)
+    return [*kept, *summary]
+
+
 def _latest_percent(output: str) -> int | None:
     """The last percentage a converter printed (`Converting page 3/12 (25%)` or
     `Converting video (25%)`), or None."""
@@ -1005,7 +1041,7 @@ def convert(
     # JSON keeps the header plain ASCII whatever the error text contains.
     headers = {
         "Content-Disposition": _content_disposition(filename),
-        "X-Conversion-Log": json.dumps(_plain_log(captured.getvalue())),
+        "X-Conversion-Log": json.dumps(_cap_log(_plain_log(captured.getvalue()))),
     }
 
     return Response(content=payload, media_type=media_type, headers=headers)
