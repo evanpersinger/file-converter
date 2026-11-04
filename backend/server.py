@@ -991,9 +991,11 @@ def convert(
     # The upload is staged before taking a job slot, so copying it (or rejecting it) never
     # waits behind running conversions.
     with job_workspace() as (job_dir, job_in, job_out):
-        # ext was lowercased above, so the staged name is lowercase whatever the upload
-        # was called.
-        staged = job_in / f"{stem}{ext}"
+        # ext was lowercased above, so the staged extension is lowercase whatever the upload
+        # was called. Leading dots come off the stem because the converters skip hidden files
+        # when they look for input, and a name made only of dots becomes "file". The download
+        # still takes the upload's own stem.
+        staged = job_in / f"{stem.lstrip('.') or 'file'}{ext}"
         limit = _upload_limit(conv)
         if problem := _upload_size_problem(_stage_upload(file, staged, limit), limit):
             return problem

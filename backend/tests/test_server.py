@@ -1230,6 +1230,27 @@ def test_directory_components_are_stripped_from_the_filename(
 
 
 @pytest.mark.parametrize(
+    ("upload_name", "download_name"),
+    [(".notes.csv", ".notes.xlsx"), ("..csv", "..xlsx")],
+    ids=["leading-dot", "only-dots"],
+)
+def test_a_filename_starting_with_a_dot_is_converted(
+    client: TestClient, jobs_root: Path, upload_name: str, download_name: str
+) -> None:
+    """The converters skip hidden files when they look for input, so an upload staged
+    under its dotted name used to fail with "No CSV files found in input folder"."""
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->xlsx"},
+        files={"file": (upload_name, b"a\n1\n")},
+    )
+
+    assert response.status_code == 200
+    assert f'filename="{download_name}"' in response.headers["content-disposition"]
+    assert pd.read_excel(io.BytesIO(response.content))["a"].tolist() == [1]
+
+
+@pytest.mark.parametrize(
     ("upload_name", "encoded_name"),
     [
         ("Screenshot 7.52.32 PM.csv", "Screenshot%207.52.32%E2%80%AFPM.xlsx"),
