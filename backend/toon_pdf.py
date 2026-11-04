@@ -6,7 +6,6 @@ drawn as text, never read as markup. Only Latin text can be drawn.
 """
 
 from pathlib import Path
-from xml.sax.saxutils import escape
 
 import toon_format
 from reportlab.lib import colors
@@ -22,6 +21,7 @@ from reportlab.platypus import (
 )
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+from pdf_fonts import fonts
 from toon_layout import NO_VALUE, Block, Bullet, Heading, Text, json_text, layout
 from toon_layout import Table as TableBlock
 
@@ -35,34 +35,41 @@ HEADING_MIN_SPACE = 90
 MIN_COLUMN_CHARS = 6
 MAX_COLUMN_CHARS = 40
 
+_FONTS = fonts()
 _STYLES = getSampleStyleSheet()
-_BODY = ParagraphStyle('ToonBody', parent=_STYLES['Normal'], fontSize=10, leading=13)
+_BODY = ParagraphStyle('ToonBody', parent=_STYLES['Normal'], fontName=_FONTS.sans, fontSize=10, leading=13)
 _CELL = ParagraphStyle('ToonCell', parent=_BODY, fontSize=9, leading=11)
-_HEADER_CELL = ParagraphStyle('ToonHeaderCell', parent=_CELL, fontName='Helvetica-Bold')
+_HEADER_CELL = ParagraphStyle('ToonHeaderCell', parent=_CELL, fontName=_FONTS.sans_bold)
+_HEADINGS = {
+    level: ParagraphStyle(f'ToonHeading{level}', parent=_STYLES[f'Heading{level}'], fontName=_FONTS.sans_bold)
+    for level in range(1, 7)
+}
 
 
-def _markup(value) -> str:
+def _markup(value, font: str = _FONTS.sans) -> str:
     """A value as Paragraph markup. Strings are escaped so they are drawn as written, the
-    rest are spelled the way JSON spells them (null, true, 1.5, {}).
+    rest are spelled the way JSON spells them (null, true, 1.5, {}). Characters `font`
+    lacks are drawn in the fallback font (Chinese, Japanese, Korean) when one is installed.
 
     Raises:
-        ValueError: If the font cannot draw a character in the string.
+        ValueError: If no installed font can draw a character in the string.
     """
     if not isinstance(value, str):
         return json_text(value)
-    try:
-        value.encode('cp1252')
-    except UnicodeEncodeError as e:
+    missing = _FONTS.undrawable(value, font)
+    if missing:
         raise ValueError(
-            f"the PDF font cannot draw {e.object[e.start:e.end]!r} (only Latin text is supported)"
-        ) from None
-    return escape(value).replace('\r\n', '<br/>').replace('\r', '<br/>').replace('\n', '<br/>')
+            f"the PDF font cannot draw {''.join(missing)!r} "
+            "(no installed font has these characters; color emoji are never supported)"
+        )
+    text = value.replace('\r\n', '\n').replace('\r', '\n')
+    return _FONTS.markup(text, font).replace('\n', '<br/>')
 
 
 def _bullet(bullet: Bullet) -> Paragraph:
     parts = []
     if bullet.key is not None:
-        parts.append(f'<b>{_markup(bullet.key)}</b>:')
+        parts.append(f'<b>{_markup(bullet.key, _FONTS.sans_bold)}</b>:')
     if bullet.value is not NO_VALUE:
         parts.append(_markup(bullet.value))
     style = ParagraphStyle(
@@ -75,7 +82,7 @@ def _bullet(bullet: Bullet) -> Paragraph:
 
 
 def _table(block: TableBlock, width: float) -> Table:
-    rows = [[Paragraph(_markup(key), _HEADER_CELL) for key in block.keys]]
+    rows = [[Paragraph(_markup(key, _FONTS.sans_bold), _HEADER_CELL) for key in block.keys]]
     for row in block.rows:
         rows.append([Paragraph(_markup(value), _CELL) for value in row])
 
@@ -106,7 +113,7 @@ def _story(blocks: list[Block], width: float) -> list:
     for block in blocks:
         if isinstance(block, Heading):
             story.append(CondPageBreak(HEADING_MIN_SPACE))
-            story.append(Paragraph(_markup(block.text), _STYLES[f'Heading{block.level}']))
+            story.append(Paragraph(_markup(block.text, _FONTS.sans_bold), _HEADINGS[block.level]))
         elif isinstance(block, TableBlock):
             story.extend([_table(block, width), Spacer(1, 8)])
         elif isinstance(block, Bullet):

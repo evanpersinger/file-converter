@@ -14,6 +14,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
+from pdf_fonts import fonts
 
 
 # Convert a .txt file to PDF
@@ -58,6 +59,15 @@ def convert_txt_to_pdf(
             with open(full_input_path, 'r', encoding='cp1252', errors='replace') as file:
                 text_content = file.read()
 
+        pdf_fonts = fonts()
+        # Characters no installed font has draw blank, so say which ones instead of
+        # leaving the user to spot the gaps.
+        missing = pdf_fonts.undrawable(text_content, pdf_fonts.mono)
+        if missing:
+            shown = ''.join(missing[:20]) + ('...' if len(missing) > 20 else '')
+            print(f"Warning: no installed font can draw {len(missing)} character(s), "
+                  f"they will be blank in the PDF: {shown}")
+
         # Create PDF document
         doc = SimpleDocTemplate(str(full_output_path), pagesize=letter)
         styles = getSampleStyleSheet()
@@ -66,6 +76,7 @@ def convert_txt_to_pdf(
         title_style = ParagraphStyle(
             'TextTitle',
             parent=styles['Title'],
+            fontName=pdf_fonts.sans_bold,
             fontSize=16,
             spaceAfter=20,
             alignment=1  # Center alignment
@@ -75,7 +86,7 @@ def convert_txt_to_pdf(
         normal_style = ParagraphStyle(
             'TextStyle',
             parent=styles['Normal'],
-            fontName='Courier',
+            fontName=pdf_fonts.mono,
             fontSize=9,
             leading=11,
             leftIndent=0,
@@ -88,7 +99,7 @@ def convert_txt_to_pdf(
 
         # Add title
         filename = full_input_path.stem
-        title = Paragraph(f"Text File: {filename}", title_style)
+        title = Paragraph(pdf_fonts.markup(f"Text File: {filename}", pdf_fonts.sans_bold), title_style)
         story.append(title)
         story.append(Spacer(1, 20))
 
@@ -96,12 +107,11 @@ def convert_txt_to_pdf(
         lines = text_content.split('\n')
         for line in lines:
             if line.strip():
-                # Escape special characters for reportlab
-                escaped_line = line.expandtabs(4).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                 # Paragraph collapses spaces, so leading spaces and runs of 2+ become non-breaking.
                 # Single spaces stay normal so long lines still wrap at word boundaries.
-                preserved_line = re.sub(r'^ +| {2,}', lambda m: '&nbsp;' * len(m.group()), escaped_line)
-                para = Paragraph(preserved_line, normal_style)
+                preserved_line = re.sub(r'^ +| {2,}', lambda m: '\u00a0' * len(m.group()), line.expandtabs(4))
+                # Escapes for reportlab, and draws Chinese, Japanese, Korean in the fallback font
+                para = Paragraph(pdf_fonts.markup(preserved_line, pdf_fonts.mono), normal_style)
                 story.append(para)
             else:
                 story.append(Spacer(1, 11))  # Empty line spacing, one line tall

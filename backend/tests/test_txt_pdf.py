@@ -8,6 +8,7 @@ from pathlib import Path
 import fitz
 import pytest
 
+import pdf_fonts
 import txt_pdf
 
 WorkDirs = tuple[Path, Path]
@@ -95,3 +96,39 @@ def test_an_existing_pdf_is_overwritten(work_dirs: WorkDirs) -> None:
 
     assert txt_pdf.convert_txt_to_pdf("notes.txt", None, input_dir, output_dir) is True
     assert "hello" in pdf_text(output_dir / "notes.pdf")
+
+
+@pytest.mark.skipif(pdf_fonts.fonts().mono == "Courier", reason="no Unicode TrueType font installed")
+def test_cyrillic_greek_and_accented_text_is_drawn(work_dirs: WorkDirs) -> None:
+    """Courier only covers Latin-1, so these used to come out blank."""
+    input_dir, output_dir = work_dirs
+    (input_dir / "мир.txt").write_text("Привет мир\nΓειά σου\n    café ñ\n", encoding="utf-8")
+
+    assert txt_pdf.convert_txt_to_pdf("мир.txt", None, input_dir, output_dir) is True
+
+    text = pdf_text(output_dir / "мир.pdf")
+    for line in ("Text File: мир", "Привет мир", "Γειά σου", "café ñ"):
+        assert line in text
+
+
+@pytest.mark.skipif(pdf_fonts.fonts().fallback is None, reason="no CJK fallback font installed")
+def test_chinese_text_is_drawn_in_the_fallback_font(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "zh.txt").write_text("你好 world\n", encoding="utf-8")
+
+    assert txt_pdf.convert_txt_to_pdf("zh.txt", None, input_dir, output_dir) is True
+
+    assert "你好 world" in pdf_text(output_dir / "zh.pdf")
+
+
+def test_characters_no_font_has_are_named_in_a_warning(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    char = next((c for c in "\U00010000\U00012000" if pdf_fonts.fonts().undrawable(c, pdf_fonts.fonts().mono)), None)
+    if char is None:
+        pytest.skip("an installed font draws every test character")
+    input_dir, output_dir = work_dirs
+    (input_dir / "odd.txt").write_text(f"a{char}b\n", encoding="utf-8")
+
+    assert txt_pdf.convert_txt_to_pdf("odd.txt", None, input_dir, output_dir) is True
+    assert f"will be blank in the PDF: {char}" in capsys.readouterr().out

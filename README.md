@@ -81,8 +81,11 @@ HTML to SVG and SVG to PDF or PNG need Google Chrome. Mermaid diagrams in Markdo
 - The LLM scripts convert every file in `backend/input/`, one at a time. If the files add up to
   more than 100 MB, they wait 30 seconds between files to go easy on memory.
 - Markdown and PDF to TOON convert tables only, and a file with none fails. A PDF table needs ruling
-  lines and two or more columns. TOON to PDF draws Latin text only, so Chinese or emoji fails instead
-  of printing boxes.
+  lines and two or more columns. TOON to PDF and TXT to PDF use a Unicode
+  font already on the machine (DejaVu on Linux, Arial or Menlo on macOS, Arial or Consolas on
+  Windows), plus a Chinese/Japanese/Korean font if one is installed. Without one they fall back to
+  Latin text only. A character no font has makes TOON to PDF fail instead of printing a box; TXT to
+  PDF converts and names the blank characters in its log.
 - OCR is English-only on purpose. Other languages come back as garbled English, not an error.
 - Handwriting reads better from a scan than from a phone photo.
 
