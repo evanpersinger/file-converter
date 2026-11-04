@@ -12,7 +12,7 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
-from image_convert import upright
+from image_convert import eight_bit, upright
 
         
 
@@ -157,7 +157,7 @@ def combine_files(
             images = []
             for img_path in file_types['image']:
                 with Image.open(img_path) as opened:
-                    img = upright(opened)
+                    img = eight_bit(upright(opened))
                     img = img.convert('RGBA') if 'A' in img.getbands() or 'transparency' in img.info else img.convert('RGB')
                 images.append(img)
             max_width = max(img.width for img in images)

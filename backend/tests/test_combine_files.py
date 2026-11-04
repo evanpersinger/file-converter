@@ -242,3 +242,16 @@ def test_an_unreadable_text_file_fails_the_combine(work_dirs: WorkDirs) -> None:
     (input_dir / "b.txt").mkdir()  # exists but cannot be read as a file
 
     assert combine(work_dirs, ["a.txt", "b.txt"]) is False
+
+
+def test_a_16_bit_png_keeps_its_brightness(work_dirs: WorkDirs) -> None:
+    """Pillow clips 16-bit values to 255 when converting, so this used to come out white."""
+    input_dir, output_dir = work_dirs
+    Image.new("I;16", (4, 4), 20000).save(input_dir / "one.png", "PNG")
+    Image.new("RGB", (4, 4), "black").save(input_dir / "two.png", "PNG")
+
+    assert combine(work_dirs, ["one.png", "two.png"]) is True
+
+    with Image.open(output_dir / "combined.png") as img:
+        red, green, blue = img.convert("RGB").getpixel((2, 2))
+        assert 70 <= red <= 86 and 70 <= green <= 86 and 70 <= blue <= 86
