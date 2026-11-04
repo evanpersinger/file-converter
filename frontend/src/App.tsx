@@ -434,25 +434,6 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     setModel(same ? null : { provider, name })
   }
 
-  async function run(action: (jobId: string) => Promise<{ blob: Blob; filename: string }>,
-                     running: Status) {
-    const id = crypto.randomUUID()
-    setStatus(running)
-    setJobId(id)
-    try {
-      const { blob, filename } = await action(id)
-      const download = { url: URL.createObjectURL(blob), filename, blob }
-      // Hold the result and let the user click Download, rather than firing the
-      // download automatically.
-      setResult((current) => ({ downloads: mergeDownloads(current?.downloads ?? [], [download]) }))
-      setStatus({ kind: 'idle' })
-    } catch (e) {
-      setStatus({ kind: 'error', message: (e as Error).message })
-    } finally {
-      setJobId(null)
-    }
-  }
-
   // Converts the files one after another, since the server runs one conversion at a
   // time anyway. A failed file doesn't stop the rest, and the ones that worked stay
   // downloadable next to the error naming the ones that didn't.
@@ -523,13 +504,34 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
   }
 
-  function combineAll() {
+  // Combines the picked files into one. Logged in the Result panel like a convert run,
+  // so a combine that failed (or what it produced) is still listed there afterwards.
+  async function combineAll() {
     const limitMessage = combineLimitMessage(files)
     if (limitMessage) {
       setStatus({ kind: 'error', message: limitMessage })
       return
     }
-    run(() => combine(files), { kind: 'combining' })
+    const fileNames = files.map((f) => f.name).join(', ')
+    const addLog = (lines: string[], failed: boolean) => {
+      const entry: LogEntry = { id: crypto.randomUUID(), fileName: fileNames, convertedTo: null, lines, failed }
+      setConversionRuns((current) => [{ id: crypto.randomUUID(), files: [entry] }, ...current].slice(0, MAX_LOG_RUNS))
+    }
+
+    setStatus({ kind: 'combining' })
+    try {
+      const { blob, filename } = await combine(files)
+      const download = { url: URL.createObjectURL(blob), filename, blob }
+      // Hold the result and let the user click Download, rather than firing the
+      // download automatically.
+      setResult((current) => ({ downloads: mergeDownloads(current?.downloads ?? [], [download]) }))
+      addLog([`Combined ${files.length} files into ${filename}`], false)
+      setStatus({ kind: 'idle' })
+    } catch (e) {
+      const message = (e as Error).message
+      addLog([message], true)
+      setStatus({ kind: 'error', message })
+    }
   }
 
   // Stops the batch from picking up the next file. For the local-model route the

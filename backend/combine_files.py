@@ -112,22 +112,23 @@ def combine_files(
     
     # Determine output format and name
     if output_path is None:
-        # Auto-detect output format from input files
+        # Auto-detect output format from input files. The name comes from the first file
+        # (report.pdf -> report_combined.pdf), so combining a second set of files doesn't
+        # produce the same name and replace the first result in the UI's download list.
+        first_file = full_input_paths[0]
         if 'image' in file_types and len(file_types) == 1:
             # All images - use same format as first input file
-            first_file_ext = file_types['image'][0].suffix.lower()
-            output_name = f"combined{first_file_ext}"
+            first_file = file_types['image'][0]
             output_type = 'image'
         elif 'pdf' in file_types and len(file_types) == 1:
             # All PDFs - use same format as first input file
-            first_file_ext = file_types['pdf'][0].suffix.lower()
-            output_name = f"combined{first_file_ext}"
+            first_file = file_types['pdf'][0]
             output_type = 'pdf'
         else:
             # Mixed or text files - use same format as first input file
-            first_file_ext = full_input_paths[0].suffix.lower() or '.txt'
-            output_name = f"combined{first_file_ext}"
             output_type = 'text'
+        first_file_ext = first_file.suffix.lower() or '.txt'
+        output_name = f"{first_file.stem}_combined{first_file_ext}"
     else:
         # User specified output - determine type from extension
         output_name = Path(output_path).name
@@ -233,9 +234,9 @@ def main():
             print("Example: python combine_files.py")
             print("         (combines all files in input/ folder - auto-detects output format)")
             print("Example: python combine_files.py file1.jpg file2.jpg")
-            print("         (combines images into combined.jpg)")
+            print("         (combines images into file1_combined.jpg)")
             print("Example: python combine_files.py file1.pdf file2.pdf")
-            print("         (combines PDFs into combined.pdf)")
+            print("         (combines PDFs into file1_combined.pdf)")
             print("Example: python combine_files.py file1.txt file2.txt combined.txt")
             print("         (combines files with custom output name)")
             print("\nNote: Files are read from 'input/' folder and output is saved to 'output/' folder")
