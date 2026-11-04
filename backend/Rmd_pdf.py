@@ -256,7 +256,9 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
                 str(full_output_path),
                 "--pdf-engine=xelatex",
                 "--standalone",
-                "--syntax-highlighting=none",  # Disable highlighting to use plain verbatim
+                # --no-highlight works on every pandoc; 3.8+ still accepts it as an alias of
+                # --syntax-highlighting=none, which older pandoc (3.1 on Debian/Ubuntu) rejects.
+                "--no-highlight",  # Disable highlighting to use plain verbatim
                 "-V", "geometry:margin=1in",  # Set 1 inch margins
                 "-V", "fontsize=11pt",  # Set readable font size
                 "-H", header_path,  # Include LaTeX header for text wrapping
