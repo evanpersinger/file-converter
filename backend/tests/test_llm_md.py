@@ -4,6 +4,7 @@ Ollama, the Anthropic SDK, and the OpenAI SDK are all mocked: no network calls, 
 key, no Ollama server needed to run this file.
 """
 
+import base64
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,13 +14,14 @@ import requests
 from PIL import Image
 
 import llm_md
+from llm_pdf_md import MAX_LOCAL_PAGE_PIXELS
 
 
 # --- helpers -------------------------------------------------------------------------
-def _make_pdf(path: Path, pages: int = 1) -> None:
+def _make_pdf(path: Path, pages: int = 1, width: float = 595, height: float = 842) -> None:
     doc = fitz.open()
     for _ in range(pages):
-        doc.new_page()
+        doc.new_page(width=width, height=height)
     doc.save(path)
     doc.close()
 
@@ -150,6 +152,21 @@ def test_local_sends_a_jpg_with_the_handwriting_prompt_and_the_chosen_model(
     assert calls[0]["model"] == "gemma4:12b"
     assert calls[0]["messages"][0]["content"] == llm_md._HANDWRITING_PROMPT
     assert len(calls[0]["messages"][0]["images"]) == 1
+
+
+def test_local_sends_an_image_within_the_pixel_cap_for_an_oversize_pdf_page(
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A photo turned into a PDF has a page many inches wide. At the full 200 DPI the image is
+    too big for a local model to read before the timeout, so the one Ollama gets is capped."""
+    input_dir, output_dir = work_dirs
+    _make_pdf(input_dir / "photo.pdf", width=2903, height=2177)
+    calls = _fake_ollama(monkeypatch)
+
+    llm_md.convert_handwriting_to_markdown_local("gemma4:12b", input_dir, output_dir)
+
+    image = fitz.Pixmap(base64.b64decode(calls[0]["messages"][0]["images"][0]))
+    assert image.width * image.height <= MAX_LOCAL_PAGE_PIXELS
 
 
 @pytest.mark.parametrize("batch_limit, rests", [(1, 1), (10**9, 0)])

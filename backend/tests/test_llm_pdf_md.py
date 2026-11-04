@@ -6,6 +6,7 @@ vision_parse library, so it isn't covered here, mocking vision_parse's internals
 just be testing that library, not our code.
 """
 
+import base64
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,11 +18,11 @@ import llm_pdf_md
 
 
 # --- helpers -------------------------------------------------------------------------
-def _make_pdf(path: Path, pages: int = 1) -> None:
-    """Write a real, minimal PDF with `pages` blank pages, so fitz can open it for real."""
+def _make_pdf(path: Path, pages: int = 1, width: float = 595, height: float = 842) -> None:
+    """Write a real, minimal PDF with `pages` blank pages (A4 unless sized), so fitz can open it for real."""
     doc = fitz.open()
     for _ in range(pages):
-        doc.new_page()
+        doc.new_page(width=width, height=height)
     doc.save(path)
     doc.close()
 
@@ -247,6 +248,47 @@ def test_local_sends_deterministic_options_and_the_chosen_model(
     assert calls[0]["model"] == "gemma4:12b"
     assert calls[0]["options"]["temperature"] == 0
     assert calls[0]["keep_alive"] == llm_pdf_md.OLLAMA_KEEP_ALIVE
+
+
+# --- local_page_dpi: oversize pages are rendered smaller ------------------------------
+@pytest.mark.parametrize(
+    "width, height, capped",
+    [(612, 792, False), (2903, 2177, True)],
+    ids=["letter", "photo-sized"],  # the second is a 4032x3024 photo embedded at 100 DPI
+)
+def test_local_page_dpi_only_lowers_the_dpi_for_pages_that_would_render_too_big(
+    width: float, height: float, capped: bool
+) -> None:
+    doc = fitz.open()
+    page = doc.new_page(width=width, height=height)
+
+    dpi = llm_pdf_md.local_page_dpi(page)
+    pixmap = page.get_pixmap(dpi=dpi)
+    doc.close()
+
+    assert (dpi < llm_pdf_md.LOCAL_RENDER_DPI) == capped
+    assert pixmap.width * pixmap.height <= llm_pdf_md.MAX_LOCAL_PAGE_PIXELS
+
+
+def test_local_sends_an_image_within_the_pixel_cap_for_an_oversize_page(
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A photo turned into a PDF has a page many inches wide. At the full 200 DPI the image is
+    too big for a local model to read before the timeout, so the one Ollama gets is capped."""
+    input_dir, output_dir = work_dirs
+    _make_pdf(input_dir / "photo.pdf", width=2903, height=2177)
+    calls: list[dict] = []
+
+    def fake_post(url, json, timeout):
+        calls.append(json)
+        return FakeResponse({"message": {"content": "text"}})
+
+    monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
+
+    llm_pdf_md.convert_pdf_to_markdown_local("qwen3.5:9b", input_dir, output_dir)
+
+    image = fitz.Pixmap(base64.b64decode(calls[0]["messages"][0]["images"][0]))
+    assert image.width * image.height <= llm_pdf_md.MAX_LOCAL_PAGE_PIXELS
 
 
 @pytest.mark.parametrize(
