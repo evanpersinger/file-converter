@@ -407,7 +407,7 @@ REGISTRY: list[Conversion] = [
                via_params(lambda s, i, o: toon_md.convert_toon_to_markdown(i, o))),
     Conversion((".toon",), "toon->pdf", "PDF", ".pdf",
                via_params(lambda s, i, o: toon_pdf.convert_toon_to_pdf(i, o)),
-               note="Latin text only. Other scripts (Chinese, emoji) fail instead of drawing boxes"),
+               note="Text no installed font can draw (some emoji) fails instead of drawing boxes"),
 
     # --- PDF -----------------------------------------------------------------
     Conversion((".pdf",), "pdf->md", "Markdown", ".md",

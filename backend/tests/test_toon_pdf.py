@@ -9,6 +9,7 @@ are read back with PyMuPDF.
 from pathlib import Path
 
 import fitz
+import pytest
 
 import toon_pdf
 
@@ -40,6 +41,12 @@ def fonts_of(doc: fitz.Document, text: str) -> set[str]:
         for span in line["spans"]
         if text in span["text"]
     }
+
+
+def is_bold(fonts: set[str]) -> bool:
+    """True when every font in the set is a bold face (Helvetica-Bold, DejaVuSans-Bold...)."""
+    assert fonts, "text not found in the PDF"
+    return all("Bold" in font for font in fonts)
 
 
 # Batch contract
@@ -111,8 +118,8 @@ def test_a_toon_table_is_drawn_as_a_table(work_dirs: WorkDirs) -> None:
 def test_the_header_row_is_bold(work_dirs: WorkDirs) -> None:
     doc = render(work_dirs, "users[1]{id,name}:\n  1,Ana\n")
 
-    assert fonts_of(doc, "name") == {"Helvetica-Bold"}
-    assert fonts_of(doc, "Ana") == {"Helvetica"}
+    assert is_bold(fonts_of(doc, "name"))
+    assert not is_bold(fonts_of(doc, "Ana"))
 
 
 def test_a_long_table_starts_on_the_page_its_heading_is_on(work_dirs: WorkDirs) -> None:
@@ -153,8 +160,8 @@ def test_plain_values_are_drawn_as_key_value_bullets(work_dirs: WorkDirs) -> Non
     text = text_of(doc)
     for line in ("name: Ana", "age: 30", "active: true", "note: null"):
         assert line in text
-    assert fonts_of(doc, "name") == {"Helvetica-Bold"}
-    assert fonts_of(doc, "Ana") == {"Helvetica"}
+    assert is_bold(fonts_of(doc, "name"))
+    assert not is_bold(fonts_of(doc, "Ana"))
 
 
 def test_nested_objects_get_headings_and_plain_entries_come_first(work_dirs: WorkDirs) -> None:
@@ -210,7 +217,7 @@ def test_markup_and_math_in_values_are_drawn_as_text(work_dirs: WorkDirs) -> Non
     assert "<b>not bold</b>" in text
     assert "&amp;" in text
     assert "<font size=40>big</font>" in text
-    assert fonts_of(doc, "not bold") == {"Helvetica"}
+    assert not is_bold(fonts_of(doc, "not bold"))
 
 
 def test_markup_in_a_key_is_drawn_as_text(work_dirs: WorkDirs) -> None:
@@ -223,14 +230,47 @@ def test_accented_latin_text_is_drawn(work_dirs: WorkDirs) -> None:
     assert "café ñ ü" in text_of(render(work_dirs, "name: café ñ ü\n"))
 
 
-def test_text_the_font_cannot_draw_fails_instead_of_printing_boxes(
+def test_text_no_font_can_draw_fails_instead_of_printing_boxes(
     work_dirs: WorkDirs,
 ) -> None:
+    # Linear B and Cuneiform are in none of the fonts pdf_fonts looks for.
+    char = next(
+        (c for c in "\U00010000\U00012000" if toon_pdf._FONTS.undrawable(c, toon_pdf._FONTS.sans)), None
+    )
+    if char is None:
+        pytest.skip("an installed font draws every test character")
     input_dir, output_dir = work_dirs
-    (input_dir / "data.toon").write_text("name: 中文\n", encoding="utf-8")
+    (input_dir / "data.toon").write_text(f"name: a{char}b\n", encoding="utf-8")
 
     summary = toon_pdf.convert_toon_to_pdf(input_dir, output_dir)
 
     assert summary.startswith("No files converted. 1 failed:")
-    assert "cannot draw '中文'" in summary
+    assert f"cannot draw {char!r}" in summary
     assert not (output_dir / "data.pdf").exists()
+
+
+@pytest.mark.skipif(toon_pdf._FONTS.sans == "Helvetica", reason="no Unicode TrueType font installed")
+def test_accented_cyrillic_and_greek_text_is_drawn(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "data.toon").write_text(
+        "people[2]{имя,city}:\n  Ζωή,Zürich\n  Ярослав,Αθήνα\nnote: café ñ\n", encoding="utf-8"
+    )
+
+    assert toon_pdf.convert_toon_to_pdf(input_dir, output_dir).startswith("Converted 1 file")
+    with fitz.open(output_dir / "data.pdf") as doc:
+        text = text_of(doc)
+        for word in ("имя", "Ζωή", "Zürich", "Ярослав", "Αθήνα", "café ñ"):
+            assert word in text
+        assert is_bold(fonts_of(doc, "имя"))
+
+
+@pytest.mark.skipif(toon_pdf._FONTS.fallback is None, reason="no CJK fallback font installed")
+def test_chinese_text_is_drawn_in_the_fallback_font(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "data.toon").write_text("名字: 中文 and Latin\n", encoding="utf-8")
+
+    assert toon_pdf.convert_toon_to_pdf(input_dir, output_dir).startswith("Converted 1 file")
+    with fitz.open(output_dir / "data.pdf") as doc:
+        text = text_of(doc)
+    assert "名字" in text
+    assert "中文 and Latin" in text
