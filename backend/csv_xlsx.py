@@ -3,10 +3,12 @@
 For each .csv in input/, reads it with pandas and writes an .xlsx to output/.
 """
 
-import pandas as pd
+import io
 from pathlib import Path
 
-from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+import pandas as pd
+
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files, read_text
 
 
 def _round_trips(converted: pd.Series, original: pd.Series) -> bool:
@@ -45,8 +47,9 @@ def _infer_lossless(column: pd.Series) -> pd.Series:
 
 def _write_workbook(source: Path, dest: Path) -> None:
     # Read as text so pandas' own guessing can't damage anything, then put back
-    # only the types that survive being printed out again.
-    df = pd.read_csv(source, dtype=str).apply(_infer_lossless)
+    # only the types that survive being printed out again. read_text also takes a CSV
+    # that is not UTF-8, which pandas alone would refuse.
+    df = pd.read_csv(io.StringIO(read_text(source)), dtype=str).apply(_infer_lossless)
 
     # xlsxwriter rather than the default openpyxl. openpyxl stores any string
     # starting with '=' as a live formula, which both loses the original text

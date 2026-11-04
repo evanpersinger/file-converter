@@ -167,3 +167,24 @@ def test_a_plain_numeric_column_is_still_written_as_numbers(work_dirs: WorkDirs)
     assert [c.value for c in price] == [15, 20]
     assert [c.data_type for c in code] == ["s", "s"]
     assert [c.value for c in code] == ["007", "042"]
+
+
+def test_a_windows_1252_csv_is_converted(work_dirs: WorkDirs) -> None:
+    """Excel's plain "CSV" save is not UTF-8. Reading it used to fail with
+    "'utf-8' codec can't decode byte 0xe9"."""
+    input_dir, output_dir = work_dirs
+    (input_dir / "data.csv").write_bytes("name,city\nJosé,Zürich\n".encode("cp1252"))
+
+    csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
+
+    df = pd.read_excel(output_dir / "data.xlsx")
+    assert df.to_dict("records") == [{"name": "José", "city": "Zürich"}]
+
+
+def test_a_bom_does_not_leak_into_the_first_header(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "data.csv").write_bytes(b"\xef\xbb\xbfname\nx\n")
+
+    csv_xlsx.convert_csv_to_xlsx(input_dir, output_dir)
+
+    assert list(pd.read_excel(output_dir / "data.xlsx").columns) == ["name"]
