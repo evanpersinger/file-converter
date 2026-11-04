@@ -137,7 +137,7 @@ def test_two_spellings_of_one_format_are_accepted(work_dirs: WorkDirs) -> None:
     Image.new("RGB", (8, 8), "blue").save(input_dir / "two.jpeg", "JPEG")
 
     assert combine(work_dirs, ["one.jpg", "two.jpeg"]) is True
-    assert (output_dir / "combined.jpg").exists()
+    assert (output_dir / "one_combined.jpg").exists()
 
 
 def test_images_are_stacked_vertically(work_dirs: WorkDirs) -> None:
@@ -146,7 +146,7 @@ def test_images_are_stacked_vertically(work_dirs: WorkDirs) -> None:
     Image.new("RGB", (8, 8), "blue").save(input_dir / "two.png", "PNG")
 
     assert combine(work_dirs, ["one.png", "two.png"]) is True
-    with Image.open(output_dir / "combined.png") as img:
+    with Image.open(output_dir / "one_combined.png") as img:
         assert img.size == (8, 16)
 
 
@@ -156,7 +156,7 @@ def test_a_narrower_image_is_centred(work_dirs: WorkDirs) -> None:
     Image.new("RGB", (10, 8), "blue").save(input_dir / "two.png", "PNG")
 
     assert combine(work_dirs, ["one.png", "two.png"]) is True
-    with Image.open(output_dir / "combined.png") as img:
+    with Image.open(output_dir / "one_combined.png") as img:
         assert img.size == (10, 16)
 
 
@@ -170,7 +170,7 @@ def test_a_phone_photo_is_stacked_the_way_up_it_displays(work_dirs: WorkDirs) ->
         Image.new("RGB", (8, 4), "red").save(input_dir / name, "JPEG", exif=exif)
 
     assert combine(work_dirs, ["one.jpg", "two.jpg"]) is True
-    with Image.open(output_dir / "combined.jpg") as img:
+    with Image.open(output_dir / "one_combined.jpg") as img:
         assert img.size == (4, 16)
 
 
@@ -180,7 +180,7 @@ def test_transparent_areas_come_out_white_not_black(work_dirs: WorkDirs) -> None
     Image.new("RGB", (4, 4), "red").save(input_dir / "two.png", "PNG")
 
     assert combine(work_dirs, ["one.png", "two.png"]) is True
-    with Image.open(output_dir / "combined.png") as img:
+    with Image.open(output_dir / "one_combined.png") as img:
         assert img.getpixel((1, 1)) == (255, 255, 255)
 
 
@@ -192,7 +192,7 @@ def test_text_files_keep_the_order_they_were_passed(work_dirs: WorkDirs) -> None
     (input_dir / "two.txt").write_text("beta\n")
 
     assert combine(work_dirs, ["two.txt", "one.txt"]) is True
-    merged = (output_dir / "combined.txt").read_text()
+    merged = (output_dir / "two_combined.txt").read_text()
     assert merged.index("beta") < merged.index("alpha")
 
 
@@ -202,7 +202,7 @@ def test_a_separator_names_each_file_after_the_first(work_dirs: WorkDirs) -> Non
     (input_dir / "two.txt").write_text("beta\n")
 
     combine(work_dirs, ["one.txt", "two.txt"])
-    merged = (output_dir / "combined.txt").read_text()
+    merged = (output_dir / "one_combined.txt").read_text()
 
     assert merged.startswith("alpha")
     assert "File: two.txt" in merged
@@ -217,7 +217,7 @@ def test_an_input_prefix_on_the_path_is_tolerated(work_dirs: WorkDirs) -> None:
     (input_dir / "b.txt").write_text("beta\n")
 
     assert combine(work_dirs, ["input/a.txt", "input/b.txt"]) is True
-    assert (output_dir / "combined.txt").exists()
+    assert (output_dir / "a_combined.txt").exists()
 
 
 def test_a_cp1252_text_file_is_decoded_not_dropped(work_dirs: WorkDirs) -> None:
@@ -226,7 +226,7 @@ def test_a_cp1252_text_file_is_decoded_not_dropped(work_dirs: WorkDirs) -> None:
     (input_dir / "b.txt").write_bytes("caf\xe9".encode("cp1252"))
 
     assert combine(work_dirs, ["a.txt", "b.txt"]) is True
-    assert "café" in (output_dir / "combined.txt").read_text(encoding="utf-8")
+    assert "café" in (output_dir / "a_combined.txt").read_text(encoding="utf-8")
 
 
 def test_an_unreadable_text_file_fails_the_combine(work_dirs: WorkDirs) -> None:
@@ -245,6 +245,17 @@ def test_a_16_bit_png_keeps_its_brightness(work_dirs: WorkDirs) -> None:
 
     assert combine(work_dirs, ["one.png", "two.png"]) is True
 
-    with Image.open(output_dir / "combined.png") as img:
+    with Image.open(output_dir / "one_combined.png") as img:
         red, green, blue = img.convert("RGB").getpixel((2, 2))
         assert 70 <= red <= 86 and 70 <= green <= 86 and 70 <= blue <= 86
+
+
+def test_the_output_is_named_after_the_first_file(work_dirs: WorkDirs) -> None:
+    """A fixed 'combined.<ext>' made a second combine replace the first in the UI's list."""
+    input_dir, output_dir = work_dirs
+    for name in ("report.txt", "notes.txt", "draft.txt", "final.txt"):
+        (input_dir / name).write_text(name)
+
+    assert combine(work_dirs, ["report.txt", "notes.txt"]) is True
+    assert combine(work_dirs, ["draft.txt", "final.txt"]) is True
+    assert sorted(p.name for p in output_dir.iterdir()) == ["draft_combined.txt", "report_combined.txt"]
