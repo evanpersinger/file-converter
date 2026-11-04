@@ -467,11 +467,14 @@ def test_a_short_log_is_sent_whole() -> None:
 
 
 def test_a_capped_log_keeps_the_cancel_line() -> None:
-    lines = [f"Page {i} of 90 could not be converted: {'x' * 100}" for i in range(1, 80)]
-    lines += ["Cancelled after page 80 of 90.", "1 of 90 pages converted."]
-    capped = server._cap_log(lines, budget=1000)
+    output = "".join(
+        f"Skipping page {i}/90, failed to convert: {'x' * 100}\n" for i in range(1, 80)
+    )
+    output += "Cancelled after page 80/90\n"
+    output += "Converted a.pdf to a.md (1/80 pages succeeded)\n"
+    capped = server._cap_log(server._plain_log(output), budget=1000)
     assert len(json.dumps(capped)) <= 1000
-    assert capped[-2:] == ["Cancelled after page 80 of 90.", "1 of 90 pages converted."]
+    assert capped[-2:] == ["Cancelled after page 80 of 90.", "1 of 80 pages converted."]
     assert capped[-3].startswith("...and ")
 
 
