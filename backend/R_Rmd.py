@@ -8,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 
+from batch_convert import read_text
 from find_files import find_files
 
 # Default folders live next to this script, so `python backend/R_Rmd.py` finds
@@ -70,8 +71,7 @@ def convert_r_to_rmd(r_path: str, output_path: str | None = None,
     
     try:
         # attempt to read R file
-        with open(full_input_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
+        lines = read_text(full_input_path, translate_newlines=True).splitlines(keepends=True)
         
         rmd_lines = []
         
