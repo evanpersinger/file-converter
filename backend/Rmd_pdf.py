@@ -13,6 +13,7 @@ from shutil import which
 from datetime import date
 import re
 
+from batch_convert import read_text
 from external_tool import run_tool
 from find_files import find_files
 
@@ -97,8 +98,7 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
         temp_path = None
         try:
             # Create a modified version with better formatting to prevent text overflow
-            with open(full_input_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = read_text(full_input_path, translate_newlines=True)
             
             # Replace Sys.Date() with actual date
             content = replace_sys_date(content)
@@ -163,8 +163,7 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
         modified_input_path = None
         try:
             # Pre-process the Rmd file to break long lines
-            with open(full_input_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = read_text(full_input_path, translate_newlines=True)
             
             # Replace Sys.Date() with actual date
             content = replace_sys_date(content)
