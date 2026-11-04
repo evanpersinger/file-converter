@@ -6,9 +6,9 @@ const GB = 1024 * MB
 // MAX_CONVERT_BYTES, MAX_VIDEO_BYTES and MAX_COMBINE_BYTES in server.py, repeated so an
 // oversize file is reported before it uploads. The server still refuses anything over them.
 // The batch limit is the UI's alone, since the server only ever sees one file per request.
-const MAX_CONVERT_BYTES = 100 * MB
+const MAX_CONVERT_BYTES = 500 * MB
 const MAX_VIDEO_BYTES = 5 * GB
-const MAX_BATCH_BYTES = 300 * MB
+const MAX_BATCH_BYTES = 500 * MB
 const MAX_COMBINE_BYTES = 500 * MB
 
 // The types the server gives the bigger video limit.

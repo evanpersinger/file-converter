@@ -95,9 +95,8 @@ BACKEND = Path(__file__).resolve().parent
 REPO = BACKEND.parent
 JOBS_ROOT = (REPO / ".webui_jobs").resolve()
 # The largest file a conversion takes, and the most a combine takes across all its files.
-# Combine only merges, so it gets the bigger limit. Video gets its own, since a few minutes
-# of it is already over the convert limit.
-MAX_CONVERT_BYTES = 100 * 1024 * 1024  # 100 MB
+# Video gets its own limit, since video files run much larger than the rest.
+MAX_CONVERT_BYTES = 500 * 1024 * 1024  # 500 MB
 MAX_COMBINE_BYTES = 500 * 1024 * 1024  # 500 MB
 MAX_VIDEO_BYTES = 5 * 1024 * 1024 * 1024  # 5 GB
 UPLOAD_CHUNK_BYTES = 1024 * 1024
