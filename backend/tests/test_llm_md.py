@@ -31,7 +31,9 @@ def _make_jpg(path: Path) -> None:
 
 
 class FakeResponse:
-    """Stands in for requests.Response, only the two methods the Ollama path calls."""
+    """Stands in for requests.Response, only what the Ollama path reads."""
+
+    status_code = 200
 
     def __init__(self, json_data: dict | None = None) -> None:
         self._json = json_data if json_data is not None else {}

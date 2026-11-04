@@ -519,3 +519,43 @@ def test_anthropic_returns_empty_string_when_there_are_no_text_blocks(tmp_path: 
     client = _FakeAnthropicClient(message)
 
     assert llm_pdf_md._convert_pdf_anthropic(client, pdf_path, llm_pdf_md.ANTHROPIC_MODELS[0]) == ""
+
+
+# --- Ollama error messages ---------------------------------------------------------------
+def test_ollama_error_body_is_shown_instead_of_the_bare_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ollama puts the real reason in the JSON body; it must reach the user, not just "500"."""
+    monkeypatch.setattr(
+        llm_pdf_md.requests,
+        "post",
+        lambda *a, **k: FakeResponse({"error": "model runner crashed: out of memory"}, status_code=500),
+    )
+
+    with pytest.raises(requests.exceptions.HTTPError, match="Ollama: model runner crashed: out of memory"):
+        llm_pdf_md._convert_page_ollama("aW1n", "qwen3.5:9b")
+
+
+def test_ollama_error_without_a_json_body_still_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    class NotJson(FakeResponse):
+        def json(self) -> dict:
+            raise ValueError("not json")
+
+    monkeypatch.setattr(llm_pdf_md.requests, "post", lambda *a, **k: NotJson(status_code=502))
+
+    with pytest.raises(requests.exceptions.HTTPError, match="502"):
+        llm_pdf_md._convert_page_ollama("aW1n", "qwen3.5:9b")
+
+
+def test_ollama_page_error_reason_reaches_the_summary(
+    work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    _make_pdf(input_dir / "doc.pdf")
+    monkeypatch.setattr(
+        llm_pdf_md.requests,
+        "post",
+        lambda *a, **k: FakeResponse({"error": 'model "nope" not found, try pulling it first'}, status_code=404),
+    )
+
+    summary = llm_pdf_md.convert_pdf_to_markdown_local("nope", input_dir, output_dir)
+
+    assert 'model "nope" not found' in summary

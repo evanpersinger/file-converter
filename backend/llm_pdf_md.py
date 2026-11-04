@@ -185,7 +185,7 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
         # by the caller, rather than left to hang.
         timeout=OLLAMA_PAGE_TIMEOUT_SECONDS,
     )
-    response.raise_for_status()
+    _raise_for_ollama_error(response)
     return _strip_markdown_fence(_strip_echoed_prompt(response.json()["message"]["content"], prompt))
 
 
@@ -193,6 +193,25 @@ def _strip_echoed_prompt(text: str, prompt: str) -> str:
     """Drop our prompt from the start of a reply that repeated it back, small models do."""
     stripped = text.lstrip()
     return stripped.removeprefix(prompt).lstrip() if stripped.startswith(prompt) else text
+
+
+def _raise_for_ollama_error(response: requests.Response) -> None:
+    """Raise with Ollama's own reason (out of memory, model not found, ...) on an error status.
+
+    `raise_for_status` alone drops the response body, which is where Ollama puts the reason,
+    so the user only saw "500 Server Error for url" and couldn't tell what to change.
+    """
+    if response.status_code < 400:
+        return
+    try:
+        reason = response.json().get("error")
+    except ValueError:
+        reason = None
+    if isinstance(reason, str) and reason.strip():
+        raise requests.exceptions.HTTPError(
+            f"Ollama: {reason.strip()} (HTTP {response.status_code})", response=response
+        )
+    response.raise_for_status()
 
 
 def _strip_markdown_fence(text: str) -> str:
