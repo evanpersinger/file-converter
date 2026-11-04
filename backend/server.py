@@ -751,6 +751,61 @@ class RejectOversizeBody:
 app.add_middleware(RejectOversizeBody)
 
 
+# Names the backend answers to. "testserver" is the host FastAPI's TestClient sends.
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "testserver"}
+
+
+def _hostname(value: str) -> str:
+    """`value` (a Host header, or the host part of an Origin) without its port, lowercased."""
+    value = value.strip().lower()
+    if value.startswith("["):  # IPv6 literal, like [::1]:8019
+        return value.split("]", 1)[0] + "]"
+    return value.rsplit(":", 1)[0] if value.count(":") == 1 else value
+
+
+def _is_local_origin(origin: str) -> bool:
+    scheme, sep, rest = origin.partition("://")
+    return bool(sep) and scheme in ("http", "https") and _hostname(rest) in LOCAL_HOSTS
+
+
+class RejectNonLocalRequests:
+    """Refuse requests that did not come from the UI on this machine.
+
+    The backend has no login, so without this any website open in the browser could POST a
+    file to http://localhost:8019/api/convert: browsers send a cross-site multipart form
+    without asking first. The page can't read the reply, but the conversion still runs
+    (R chunks in an .Rmd, a paid LLM route on the user's API key). Two checks:
+
+    - Host must be a local name. A DNS rebinding page reaches the server under its own
+      domain, so its Host header gives it away.
+    - Origin, when the browser sends one, must be a local page. The Vite dev server
+      forwards the UI's own http://localhost:3004, so the UI is unaffected. curl and the
+      scripts send no Origin and are let through.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            headers = dict(scope["headers"])
+            host = headers.get(b"host", b"").decode("latin-1")
+            origin = headers.get(b"origin", b"").decode("latin-1")
+            if _hostname(host) not in LOCAL_HOSTS or (origin and not _is_local_origin(origin)):
+                response = _error(
+                    "This backend only answers requests from the web UI on this computer.",
+                    "Open the UI at http://localhost:3004.",
+                    status=403,
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+# Added last so it runs first, before an oversize body is read.
+app.add_middleware(RejectNonLocalRequests)
+
+
 def _content_disposition(filename: str) -> str:
     """The download header for `filename`, which can hold any character the upload did.
 

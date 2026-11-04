@@ -69,6 +69,8 @@ HTML to SVG and SVG to PDF or PNG need Google Chrome. Mermaid diagrams in Markdo
 
 - There is no login and the converters run on whatever you upload, so keep the backend on localhost
   (don't start it with `--host 0.0.0.0`) and don't convert files you don't trust.
+- The backend refuses requests from other websites and from host names other than localhost,
+  so open the UI at `http://localhost:3004` (or `127.0.0.1`), not a LAN address.
 - Converting a file again overwrites the old output, and the script prints a message when it does.
 - Combine only works on files that share one extension, and keeps the order you added them.
 - A file to convert is capped at 500 MB, and a video at 5 GB. Combine takes up to 500 MB across all its files.

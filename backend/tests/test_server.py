@@ -147,6 +147,57 @@ def test_every_offered_conversion_names_a_real_target(client: TestClient) -> Non
 # Rejected requests
 
 
+@pytest.mark.parametrize("origin", [
+    "https://evil.example",
+    "http://localhost.evil.example",
+    "null",  # a sandboxed iframe or a file:// page
+])
+def test_a_conversion_posted_from_another_site_is_rejected(
+    client: TestClient, jobs_root: Path, origin: str
+) -> None:
+    """Any open website could otherwise make the browser POST a file here and run it."""
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->md"},
+        files={"file": ("a.csv", b"a\n1\n")},
+        headers={"Origin": origin},
+    )
+    assert response.status_code == 403
+    assert list(jobs_root.iterdir()) == []
+
+
+@pytest.mark.parametrize("host", ["evil.example", "evil.example:8019", "192.168.1.5:8019"])
+def test_a_request_under_a_non_local_host_name_is_rejected(
+    client: TestClient, host: str
+) -> None:
+    """A DNS rebinding page reaches the server under its own domain name."""
+    response = client.get("/api/formats", headers={"Host": host})
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("origin", [
+    "http://localhost:3004",
+    "http://127.0.0.1:3004",
+    "http://[::1]:3004",
+])
+def test_the_ui_on_a_local_origin_is_allowed(client: TestClient, origin: str) -> None:
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->md"},
+        files={"file": ("a.csv", b"a\n1\n")},
+        headers={"Origin": origin, "Host": "localhost:8019"},
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("host", ["localhost:8019", "127.0.0.1:8019", "[::1]:8019", "LOCALHOST"])
+def test_a_request_with_no_origin_on_a_local_host_is_allowed(
+    client: TestClient, host: str
+) -> None:
+    """curl and scripts send no Origin."""
+    assert client.get("/api/health", headers={"Host": host}).status_code == 200
+
+
 def test_an_unknown_target_is_rejected(client: TestClient) -> None:
     response = client.post(
         "/api/convert",
