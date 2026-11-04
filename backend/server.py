@@ -880,6 +880,18 @@ def _stage_upload(upload: UploadFile, dest: Path, limit: int) -> int:
     return copied
 
 
+def _staging_name(stem: str, suffix: str) -> str:
+    """The name to stage an upload under in the job's input folder.
+
+    The converters find their input with find_files, which skips hidden files (the macOS
+    '._photo.jpg' leftovers), so an upload named '.notes.csv' staged as-is was never seen:
+    a conversion failed with "No CSV files found" and a combine left it out and still
+    reported success. Leading dots are dropped here, and a name left with nothing but its
+    extension gets a placeholder stem.
+    """
+    return f"{stem.lstrip('.') or 'file'}{suffix}"
+
+
 def _upload_size_problem(size: int, limit: int) -> JSONResponse | None:
     """The error response for a single upload that is over `limit` or empty, else None."""
     if size > limit:
@@ -955,9 +967,9 @@ def convert(
     # The upload is staged before taking a job slot, so copying it (or rejecting it) never
     # waits behind running conversions.
     with job_workspace() as (job_dir, job_in, job_out):
-        # ext was lowercased above, so the staged name is lowercase whatever the upload
-        # was called.
-        staged = job_in / f"{stem}{ext}"
+        # ext was lowercased above, so the staged extension is lowercase whatever the
+        # upload was called. The download still takes the upload's own stem.
+        staged = job_in / _staging_name(stem, ext)
         limit = _upload_limit(conv)
         if problem := _upload_size_problem(_stage_upload(file, staged, limit), limit):
             return problem
@@ -1046,8 +1058,9 @@ def combine(files: list[UploadFile] = File(...)):
         for item, raw_name in zip(files, names):
             # Two uploads can share a name, and the second would overwrite the first.
             # Suffixing keeps both, and keeps the count honest.
-            stem, suffix = Path(raw_name).stem, Path(raw_name).suffix
-            name, counter = raw_name, 2
+            suffix = Path(raw_name).suffix
+            name = _staging_name(Path(raw_name).stem, suffix)
+            stem, counter = Path(name).stem, 2
             while name in staged_names:
                 name = f"{stem}_{counter}{suffix}"
                 counter += 1

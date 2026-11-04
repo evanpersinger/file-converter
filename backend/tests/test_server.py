@@ -1171,6 +1171,48 @@ def test_directory_components_are_stripped_from_the_filename(
 
 
 @pytest.mark.parametrize(
+    ("upload_name", "download_name"),
+    [(".notes.csv", ".notes.xlsx"), ("..csv", "..xlsx")],
+    ids=["leading-dot", "only-dots"],
+)
+def test_a_filename_starting_with_a_dot_is_converted(
+    client: TestClient, jobs_root: Path, upload_name: str, download_name: str
+) -> None:
+    """The converters skip hidden files when they look for input, so an upload staged
+    under its dotted name used to fail with "No CSV files found in input folder"."""
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->xlsx"},
+        files={"file": (upload_name, b"a\n1\n")},
+    )
+
+    assert response.status_code == 200
+    assert f'filename="{download_name}"' in response.headers["content-disposition"]
+    assert pd.read_excel(io.BytesIO(response.content))["a"].tolist() == [1]
+
+
+def test_combine_keeps_a_file_whose_name_starts_with_a_dot(
+    client: TestClient, jobs_root: Path
+) -> None:
+    """combine_files skips hidden files, so a dotted upload used to be dropped from the
+    result while the request still came back 200."""
+    response = client.post(
+        "/api/combine",
+        files=[
+            ("files", ("a.txt", b"first\n")),
+            ("files", (".b.txt", b"second\n")),
+            ("files", ("b.txt", b"third\n")),
+        ],
+    )
+
+    assert response.status_code == 200
+    text = response.content.decode()
+    assert "first" in text
+    assert "second" in text
+    assert "third" in text
+
+
+@pytest.mark.parametrize(
     ("upload_name", "encoded_name"),
     [
         ("Screenshot 7.52.32 PM.csv", "Screenshot%207.52.32%E2%80%AFPM.xlsx"),
