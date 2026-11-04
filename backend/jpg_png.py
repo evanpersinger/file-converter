@@ -6,8 +6,18 @@ output/. JPEG carries no transparency, so nothing is lost on the way across.
 
 from pathlib import Path
 
+from PIL import Image
+
 from batch_convert import INPUT_DIR, OUTPUT_DIR
-from image_convert import convert_images, saver
+from image_convert import convert_images
+
+
+def _save_png(img: Image.Image, dest: Path) -> None:
+    """Write the image as a PNG. PNG has no CMYK mode, so a CMYK JPEG (the kind print
+    work and Photoshop export) is turned into RGB first instead of failing to save."""
+    if img.mode == "CMYK":
+        img = img.convert("RGB")
+    img.save(dest, "PNG")
 
 
 def convert_jpg_to_png(
@@ -18,7 +28,7 @@ def convert_jpg_to_png(
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-    return convert_images(input_dir, output_dir, ('.jpg', '.jpeg'), ('.png',), saver('PNG'))
+    return convert_images(input_dir, output_dir, ('.jpg', '.jpeg'), ('.png',), _save_png)
 
 
 if __name__ == "__main__":

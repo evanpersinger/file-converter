@@ -114,3 +114,18 @@ def test_output_folder_is_created_when_missing(
     jpg_png.convert_jpg_to_png(input_dir, output_dir)
 
     assert output_dir.is_dir()
+
+
+def test_converts_a_cmyk_jpg(work_dirs: WorkDirs) -> None:
+    """PNG has no CMYK mode, so saving a CMYK JPEG as-is failed with
+    "cannot write mode CMYK as PNG"."""
+    input_dir, output_dir = work_dirs
+    Image.new("CMYK", (8, 8), (0, 255, 255, 0)).save(input_dir / "print.jpg", "JPEG")
+
+    jpg_png.convert_jpg_to_png(input_dir, output_dir)
+
+    with Image.open(output_dir / "print.png") as img:
+        assert img.format == "PNG"
+        assert img.mode == "RGB"
+        red, green, blue = img.getpixel((4, 4))
+        assert red > 200 and green < 60 and blue < 60
