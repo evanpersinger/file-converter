@@ -10,7 +10,7 @@ from pathlib import Path
 import mistune
 import toon_format
 
-from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files, read_text
 from toon_tables import FoundTable, tables_to_data
 
 _PARSER = mistune.create_markdown(renderer=None, plugins=['table'])
@@ -77,9 +77,8 @@ def _find_tables(tokens: list[dict]) -> list[FoundTable]:
 # handles conversion logic
 def markdown_to_toon(md_file):
     """Read a Markdown file and return its tables as TOON text"""
-    # utf-8-sig so a file saved with a byte order mark still parses
-    with open(md_file, 'r', encoding='utf-8-sig') as f:
-        tokens = _PARSER(f.read())
+    # read_text drops a byte order mark and takes a file that is not UTF-8
+    tokens = _PARSER(read_text(md_file, translate_newlines=True))
     return toon_format.dumps(tables_to_data(_find_tables(tokens))) + '\n'
 
 

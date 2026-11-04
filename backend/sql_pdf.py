@@ -11,7 +11,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-from batch_convert import INPUT_DIR, OUTPUT_DIR
+from batch_convert import INPUT_DIR, OUTPUT_DIR, read_text
 from find_files import find_files
 
 
@@ -19,7 +19,7 @@ def create_pdf_from_sql(sql_file_path, output_path) -> bool:
     """Write one PDF: a "SQL File: <name>" title, then each line of the source in a grey Courier box."""
     try:
         sql_path = Path(sql_file_path)
-        sql_content = sql_path.read_text(encoding="utf-8")
+        sql_content = read_text(sql_path, translate_newlines=True)
 
         styles = getSampleStyleSheet()
         sql_style = ParagraphStyle(

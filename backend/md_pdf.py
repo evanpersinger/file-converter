@@ -11,7 +11,7 @@ import traceback
 from pathlib import Path
 from shutil import which
 
-from batch_convert import INPUT_DIR, OUTPUT_DIR
+from batch_convert import INPUT_DIR, OUTPUT_DIR, read_text
 from external_tool import ToolTimeout, run_tool
 from find_files import find_files
 
@@ -782,8 +782,7 @@ def convert_md_to_pdf(
         return False
 
     try:
-        with open(full_input_path, "r", encoding="utf-8") as f:
-            md_content = f.read()
+        md_content = read_text(full_input_path, translate_newlines=True)
 
         # Shared safe preprocessing (no injected LaTeX) -> reused by the fallback
         md_content = clean_control_chars(md_content)
