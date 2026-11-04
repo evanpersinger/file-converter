@@ -127,13 +127,6 @@ def test_mixed_extensions_are_rejected(work_dirs: WorkDirs) -> None:
     assert list(output_dir.iterdir()) == []
 
 
-def test_hidden_files_are_skipped(work_dirs: WorkDirs) -> None:
-    input_dir, _ = work_dirs
-    (input_dir / ".DS_Store").write_bytes(b"\x00\x01")
-
-    assert combine(work_dirs, [".DS_Store"]) is False
-
-
 # Combining
 
 

@@ -93,13 +93,6 @@ def combine_files(
         print("Error: No valid files found to combine")
         return False
     
-    # Skip .DS_Store and other hidden/system files
-    full_input_paths = [f for f in full_input_paths if not f.name.startswith('.')]
-    
-    if not full_input_paths:
-        print("Error: No valid files found to combine")
-        return False
-
     # Mixing formats used to write junk and report success: a .pdf among .txt files
     # landed in the text branch and its raw bytes went straight into the output. The
     # order of the list is left alone, files combine in the order they were passed.
