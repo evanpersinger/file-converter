@@ -12,6 +12,7 @@ from pathlib import Path
 from shutil import which
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
+from pandoc_filters import local_files_filter
 from external_tool import ToolTimeout, run_tool
 from find_files import find_files
 
@@ -669,13 +670,16 @@ def _pandoc_once(md_text, output_path, from_fmt, header_path, mermaid_filter):
         f"--from={from_fmt}",
         "--to=pdf",
     ]
-    if mermaid_filter:
-        cmd += ["--filter", mermaid_filter]
 
     try:
-        # openin_any=p makes xelatex refuse absolute and parent-directory paths, so a
-        # \input{/some/file} in an upload can't pull a local file into the PDF.
-        result = run_tool(cmd, env={**os.environ, "openin_any": "p"})
+        with local_files_filter() as filter_args:
+            # Before mermaid-filter, so the diagram images it generates aren't dropped.
+            cmd += filter_args
+            if mermaid_filter:
+                cmd += ["--filter", mermaid_filter]
+            # openin_any=p makes xelatex refuse absolute and parent-directory paths, so a
+            # \input{/some/file} in an upload can't pull a local file into the PDF.
+            result = run_tool(cmd, env={**os.environ, "openin_any": "p"})
     finally:
         try:
             os.unlink(temp_md_path)

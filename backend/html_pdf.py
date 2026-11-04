@@ -10,6 +10,7 @@ from pathlib import Path
 from shutil import which
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
+from pandoc_filters import local_files_filter
 from external_tool import run_tool
 
 
@@ -94,7 +95,9 @@ def convert_html_to_pdf(
                 "--pdf-engine=xelatex",
             ]
             print(f"Converting {full_input_path.name} to pdf")
-            result = run_tool(cmd)
+            # Drops <img> tags that point at local files, so an upload can't embed them.
+            with local_files_filter() as filter_args:
+                result = run_tool(cmd + filter_args)
             if result.returncode == 0 and full_output_path.exists():
                 print(f"Converted {full_input_path.name} to {full_output_path.name}")
                 if existed_before:

@@ -13,6 +13,7 @@ from shutil import which
 from datetime import date
 import re
 
+from pandoc_filters import local_files_filter
 from external_tool import run_tool
 from find_files import find_files
 
@@ -263,7 +264,9 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
                 "-H", header_path,  # Include LaTeX header for text wrapping
             ]
             print(f"Converting {full_input_path.name} to pdf")
-            result = run_tool(cmd)
+            # Drops images and raw LaTeX that point at local files, so an upload can't embed them.
+            with local_files_filter() as filter_args:
+                result = run_tool(cmd + filter_args)
             
             # Clean up temp files
             if os.path.exists(header_path):
