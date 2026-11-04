@@ -22,11 +22,11 @@ from openai import OpenAI
 from batch_convert import INPUT_DIR, OUTPUT_DIR
 from llm_pdf_md import (
     BATCH_PAUSE_BYTES,
-    LOCAL_RENDER_DPI,
     OLLAMA_HOST,
     _convert_page_ollama,
     _prompt_for_local_model,
     _prompt_for_provider,
+    local_page_dpi,
     not_cancelled,
     rest_between_files,
 )
@@ -141,7 +141,7 @@ def _convert_pdf_pages(
                 print(f"\rCancelled after page {i - 1}/{page_count}")
                 break
             print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
-            png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
+            png_bytes = page.get_pixmap(dpi=local_page_dpi(page)).tobytes("png")
             image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
             attempted += 1
             try:

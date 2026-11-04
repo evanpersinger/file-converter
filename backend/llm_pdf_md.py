@@ -34,6 +34,7 @@ OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script completes conversion, overrides Ollama's 5 min default
 _MODEL_DISPLAY_NAMES = {"claude-haiku-4-5-20251001": "claude-haiku-4.5"}  # friendlier label for the CLI menu, actual model id is unchanged
 LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
+MAX_LOCAL_PAGE_PIXELS = 4_000_000  # Letter and A4 at 200 DPI fit (about 3.7M and 3.9M), so only oversize pages render lower
 OLLAMA_PAGE_TIMEOUT_SECONDS = 60  # a page taking longer than this is treated as stuck, not just slow
 BATCH_PAUSE_BYTES = 100 * 1024 * 1024  # a batch totalling more than this gets a rest between files
 PAUSE_SECONDS = 30
@@ -153,6 +154,16 @@ def _convert_pdf_anthropic(client: anthropic.Anthropic, pdf_path: Path, model: s
     return "".join(block.text for block in message.content if block.type == "text")
 
 
+def local_page_dpi(page: fitz.Page) -> int:
+    """LOCAL_RENDER_DPI, or lower for a page that would render to more than MAX_LOCAL_PAGE_PIXELS.
+
+    A photo turned into a PDF by jpg_pdf.py is embedded at 100 DPI, so its page is many inches
+    wide and a fixed 200 DPI render of it is too big for a local model to read before the timeout.
+    """
+    area_in_square_inches = (page.rect.width / 72) * (page.rect.height / 72)
+    return min(LOCAL_RENDER_DPI, int((MAX_LOCAL_PAGE_PIXELS / area_in_square_inches) ** 0.5))
+
+
 # Local (Ollama reads each page as an image, no API key or internet needed)
 def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT) -> str:
     """Send one image to the local Ollama vision model and return its Markdown."""
@@ -220,7 +231,7 @@ def _convert_pdf_local(
                 print(f"\rCancelled after page {i - 1}/{page_count}")
                 break
             print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
-            png_bytes = page.get_pixmap(dpi=LOCAL_RENDER_DPI).tobytes("png")
+            png_bytes = page.get_pixmap(dpi=local_page_dpi(page)).tobytes("png")
             image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
             attempted += 1
             try:
