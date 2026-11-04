@@ -66,3 +66,9 @@ def test_newline_in_a_cell_becomes_br(tmp_path: Path) -> None:
 
 def test_short_rows_are_padded(tmp_path: Path) -> None:
     assert _convert(tmp_path, b"name,note\nshort\n").splitlines()[-1] == "| short |  |"
+
+
+def test_a_windows_1252_csv_is_read(tmp_path: Path) -> None:
+    """Excel's plain "CSV" save is not UTF-8. Reading it used to fail with
+    "'utf-8' codec can't decode byte 0xe9"."""
+    assert "| José | Zürich |" in _convert(tmp_path, "name,city\nJosé,Zürich\n".encode("cp1252"))

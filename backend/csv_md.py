@@ -5,9 +5,10 @@ writes a pipe-delimited Markdown table to output/.
 """
 
 import csv
+import io
 from pathlib import Path
 
-from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
+from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files, read_text
 
 
 def _cell(value):
@@ -20,9 +21,9 @@ def _cell(value):
 # handles conversion logic
 def csv_to_markdown(csv_file):
     """Read a CSV file and return a markdown table string"""
-    with open(csv_file, 'r', encoding='utf-8-sig', newline='') as f:  # utf-8-sig drops the BOM Excel adds
-        reader = csv.reader(f)
-        rows = list(reader)
+    # read_text drops the BOM Excel adds and reads a non-UTF-8 (Windows-1252) export too.
+    # newline='' so quoted newlines inside a cell reach the reader untouched.
+    rows = list(csv.reader(io.StringIO(read_text(csv_file), newline='')))
 
     if not rows: # if csv file is empty, return an empty string
         return ""
