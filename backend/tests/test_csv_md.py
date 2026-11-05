@@ -72,3 +72,15 @@ def test_a_windows_1252_csv_is_read(tmp_path: Path) -> None:
     """Excel's plain "CSV" save is not UTF-8. Reading it used to fail with
     "'utf-8' codec can't decode byte 0xe9"."""
     assert "| José | Zürich |" in _convert(tmp_path, "name,city\nJosé,Zürich\n".encode("cp1252"))
+
+
+def test_a_utf_16_csv_is_reported_not_converted(work_dirs: WorkDirs) -> None:
+    """UTF-16 text is full of NUL bytes. Reading it as Windows-1252 wrote them into the
+    table and still reported success."""
+    input_dir, output_dir = work_dirs
+    (input_dir / "data.csv").write_bytes("name,city\nJosé,Zürich\n".encode("utf-16"))
+
+    summary = csv_md.convert_csv_to_markdown(input_dir, output_dir)
+
+    assert summary.startswith("No files converted. 1 failed: data.csv")
+    assert not (output_dir / "data.md").exists()
