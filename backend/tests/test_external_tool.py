@@ -4,6 +4,7 @@ tesseract is needed.
 """
 
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -48,17 +49,32 @@ def test_a_timeout_also_stops_what_the_tool_started(
     pid_file = tmp_path / "pid"
 
     with pytest.raises(ToolTimeout):
-        run_tool(["sh", "-c", f"sleep 30 & echo $! > '{pid_file}'; wait"])
+        # The grandchild's output goes to /dev/null, so it doesn't hold the tool's pipes
+        # open: if only the tool were killed, run_tool would return at once with the
+        # grandchild still running, instead of waiting out its 30 seconds
+        run_tool(["sh", "-c", f"sleep 30 >/dev/null 2>&1 & echo $! > '{pid_file}'; wait"])
 
     grandchild = int(pid_file.read_text())
     deadline = time.time() + 2
     while time.time() < deadline:
-        try:
-            os.kill(grandchild, 0)
-        except ProcessLookupError:
+        if not _running(grandchild):
             return
         time.sleep(0.05)
     pytest.fail("the process the tool started is still running")
+
+
+def _running(pid: int) -> bool:
+    """Whether a process is still running. A killed process whose parent died stays a
+    zombie until init reaps it, and in some containers init is slow to, so os.kill(pid, 0)
+    still finds it. A zombie has stopped running, so it counts as gone."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    state = subprocess.run(
+        ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True
+    ).stdout.strip()
+    return bool(state) and not state.startswith("Z")
 
 
 def _fake_tesseract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> None:
