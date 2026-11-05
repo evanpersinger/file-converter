@@ -9,16 +9,75 @@ from pathlib import Path
 
 import mistune
 import toon_format
+from mistune.plugins.table import (
+    CELL_SPLIT, NP_TABLE_PATTERN, TABLE_CELL, TABLE_PATTERN, _process_thead, table_in_list,
+    table_in_quote,
+)
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 from toon_tables import FoundTable, tables_to_data
 
-_PARSER = mistune.create_markdown(renderer=None, plugins=['table'])
+
+def _gfm_rows(lines: list[str], aligns: list) -> list[dict]:
+    """Table body lines as row tokens, each fitted to the header's width the way GitHub
+    does it: a short row gets empty cells, and cells past the header's width are dropped."""
+    rows = []
+    for line in lines:
+        cells = CELL_SPLIT.split(line)[:len(aligns)]
+        cells += [''] * (len(aligns) - len(cells))
+        rows.append({'type': 'table_row', 'children': [
+            {'type': 'table_cell', 'text': text.strip(), 'attrs': {'align': align, 'head': False}}
+            for text, align in zip(cells, aligns)
+        ]})
+    return rows
+
+
+def _parse_table(block, m, state):
+    """mistune's parse_table, except that rows whose cell count is off from the header's
+    are fitted to it instead of the whole table being turned down."""
+    thead, aligns = _process_thead(m.group('table_head'), m.group('table_align'))
+    if not thead:
+        return None
+    lines = []
+    for line in m.group('table_body').splitlines():
+        cell = TABLE_CELL.match(line)
+        if not cell:
+            return None
+        lines.append(cell.group(1))
+    body = {'type': 'table_body', 'children': _gfm_rows(lines, aligns)}
+    state.append_token({'type': 'table', 'children': [thead, body]})
+    return m.end()
+
+
+def _parse_nptable(block, m, state):
+    """Like _parse_table, for a table written without the outer pipes."""
+    thead, aligns = _process_thead(m.group('nptable_head'), m.group('nptable_align'))
+    if not thead:
+        return None
+    body = {'type': 'table_body', 'children': _gfm_rows(m.group('nptable_body').splitlines(), aligns)}
+    state.append_token({'type': 'table', 'children': [thead, body]})
+    return m.end()
+
+
+def _gfm_table(md: mistune.Markdown) -> None:
+    """mistune's table plugin with GitHub's handling of short and long rows."""
+    md.block.register('table', TABLE_PATTERN, _parse_table, before='paragraph')
+    md.block.register('nptable', NP_TABLE_PATTERN, _parse_nptable, before='paragraph')
+
+
+# table_in_quote and table_in_list also read a table inside a > quote or a list item
+_PARSER = mistune.create_markdown(
+    renderer=None, plugins=[_gfm_table, table_in_quote, table_in_list]
+)
+
+# Block tokens whose children can hold a table
+_CONTAINERS = ('block_quote', 'list', 'list_item')
 
 _LINE_BREAK = re.compile(r'<br\s*/?>', re.IGNORECASE)
 
-# The start of a table the parser turned down: a header line, then a line of dashes. The
-# parser only reads a table whose every row has as many cells as its header.
+# The start of a table the parser turned down: a header line, then a line of dashes. Now
+# that rows are fitted to the header, that happens when the header and the line of dashes
+# have a different number of cells.
 _REJECTED_TABLE = re.compile(r'[^\n]*\|[^\n]*\n\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*(\n|$)')
 
 
@@ -50,26 +109,34 @@ def _rows(table: dict) -> list[list[str]]:
 
 
 def _find_tables(tokens: list[dict]) -> list[FoundTable]:
-    """The tables in a document, each with the nearest heading above it. Only top-level
-    ones: the parser does not find a table inside a quote or a list.
+    """The tables in a document, each with the nearest heading above it, including tables
+    inside a quote or a list item.
 
     Raises:
         ValueError: If something that looks like a table was not read as one, so it is
             reported rather than silently left out.
     """
-    found = []
+    found: list[FoundTable] = []
     title = None
-    for token in tokens:
-        kind = token['type']
-        if kind == 'heading':
-            title = _inline_text(token['children']).strip() or None
-        elif kind == 'table':
-            found.append(FoundTable(title, _rows(token)))
-        elif kind == 'paragraph' and _REJECTED_TABLE.match(_inline_text(token['children'])):
-            raise ValueError(
-                "found what looks like a table but could not read it "
-                "(every row needs the same number of cells as the header)"
-            )
+
+    def walk(tokens: list[dict]) -> None:
+        nonlocal title
+        for token in tokens:
+            kind = token['type']
+            if kind == 'heading':
+                title = _inline_text(token['children']).strip() or None
+            elif kind == 'table':
+                found.append(FoundTable(title, _rows(token)))
+            elif kind in _CONTAINERS:
+                walk(token['children'])
+            elif (kind in ('paragraph', 'block_text')
+                  and _REJECTED_TABLE.match(_inline_text(token['children']))):
+                raise ValueError(
+                    "found what looks like a table but could not read it "
+                    "(the header and the line of dashes under it need the same number of cells)"
+                )
+
+    walk(tokens)
     return found
 
 
