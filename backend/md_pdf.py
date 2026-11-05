@@ -14,6 +14,7 @@ from shutil import which
 from batch_convert import INPUT_DIR, OUTPUT_DIR
 from external_tool import ToolTimeout, run_tool
 from find_files import find_files
+from platform_tools import mono_font
 
 # Config: pandoc reader extensions
 # Full fidelity: math, pipe tables, raw HTML and raw LaTeX (for our injected \...)
@@ -93,12 +94,20 @@ _SCRIPT_BASE = r"A-Za-z0-9" + _GREEK_CLASS + r"\)\]"
 _SUB_CHARS = "".join(re.escape(c) for c in SUBSCRIPT_TO_LATEX)
 _SUB_RUN = rf"[{_SUB_CHARS}]+(?:[.,][{_SUB_CHARS}]+)*"
 
+# The default LaTeX mono font lacks greek, subscripts and ≈, so code blocks print "?" for
+# them. Use an installed font that has them (Menlo on macOS, DejaVu Sans Mono on most Linux),
+# and LaTeX's default when there is none, since naming a missing font fails the whole render.
+_MONO = mono_font()
+_MONO_FONT_LINE = (
+    f"\\setmonofont{{{_MONO}}}" if _MONO
+    else "% No monospace font with greek found, so LaTeX's default is kept"
+)
+
 # Config: LaTeX preamble injected into every render
 LATEX_HEADER = """\\usepackage{amsmath}
 \\usepackage{amssymb}
 \\usepackage{fontspec}
-% Default mono font lacks greek, subscripts and ≈, so code blocks print "?" for them
-\\setmonofont{Menlo}
+""" + _MONO_FONT_LINE + """
 % Ensure horizontal rules render properly
 \\usepackage{booktabs}
 \\usepackage{array}

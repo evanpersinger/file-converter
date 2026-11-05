@@ -255,7 +255,7 @@ def test_a_ppt_without_libreoffice_fails_alone_and_a_pptx_still_converts(
     summary = pptx_md.convert_pptx_to_markdown(input_dir, output_dir)
 
     assert "NEWDECK" in (output_dir / "new.md").read_text(encoding="utf-8")
-    assert "1 failed: old.ppt: LibreOffice not found in PATH" in summary
+    assert "1 failed: old.ppt: LibreOffice not found" in summary
 
 
 def test_a_picture_in_the_deck_does_not_change_the_markdown(

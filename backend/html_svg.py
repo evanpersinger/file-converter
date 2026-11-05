@@ -21,8 +21,11 @@ import fitz  # PyMuPDF
 from batch_convert import INPUT_DIR, OUTPUT_DIR
 from external_tool import run_tool
 from find_files import find_files
+from platform_tools import find_chrome, install_hint
 
-CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# Chrome or Chromium wherever it is installed (CHROME_PATH in the environment wins). When
+# there is none, the macOS path, which then fails the exists() checks below.
+CHROME_PATH = find_chrome() or "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 # Text becomes outlines, so the SVG looks the same on a machine without the page's fonts,
 # at the cost of text that cannot be selected or edited. False keeps real <text> elements:
@@ -52,6 +55,20 @@ def _serve_folder(folder: Path):
         server.server_close()
 
 
+def chrome_missing() -> str | None:
+    """The message to return when Chrome isn't installed, or None when it is."""
+    if not os.path.exists(CHROME_PATH):
+        return f"Google Chrome not found. To install it: {install_hint('chrome')}"
+    return None
+
+
+def _sandbox_flags() -> list[str]:
+    """Chrome refuses to start as root on Linux (in Docker, say) unless its sandbox is off."""
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        return ["--no-sandbox"]
+    return []
+
+
 def _print_to_pdf(html_file: str, pdf_file: str, profile_dir: str) -> None:
     """Print one HTML file to a PDF with headless Chrome.
 
@@ -68,6 +85,7 @@ def _print_to_pdf(html_file: str, pdf_file: str, profile_dir: str) -> None:
             CHROME_PATH,
             "--headless",
             "--disable-gpu",
+            *_sandbox_flags(),
             "--no-pdf-header-footer",
             f"--user-data-dir={profile_dir}",
             f"--print-to-pdf={pdf_file}",
@@ -124,8 +142,9 @@ def convert_html_to_svg(
             return "That file is already in svg format"
         return "No HTML files found in input folder"
 
-    if not os.path.exists(CHROME_PATH):
-        return f"Google Chrome not found at {CHROME_PATH}"
+    missing = chrome_missing()
+    if missing:
+        return missing
 
     converted = []
     errors = []
