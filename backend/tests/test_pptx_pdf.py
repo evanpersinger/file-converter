@@ -13,6 +13,7 @@ import fitz
 import pytest
 from pptx import Presentation
 
+import platform_tools
 import pptx_pdf
 
 WorkDirs = tuple[Path, Path]
@@ -67,8 +68,8 @@ def test_a_missing_libreoffice_is_reported_with_install_help(
 
     summary = pptx_pdf.convert_pptx_to_pdf(input_dir, output_dir)
 
-    assert summary.startswith("LibreOffice not found in PATH")
-    assert "brew install --cask libreoffice" in summary
+    assert summary.startswith("LibreOffice not found")
+    assert platform_tools.install_hint("libreoffice") in summary
     assert list(output_dir.iterdir()) == []
 
 

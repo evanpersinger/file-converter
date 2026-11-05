@@ -71,6 +71,7 @@ import mp4_md
 import pdf_md
 import pdf_png
 import pdf_toon
+import platform_tools
 import png_jpg
 import png_pdf
 import png_svg
@@ -259,7 +260,6 @@ def via_params(call: Callable):
 
 
 # System dependency probes
-_LIBREOFFICE_APP = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
 
 
 def _ollama_reachable() -> bool:
@@ -274,9 +274,7 @@ DEPS: dict[str, Callable[[], bool]] = {
     "tesseract": lambda: bool(which("tesseract")),
     "pandoc": lambda: bool(which("pandoc")),
     "latex": lambda: bool(which("xelatex") or which("pdflatex")),
-    "libreoffice": lambda: bool(
-        which("soffice") or which("libreoffice") or _LIBREOFFICE_APP.exists()
-    ),
+    "libreoffice": lambda: bool(platform_tools.find_libreoffice_path()),
     "chrome": lambda: Path(html_svg.CHROME_PATH).exists(),
     "openai_key": lambda: bool(os.environ.get("OPENAI_API_KEY")),
     "anthropic_key": lambda: bool(os.environ.get("ANTHROPIC_API_KEY")),
@@ -284,11 +282,11 @@ DEPS: dict[str, Callable[[], bool]] = {
 }
 
 DEP_LABELS = {
-    "tesseract": ("Tesseract OCR is not installed", "brew install tesseract"),
-    "pandoc": ("Pandoc is not installed", "brew install pandoc"),
-    "latex": ("No LaTeX engine found", "brew install --cask mactex"),
-    "libreoffice": ("LibreOffice is not installed", "brew install --cask libreoffice"),
-    "chrome": ("Google Chrome is not installed", "brew install --cask google-chrome"),
+    "tesseract": ("Tesseract OCR is not installed", platform_tools.install_hint("tesseract")),
+    "pandoc": ("Pandoc is not installed", platform_tools.install_hint("pandoc")),
+    "latex": ("No LaTeX engine found", platform_tools.install_hint("latex")),
+    "libreoffice": ("LibreOffice is not installed", platform_tools.install_hint("libreoffice")),
+    "chrome": ("Google Chrome is not installed", platform_tools.install_hint("chrome")),
     "openai_key": ("OPENAI_API_KEY is not set", "add OPENAI_API_KEY to the .env file"),
     "anthropic_key": ("ANTHROPIC_API_KEY is not set", "add ANTHROPIC_API_KEY to the .env file"),
     "ollama": ("Ollama is not running", "open the Ollama app or run `ollama serve`"),
@@ -573,7 +571,10 @@ REGISTRY: list[Conversion] = [
                via_params(lambda s, i, o: html_pdf.convert_html_to_pdf(
                    str(s), None, input_dir=i, output_dir=o)),
                requires=("pandoc", "latex"),
-               note="Uses Pandoc, so CSS and layout are not preserved"),
+               note=(None if which("wkhtmltopdf") else
+                     "wkhtmltopdf is not installed, so this falls back to Pandoc and "
+                     "CSS/layout will not be preserved. "
+                     + platform_tools.install_hint("wkhtmltopdf"))),
     Conversion((".html", ".htm"), "html->svg", "SVG", ".svg",
                via_params(lambda s, i, o: html_svg.convert_html_to_svg(i, o)),
                requires=("chrome",)),

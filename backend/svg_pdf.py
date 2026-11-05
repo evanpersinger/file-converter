@@ -88,9 +88,7 @@ def svg_to_pdf(svg_file: str, pdf_file: str, work_dir: str) -> None:
 
 def chrome_missing() -> str | None:
     """The message to return when Chrome isn't installed, or None when it is."""
-    if not os.path.exists(html_svg.CHROME_PATH):
-        return f"Google Chrome not found at {html_svg.CHROME_PATH}"
-    return None
+    return html_svg.chrome_missing()
 
 
 def _print_pdf(source: Path, dest: Path) -> None:

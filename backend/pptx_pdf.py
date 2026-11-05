@@ -9,23 +9,16 @@ from pathlib import Path
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 from external_tool import ToolTimeout, run_tool
+from platform_tools import LIBREOFFICE_CANDIDATES, install_hint
 
 LIBREOFFICE_NOT_FOUND = (
-    "LibreOffice not found in PATH. On macOS (Homebrew cask): "
-    "brew install --cask libreoffice. If already installed via .app, add a "
-    "symlink: sudo ln -s /Applications/LibreOffice.app/Contents/MacOS/soffice "
-    "/usr/local/bin/soffice"
+    f"LibreOffice not found. To install it: {install_hint('libreoffice')}"
 )
 
 
 def _find_libreoffice() -> str | None:
     """Resolve the LibreOffice executable across platforms, or None if there isn't one."""
-    libreoffice_executables = [
-        'libreoffice',  # common on Linux
-        'soffice',      # common alias
-        '/Applications/LibreOffice.app/Contents/MacOS/soffice'  # macOS app bundle
-    ]
-    for candidate in libreoffice_executables:
+    for candidate in LIBREOFFICE_CANDIDATES:
         try:
             check = run_tool([candidate, '--version'])
             if check.returncode == 0 or 'LibreOffice' in check.stdout:
