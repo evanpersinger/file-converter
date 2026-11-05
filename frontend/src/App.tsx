@@ -73,10 +73,15 @@ const formatDuration = (seconds: number) =>
 
 // Adds freshly converted files to the ones already listed. An earlier result is only
 // replaced by one with the same name and extension, so converting a file to a second
-// format leaves the first result alone. Files in `added` never replace each other.
-function mergeDownloads(existing: Download[], added: Download[]): Download[] {
+// format leaves the first result alone. Files in `added` never replace each other, and
+// neither do the ones whose url is in `keep` (earlier files of the same batch).
+function mergeDownloads(
+  existing: Download[],
+  added: Download[],
+  keep: ReadonlySet<string> = new Set(),
+): Download[] {
   const replaced = new Set(added.map((d) => d.filename))
-  return [...existing.filter((d) => !replaced.has(d.filename)), ...added]
+  return [...existing.filter((d) => keep.has(d.url) || !replaced.has(d.filename)), ...added]
 }
 
 // The Markdown formats in the LLM tab, one per script, in registry order. A format has a
@@ -463,7 +468,9 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       return
     }
 
-    const downloads: Download[] = []
+    // The urls of this batch's results, so a later file with the same name (report.pdf
+    // from two folders) is listed next to an earlier one instead of replacing it.
+    const batchUrls = new Set<string>()
     const failures: string[] = []
     cancelledBatch.current = false
     localModelRun.current = llmRoute?.provider === 'local'
@@ -501,7 +508,13 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       setCancelling(false)
       try {
         const { blob, filename, log } = await convert(file, targetId, modelName, id, controller.signal)
-        downloads.push({ url: URL.createObjectURL(blob), filename, blob })
+        // Listed right away, so a finished file can be downloaded while the rest convert
+        const download = { url: URL.createObjectURL(blob), filename, blob }
+        const keep = new Set(batchUrls)
+        batchUrls.add(download.url)
+        setResult((current) => ({
+          downloads: mergeDownloads(current?.downloads ?? [], [download], keep),
+        }))
         const outExt = extensionOf(filename)
         const formatName = formats?.allFormats.find((f) => f.ext === outExt)?.name ?? outExt.slice(1).toUpperCase()
         addLog(file.name, formatName || filename, log)
@@ -517,9 +530,6 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     }
 
     setJobId(null)
-    if (downloads.length > 0) {
-      setResult((current) => ({ downloads: mergeDownloads(current?.downloads ?? [], downloads) }))
-    }
     setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
   }
 
