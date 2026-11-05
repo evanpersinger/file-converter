@@ -182,15 +182,74 @@ def test_a_blank_cell_among_numbers_is_null(work_dirs: WorkDirs) -> None:
     assert [row["n"] for row in data] == [1, None, 3]
 
 
+# Rows of the wrong width, fitted to the header the way GitHub does it (#67)
+
+
+def test_a_short_row_gets_blank_cells(work_dirs: WorkDirs) -> None:
+    data = toon_format.loads(convert(work_dirs, "| a | b |\n| - | - |\n| 1 | 2 |\n| 3 |\n"))
+
+    assert data == [{"a": 1, "b": 2}, {"a": 3, "b": None}]
+
+
+def test_a_short_row_in_a_text_column_is_blank_text(work_dirs: WorkDirs) -> None:
+    data = toon_format.loads(convert(work_dirs, "| a | b |\n| - | - |\n| x | y |\n| z |\n"))
+
+    assert data == [{"a": "x", "b": "y"}, {"a": "z", "b": ""}]
+
+
+def test_cells_past_the_header_are_dropped(work_dirs: WorkDirs) -> None:
+    data = toon_format.loads(convert(work_dirs, "| a | b |\n| - | - |\n| 1 | 2 | 3 |\n"))
+
+    assert data == [{"a": 1, "b": 2}]
+
+
+def test_a_ragged_table_without_outer_pipes_is_read(work_dirs: WorkDirs) -> None:
+    data = toon_format.loads(convert(work_dirs, "a | b\n- | -\n1 | 2 | 3\n4 | 5\n"))
+
+    assert data == [{"a": 1, "b": 2}, {"a": 4, "b": 5}]
+
+
+# Tables inside quotes and lists (#67)
+
+
+def test_a_table_inside_a_quote_is_read(work_dirs: WorkDirs) -> None:
+    assert convert(work_dirs, "> | a |\n> | - |\n> | 1 |\n") == "[1]{a}:\n  1\n"
+
+
+def test_a_table_inside_a_list_item_is_keyed_by_the_heading_above(work_dirs: WorkDirs) -> None:
+    markdown = "# items\n\n- first\n\n  | a | b |\n  | - | - |\n  | 1 | 2 |\n"
+
+    assert toon_format.loads(convert(work_dirs, markdown)) == {"items": [{"a": 1, "b": 2}]}
+
+
+def test_a_quoted_table_is_kept_next_to_a_top_level_one(work_dirs: WorkDirs) -> None:
+    """Before, the top-level table was converted and the quoted one dropped without a word."""
+    markdown = "# one\n\n| x |\n| - |\n| 1 |\n\n# two\n\n> | y |\n> | - |\n> | 2 |\n"
+
+    assert toon_format.loads(convert(work_dirs, markdown)) == {"one": [{"x": 1}], "two": [{"y": 2}]}
+
+
+def test_a_table_in_a_code_block_inside_a_quote_is_not_read(work_dirs: WorkDirs) -> None:
+    markdown = "> ```\n> | a |\n> | - |\n> | 1 |\n> ```\n\n| real |\n| - |\n| 2 |\n"
+
+    assert convert(work_dirs, markdown) == "[1]{real}:\n  2\n"
+
+
 # Tables that cannot be read
 
 
-def test_a_table_with_rows_of_the_wrong_width_fails_instead_of_being_skipped(
+def test_a_header_and_dash_line_of_different_widths_fails_instead_of_being_skipped(
     work_dirs: WorkDirs,
 ) -> None:
-    """The parser reads a table only when every row matches the header. Another table in
-    the same file must not let this one vanish without a word."""
-    markdown = "| a | b |\n| - | - |\n| 1 |\n\n| c |\n| - |\n| 2 |\n"
+    """The parser turns down a table whose header and line of dashes differ in cell count.
+    Another table in the same file must not let this one vanish without a word."""
+    markdown = "| a | b |\n| - |\n| 1 | 2 |\n\n| c |\n| - |\n| 2 |\n"
+
+    assert "could not read it" in failure(work_dirs, markdown)
+
+
+def test_an_unreadable_table_inside_a_quote_fails_too(work_dirs: WorkDirs) -> None:
+    markdown = "> | a | b |\n> | - |\n> | 1 | 2 |\n\n| c |\n| - |\n| 2 |\n"
 
     assert "could not read it" in failure(work_dirs, markdown)
 
