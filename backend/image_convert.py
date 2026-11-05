@@ -47,6 +47,19 @@ def save_pdf_pages(img: Image.Image, dest: Path) -> None:
     pages[0].save(dest, "PDF", save_all=True, append_images=pages[1:], resolution=100.0)
 
 
+# The 16-bit grayscale modes Pillow opens a 16-bit grayscale PNG in ("I" on older Pillow).
+_SIXTEEN_BIT_MODES = {"I;16", "I;16B", "I;16L", "I;16N", "I"}
+
+
+def eight_bit(img: Image.Image) -> Image.Image:
+    """Scale a 16-bit grayscale image down to 8-bit ("L"). Pillow's own conversion to RGB
+    or L clips every value over 255 instead of scaling it, so anything brighter than
+    near-black came out pure white. Any other image is returned as is."""
+    if img.mode not in _SIXTEEN_BIT_MODES:
+        return img
+    return img.convert("I").point(lambda value: value * (1 / 256)).convert("L")
+
+
 def upright(img: Image.Image) -> Image.Image:
     """Apply the EXIF orientation tag, so a phone photo stored rotated comes out the
     right way up. An image with no orientation to apply is returned as is, since
@@ -69,7 +82,7 @@ def convert_images(
 
     def convert(source: Path, dest: Path) -> None:
         with Image.open(source) as img:
-            save(upright(img), dest)
+            save(eight_bit(upright(img)), dest)
 
     return convert_files(
         input_dir, output_dir, source_exts, target_exts, convert, source_label, target_label
