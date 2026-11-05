@@ -18,11 +18,15 @@ def read_text(path: str | Path) -> str:
     that are not valid UTF-8, like a CSV from Excel's plain "CSV" save.
 
     Line endings are kept as they are, so a CSV reader still sees quoted newlines intact.
+    Raises ValueError for UTF-16 text instead of reading it as Windows-1252.
     """
     data = Path(path).read_bytes()
     try:
         return data.decode('utf-8-sig')
     except UnicodeDecodeError:
+        # UTF-16 is full of NUL bytes, and cp1252 would decode them into a table of garbage
+        if b'\x00' in data:
+            raise ValueError("not UTF-8 or Windows-1252 text (UTF-16 is not supported)") from None
         return data.decode('cp1252', errors='replace')
 
 
