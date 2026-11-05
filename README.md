@@ -9,7 +9,8 @@
 Built and tested on macOS only. Several converters depend on macOS paths and tools (Chrome,
 LibreOffice, the Menlo font, `brew` installs), so on Linux or Windows expect some of them to fail.
 
-Install the [system tools](#system-tools) first. `uv sync` and `pnpm install` only cover the
+Needs [uv](https://docs.astral.sh/uv/), Node 22 and pnpm (`corepack enable` picks the version in
+`frontend/package.json`). Install the [system tools](#system-tools) first. `uv sync` and `pnpm install` only cover the
 Python and frontend packages, and the backend won't start without libmagic.
 
 ```bash
@@ -44,8 +45,8 @@ OpenAI, or Anthropic (the last two cost money and need `OPENAI_API_KEY` or
 - Combine several files of one type into one
 
 Every script is in `backend/<from>_<to>.py`. Each runs on its own: create `backend/input/` (it is
-gitignored, so a fresh clone doesn't have it), drop files in, run the script, and find the results
-in `backend/output/`.
+gitignored, so a fresh clone doesn't have it), drop files in, run the script (for example `uv run python backend/csv_md.py`), and find the
+results in `backend/output/`.
 
 ## System tools
 
@@ -64,6 +65,19 @@ brew install ollama                     # local LLM
 
 HTML to SVG and SVG to PDF or PNG need Google Chrome. Mermaid diagrams in Markdown to PDF need
 `pnpm add -g mermaid-filter`.
+
+## Test
+
+The same checks CI runs:
+
+```bash
+uv run ruff check backend
+uv run pytest
+cd frontend && pnpm lint && pnpm build
+```
+
+Tests that need a missing tool are skipped, not failed. CI installs `libmagic`, `tesseract` and
+`pandoc` first.
 
 ## Good to know
 
