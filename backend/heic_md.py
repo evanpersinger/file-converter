@@ -6,30 +6,13 @@ English only (lang='eng'): other languages come back as garbled English, not an 
 import re
 from pathlib import Path
 import pillow_heif
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
-from external_tool import ocr_text
+from ocr_variants import best_ocr_text
 from image_convert import convert_images
 
 pillow_heif.register_heif_opener()
-
-
-def preprocess_image(image):
-    """Preprocess image to improve OCR accuracy"""
-    if image.mode != 'L':
-        image = image.convert('L')
-
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(1.5)
-
-    enhancer = ImageEnhance.Sharpness(image)
-    image = enhancer.enhance(1.2)
-
-    image = image.filter(ImageFilter.MedianFilter(size=3))
-
-    return image
-
 
 
 def clean_text(text):
@@ -86,15 +69,8 @@ def clean_text(text):
 
 
 def _ocr_to_markdown(img: Image.Image, dest: Path) -> None:
-    processed_image = preprocess_image(img)
-
-    custom_config = r'--oem 3 --psm 6'
-    text = ocr_text(
-        processed_image,
-        config=custom_config,
-        lang='eng'
-    )
-
+    # Reads a few preprocessed versions and keeps the most confident (see ocr_variants)
+    text = best_ocr_text(img)
     dest.write_text(clean_text(text), encoding='utf-8')
 
 

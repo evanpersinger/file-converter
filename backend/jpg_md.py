@@ -4,32 +4,12 @@ English only (lang='eng'): other languages come back as garbled English, not an 
 """
 
 from pathlib import Path
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image
 import re
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
-from external_tool import ocr_text
+from ocr_variants import best_ocr_text
 from image_convert import convert_images
-
-
-def preprocess_image(image):
-    """Preprocess image to improve OCR accuracy"""
-    # Convert to grayscale for better OCR
-    if image.mode != 'L':
-        image = image.convert('L')
-    
-    # Enhance contrast
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(1.5)
-    
-    # Enhance sharpness
-    enhancer = ImageEnhance.Sharpness(image)
-    image = enhancer.enhance(1.2)
-    
-    # Apply slight denoising
-    image = image.filter(ImageFilter.MedianFilter(size=3))
-    
-    return image
 
 
 def clean_text(text):
@@ -90,18 +70,8 @@ def clean_text(text):
 
 
 def _ocr_to_markdown(img: Image.Image, dest: Path) -> None:
-    # Preprocess image for better OCR
-    processed_image = preprocess_image(img)
-
-    # OCR with better configuration for accuracy
-    custom_config = r'--oem 3 --psm 6'
-    text = ocr_text(
-        processed_image,
-        config=custom_config,
-        lang='eng'
-    )
-
-    # Clean and format text as markdown
+    # Reads a few preprocessed versions and keeps the most confident (see ocr_variants)
+    text = best_ocr_text(img)
     dest.write_text(clean_text(text), encoding='utf-8')
 
 

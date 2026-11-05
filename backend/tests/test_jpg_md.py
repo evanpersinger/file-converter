@@ -44,7 +44,7 @@ def test_the_cleaned_text_is_written_to_a_md(
     input_dir, output_dir = work_dirs
     write_image(input_dir / filename)
     monkeypatch.setattr(
-        jpg_md, "ocr_text", lambda image, **kwargs: "First sentence.\nsecond half\n\n\n\nThird"
+        jpg_md, "best_ocr_text", lambda image: "First sentence.\nsecond half\n\n\n\nThird"
     )
 
     summary = jpg_md.convert_jpg_to_markdown(input_dir, output_dir)
