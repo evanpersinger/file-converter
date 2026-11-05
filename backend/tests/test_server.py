@@ -1452,8 +1452,11 @@ def test_the_result_file_is_cleaned_up_when_sending_it_fails(tmp_path: Path) -> 
     response = server._StreamedFile(result, lambda: cleaned.append(True))
     scope = {"type": "http", "method": "GET", "headers": [], "path": "/"}
 
-    with pytest.raises(OSError):
+    # Starlette before 1.0 lets the error through, later versions swallow it as a disconnect
+    try:
         asyncio.run(response(scope, receive, send))
+    except OSError:
+        pass
 
     assert cleaned == [True]
 
