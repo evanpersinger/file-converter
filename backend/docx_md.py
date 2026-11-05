@@ -8,6 +8,7 @@ from shutil import which
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 from external_tool import run_tool
+from platform_tools import install_hint
 
 
 def _run_pandoc(source: Path, dest: Path) -> None:
@@ -41,7 +42,7 @@ def convert_docx_to_markdown(
         A summary of what was converted, suitable for showing to a caller.
     """
     if not which("pandoc"):
-        return "Error: pandoc not found. Install it with: brew install pandoc"
+        return f"Error: pandoc not found. Install it with: {install_hint('pandoc')}"
 
     return convert_files(
         input_dir, output_dir, ('.docx',), ('.md',), _run_pandoc, target_label="markdown"
