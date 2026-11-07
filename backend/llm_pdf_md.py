@@ -186,7 +186,13 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
         timeout=OLLAMA_PAGE_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    return _strip_markdown_fence(response.json()["message"]["content"])
+    return _strip_markdown_fence(_strip_echoed_prompt(response.json()["message"]["content"], prompt))
+
+
+def _strip_echoed_prompt(text: str, prompt: str) -> str:
+    """Drop our prompt from the start of a reply that repeated it back, small models do."""
+    stripped = text.lstrip()
+    return stripped.removeprefix(prompt).lstrip() if stripped.startswith(prompt) else text
 
 
 def _strip_markdown_fence(text: str) -> str:

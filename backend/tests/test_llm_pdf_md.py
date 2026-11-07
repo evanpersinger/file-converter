@@ -368,6 +368,16 @@ def test_local_reports_all_empty_pages_as_no_content(
     assert not (output_dir / "blank.md").exists()
 
 
+def test_page_drops_the_prompt_a_small_model_repeats_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    prompt = "Transcribe this page."
+    reply = f"{prompt}\n\n# Real heading\n\nBody text."
+    monkeypatch.setattr(
+        llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": reply}})
+    )
+
+    assert llm_pdf_md._convert_page_ollama("img", "qwen3.5:2b", prompt) == "# Real heading\n\nBody text."
+
+
 def test_local_continues_after_one_pdf_fails_mid_batch(
     work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
