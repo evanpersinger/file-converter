@@ -12,6 +12,9 @@ interface FileViewerProps {
 
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']
 const TEXT_EXTS = ['.csv', '.txt', '.sql', '.r', '.rmd', '.md', '.ipynb', '.json', '.toon']
+// The files the Copy button shows for, so a converted result can be pasted without downloading it.
+const COPYABLE_EXTS = ['.md', '.txt']
+const COPY_FEEDBACK_MS = 2000
 
 // The backend sends every converted file as application/octet-stream, and a browser
 // saves that instead of showing it. This already picks how to render by extension, so
@@ -35,6 +38,14 @@ type HeicStatus =
   | { kind: 'ready' }
   | { kind: 'error'; message: string }
 
+type CopyState = 'idle' | 'copied' | 'failed'
+
+const COPY_LABELS: Record<CopyState, string> = {
+  idle: 'Copy',
+  copied: 'Copied',
+  failed: 'Copy failed',
+}
+
 /**
  * Preview a file before it's converted. Images and PDFs render directly, pptx decks are
  * drawn slide by slide in the browser, heic photos are decoded to a JPEG in the browser
@@ -52,9 +63,11 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
   const isMarkdown = ext === '.md'
   const isR = ext === '.r'
   const isIpynb = ext === '.ipynb'
+  const canCopy = COPYABLE_EXTS.includes(ext)
 
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
+  const [copyState, setCopyState] = useState<CopyState>('idle')
   const [highlightedR, setHighlightedR] = useState<string | null>(null)
   const [notebook, setNotebook] = useState<ParsedNotebook | null>(null)
   // Highlighted HTML for a notebook's code cells, keyed by cell index. A cell missing
@@ -253,6 +266,23 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // Puts "Copied" or "Copy failed" back to "Copy" after a moment.
+  useEffect(() => {
+    if (copyState === 'idle') return
+    const timer = setTimeout(() => setCopyState('idle'), COPY_FEEDBACK_MS)
+    return () => clearTimeout(timer)
+  }, [copyState])
+
+  async function handleCopy() {
+    if (text === null) return
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyState('copied')
+    } catch {
+      setCopyState('failed')
+    }
+  }
+
   function handleClose() {
     ;(document.activeElement as HTMLElement | null)?.blur()
     onClose()
@@ -287,6 +317,12 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
                 +
               </button>
             </div>
+          )}
+
+          {canCopy && (
+            <button type="button" className="view" onClick={handleCopy} disabled={text === null}>
+              {COPY_LABELS[copyState]}
+            </button>
           )}
 
           <button type="button" className="remove" onClick={handleClose} aria-label="Close preview">
