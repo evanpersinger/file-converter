@@ -73,10 +73,16 @@ const formatDuration = (seconds: number) =>
 
 // Adds freshly converted files to the ones already listed. An earlier result is only
 // replaced by one with the same name and extension, so converting a file to a second
-// format leaves the first result alone. Files in `added` never replace each other.
-function mergeDownloads(existing: Download[], added: Download[]): Download[] {
+// format leaves the first result alone. Files in `added` never replace each other, and
+// neither do the files of the run adding them (`sameRun`, by url), since a run lists its
+// files one at a time and two of them can share a name.
+function mergeDownloads(
+  existing: Download[],
+  added: Download[],
+  sameRun: Set<string> = new Set(),
+): Download[] {
   const replaced = new Set(added.map((d) => d.filename))
-  return [...existing.filter((d) => !replaced.has(d.filename)), ...added]
+  return [...existing.filter((d) => sameRun.has(d.url) || !replaced.has(d.filename)), ...added]
 }
 
 // The Markdown formats in the LLM tab, one per script, in registry order. A format has a
@@ -455,7 +461,8 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
 
   // Converts the files one after another, since the server runs one conversion at a
   // time anyway. A failed file doesn't stop the rest, and the ones that worked stay
-  // downloadable next to the error naming the ones that didn't.
+  // downloadable next to the error naming the ones that didn't. Each file is listed the
+  // moment it is done, without waiting for the rest.
   async function convertAll(targetId: string) {
     const limitMessage = convertLimitMessage(files)
     if (limitMessage) {
@@ -463,7 +470,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       return
     }
 
-    const downloads: Download[] = []
+    const runUrls = new Set<string>()
     const failures: string[] = []
     cancelledBatch.current = false
     localModelRun.current = llmRoute?.provider === 'local'
@@ -501,7 +508,11 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       setCancelling(false)
       try {
         const { blob, filename, log } = await convert(file, targetId, modelName, id, controller.signal)
-        downloads.push({ url: URL.createObjectURL(blob), filename, blob })
+        const download = { url: URL.createObjectURL(blob), filename, blob }
+        runUrls.add(download.url)
+        setResult((current) => ({
+          downloads: mergeDownloads(current?.downloads ?? [], [download], runUrls),
+        }))
         const outExt = extensionOf(filename)
         const formatName = formats?.allFormats.find((f) => f.ext === outExt)?.name ?? outExt.slice(1).toUpperCase()
         addLog(file.name, formatName || filename, log)
@@ -517,9 +528,6 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     }
 
     setJobId(null)
-    if (downloads.length > 0) {
-      setResult((current) => ({ downloads: mergeDownloads(current?.downloads ?? [], downloads) }))
-    }
     setStatus(failures.length > 0 ? { kind: 'error', message: failures.join('\n\n') } : { kind: 'idle' })
   }
 
