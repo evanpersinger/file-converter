@@ -1,6 +1,6 @@
 """Convert HTML files in input/ (or one passed as an argument) to PDF in output/.
 
-Uses wkhtmltopdf, falling back to pandoc (xelatex) if it is not installed.
+Uses pandoc with xelatex.
 """
 
 
@@ -26,7 +26,7 @@ def convert_html_to_pdf(
     """
     Convert an .html file to PDF.
 
-    Prefers wkhtmltopdf. Falls back to pandoc if wkhtmltopdf is unavailable.
+    Uses pandoc with xelatex, so CSS and layout are not preserved.
 
     Args:
         html_path (str | Path): Path to the .html file (relative to input folder or absolute)
@@ -61,29 +61,6 @@ def convert_html_to_pdf(
 
     existed_before = full_output_path.exists()
 
-    # 1) Try wkhtmltopdf (best quality for HTML rendering)
-    if command_exists("wkhtmltopdf"):
-        try:
-            cmd = [
-                "wkhtmltopdf",
-                str(full_input_path),
-                str(full_output_path),
-            ]
-            print(f"Converting {full_input_path.name} to pdf")
-            result = run_tool(cmd)
-            if result.returncode == 0 and full_output_path.exists():
-                print(f"Converted {full_input_path.name} to {full_output_path.name}")
-                if existed_before:
-                    print(f"Overwrote existing file: {full_output_path.name}")
-                return True
-            else:
-                if result.stderr:
-                    print(f"wkhtmltopdf stderr: {result.stderr.strip()}")
-                print("wkhtmltopdf conversion failed; will try pandoc fallback if available.")
-        except Exception as e:
-            print(f"wkhtmltopdf failed with error: {e}")
-
-    # 2) Fallback to pandoc
     if command_exists("pandoc"):
         try:
             cmd = [
@@ -110,9 +87,8 @@ def convert_html_to_pdf(
             print(f"Unexpected error running pandoc: {e}")
             return False
 
-    print("Neither wkhtmltopdf nor pandoc found. Please install one of them to convert HTML to PDF.")
-    print("- Install wkhtmltopdf: https://wkhtmltopdf.org/downloads.html")
-    print("- Or install pandoc: https://pandoc.org/installing.html")
+    print("pandoc not found. Please install it to convert HTML to PDF.")
+    print("- Install pandoc: https://pandoc.org/installing.html")
     return False
 
 

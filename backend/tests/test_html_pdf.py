@@ -1,7 +1,6 @@
-"""Tests for html_pdf.py, which prints one HTML file to PDF with wkhtmltopdf or pandoc.
+"""Tests for html_pdf.py, which prints one HTML file to PDF with pandoc.
 
-It has its own loop rather than convert_files: it returns True or False and prints. Which
-tool it picks is not tested, so the real conversion only needs one of them.
+It has its own loop rather than convert_files: it returns True or False and prints.
 """
 
 import shutil
@@ -15,8 +14,8 @@ import html_pdf
 WorkDirs = tuple[Path, Path]
 
 needs_an_html_tool = pytest.mark.skipif(
-    not (shutil.which("wkhtmltopdf") or (shutil.which("pandoc") and shutil.which("xelatex"))),
-    reason="neither wkhtmltopdf nor pandoc with xelatex is installed",
+    not (shutil.which("pandoc") and shutil.which("xelatex")),
+    reason="pandoc with xelatex is not installed",
 )
 
 
