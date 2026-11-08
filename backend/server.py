@@ -569,9 +569,7 @@ REGISTRY: list[Conversion] = [
                via_params(lambda s, i, o: html_pdf.convert_html_to_pdf(
                    str(s), None, input_dir=i, output_dir=o)),
                requires=("pandoc", "latex"),
-               note=(None if which("wkhtmltopdf") else
-                     "wkhtmltopdf is not installed, so this falls back to Pandoc and "
-                     "CSS/layout will not be preserved. brew install wkhtmltopdf")),
+               note="Uses Pandoc, so CSS and layout are not preserved"),
     Conversion((".html", ".htm"), "html->svg", "SVG", ".svg",
                via_params(lambda s, i, o: html_svg.convert_html_to_svg(i, o)),
                requires=("chrome",)),
