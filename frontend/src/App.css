@@ -162,12 +162,9 @@
   font-weight: 600;
 }
 
-/* A file that failed outright gets the same dark panel as the error block. */
-.log-entry.failed {
-  padding: 0.6rem 0.75rem;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.42);
-  border: var(--line-thin) solid #ffc9c0;
+/* A file that failed outright reads like the others, with only its message tinted. */
+.log-entry.failed .muted {
+  color: #ffc9c0;
 }
 
 main {
