@@ -831,21 +831,44 @@ button:disabled {
   font-size: 0.9rem;
 }
 
-/* Progress for a running conversion: which file, a bar with the percent inside it, and
-   the time so far. */
+/* Progress for a running conversion: which file and where it is in the batch, a bar with
+   the percent inside it, the time so far, and every file in the batch. */
 .progress-block {
   margin-top: 1.5rem;
 }
 
 .progress-title {
+  display: flex;
   margin: 0 0 0.6rem;
+}
+
+/* A long filename gives way to the ellipsis, so the count after it always shows. */
+.progress-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.progress-count {
+  flex: none;
+  margin-left: 0.5rem;
+}
+
 .progress-time {
   margin: 0.5rem 0 0;
+}
+
+.progress-files {
+  margin: 0.75rem 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.progress-files li {
+  padding: 0.1rem 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .progress {

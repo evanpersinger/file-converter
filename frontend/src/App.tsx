@@ -835,12 +835,21 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
 
         {status.kind === 'converting' && (
           <div className="progress-block">
-            <p className="progress-title" title={status.fileName}>
-              Converting {status.total > 1 && `${status.position} of ${status.total}: `}
-              {status.fileName}.
+            <p className="progress-title">
+              <span className="progress-name" title={status.fileName}>Converting {status.fileName}</span>
+              {status.total > 1 && (
+                <span className="progress-count">| {status.position} of {status.total}</span>
+              )}
             </p>
             <ProgressBar percent={percent} queued={queued} />
             <p className="muted progress-time">{formatDuration(elapsed)}</p>
+            {status.total > 1 && (
+              <ul className="muted progress-files">
+                {files.map((f, i) => (
+                  <li key={`${f.name}-${i}`} title={f.name}>{f.name}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
