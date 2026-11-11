@@ -57,7 +57,11 @@ def eight_bit(img: Image.Image) -> Image.Image:
     near-black came out pure white. Any other image is returned as is."""
     if img.mode not in _SIXTEEN_BIT_MODES:
         return img
-    return img.convert("I").point(lambda value: value * (1 / 256)).convert("L")
+    scaled = img.convert("I").point(lambda value: value * (1 / 256)).convert("L")
+    # A PNG's transparent gray is a 16-bit value, so on the 8-bit image it would match the
+    # wrong pixels. The transparency is dropped instead.
+    scaled.info.pop("transparency", None)
+    return scaled
 
 
 def upright(img: Image.Image) -> Image.Image:

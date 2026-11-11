@@ -9,6 +9,7 @@ from PIL import Image
 
 import image_convert
 import jpg_png
+import png_jpg
 import png_pdf
 
 
@@ -84,3 +85,18 @@ def test_a_16_bit_png_keeps_its_brightness_in_a_pdf(work_dirs: tuple[Path, Path]
     pixmap = fitz.open(output_dir / "scan.pdf").load_page(0).get_pixmap()
     red, green, blue = pixmap.pixel(pixmap.width // 2, pixmap.height // 2)
     assert 70 <= red <= 86 and 70 <= green <= 86 and 70 <= blue <= 86
+
+
+def test_a_16_bit_png_transparent_gray_does_not_hide_other_pixels(
+    work_dirs: tuple[Path, Path],
+) -> None:
+    """The PNG names its transparent gray as a 16-bit value (20000). Kept on the 8-bit image,
+    Pillow read it as 20000 & 255 = 32, so 8192 (32 in 8-bit) came out transparent, then white."""
+    input_dir, output_dir = work_dirs
+    Image.new("I;16", (4, 4), 8192).save(input_dir / "scan.png", "PNG", transparency=20000)
+
+    png_jpg.convert_png_to_jpg(input_dir, output_dir)
+
+    with Image.open(output_dir / "scan.jpg") as img:
+        red, green, blue = img.convert("RGB").getpixel((2, 2))
+        assert 28 <= red <= 36 and 28 <= green <= 36 and 28 <= blue <= 36
