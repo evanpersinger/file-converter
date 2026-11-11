@@ -13,21 +13,26 @@ INPUT_DIR = BACKEND_DIR / "input"
 OUTPUT_DIR = BACKEND_DIR / "output"
 
 
-def read_text(path: str | Path) -> str:
+def read_text(path: str | Path, translate_newlines: bool = False) -> str:
     """Read a text file as UTF-8 (BOM allowed), falling back to Windows-1252 for files
-    that are not valid UTF-8, like a CSV from Excel's plain "CSV" save.
+    that are not valid UTF-8, like a CSV from Excel's plain "CSV" save or a script from
+    an older Windows editor.
 
-    Line endings are kept as they are, so a CSV reader still sees quoted newlines intact.
-    Raises ValueError for UTF-16 text instead of reading it as Windows-1252.
+    Line endings are kept as they are by default, so a CSV reader still sees quoted
+    newlines intact. translate_newlines turns \r\n and \r into \n, the way open() does
+    in text mode. Raises ValueError for UTF-16 text instead of reading it as Windows-1252.
     """
     data = Path(path).read_bytes()
     try:
-        return data.decode('utf-8-sig')
+        text = data.decode('utf-8-sig')
     except UnicodeDecodeError:
         # UTF-16 is full of NUL bytes, and cp1252 would decode them into a table of garbage
         if b'\x00' in data:
             raise ValueError("not UTF-8 or Windows-1252 text (UTF-16 is not supported)") from None
-        return data.decode('cp1252', errors='replace')
+        text = data.decode('cp1252', errors='replace')
+    if translate_newlines:
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
+    return text
 
 
 def convert_files(
