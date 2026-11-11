@@ -21,7 +21,7 @@ import threading
 import time
 import traceback
 import zipfile
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import ExitStack, asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,7 +34,8 @@ import magic
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 # Converter modules. Imported as plain top-level modules, which works because this
@@ -142,6 +143,24 @@ def job_workspace() -> Iterator[tuple[Path, Path, Path]]:
         yield job_dir, job_in, job_out
     finally:
         shutil.rmtree(job_dir, ignore_errors=True)
+
+
+class _StreamedFile(FileResponse):
+    """A file sent from disk in chunks, then cleaned up.
+
+    `cleanup` runs once the response is sent, or when sending fails (the browser went
+    away), so the job dir holding the file is never left behind.
+    """
+
+    def __init__(self, path: Path, cleanup: Callable[[], None], **kwargs) -> None:
+        super().__init__(path, **kwargs)
+        self._cleanup = cleanup
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await run_in_threadpool(self._cleanup)
 
 
 def _remove_stale_jobs() -> None:
@@ -1042,8 +1061,10 @@ def convert(
     captured = io.StringIO()
 
     # The upload is staged before taking a job slot, so copying it (or rejecting it) never
-    # waits behind running conversions.
-    with job_workspace() as (job_dir, job_in, job_out):
+    # waits behind running conversions. On success the workspace outlives this block: the
+    # result is streamed from it, and the response deletes it once it is sent.
+    with ExitStack() as workspace:
+        job_dir, job_in, job_out = workspace.enter_context(job_workspace())
         # ext was lowercased above, so the staged extension is lowercase whatever the upload
         # was called. Leading dots come off the stem because the converters skip hidden files
         # when they look for input, and a name made only of dots becomes "file". The download
@@ -1081,17 +1102,19 @@ def convert(
                 return _error(f"{conv.label} conversion produced no output.", detail or None)
 
             if len(produced) == 1:
-                payload = produced[0].read_bytes()
+                result_file = produced[0]
                 filename = f"{stem}{conv.target_ext}"
                 media_type = "application/octet-stream"
             else:
-                buffer = io.BytesIO()
-                with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+                # Written next to output/, not in it, and to disk rather than memory
+                result_file = job_dir / "result.zip"
+                with zipfile.ZipFile(result_file, "w", zipfile.ZIP_DEFLATED) as archive:
                     for path in produced:
                         archive.write(path, path.relative_to(job_out))
-                payload = buffer.getvalue()
                 filename = f"{stem}.zip"
                 media_type = "application/zip"
+
+        cleanup = workspace.pop_all().close
 
     # JSON keeps the header plain ASCII whatever the error text contains.
     headers = {
@@ -1099,7 +1122,7 @@ def convert(
         "X-Conversion-Log": json.dumps(_cap_log(_plain_log(captured.getvalue()))),
     }
 
-    return Response(content=payload, media_type=media_type, headers=headers)
+    return _StreamedFile(result_file, cleanup, media_type=media_type, headers=headers)
 
 
 @app.post("/api/combine")
@@ -1129,8 +1152,10 @@ def combine(files: list[UploadFile] = File(...)):
 
     captured = io.StringIO()
 
-    # Uploads are staged before taking a job slot, same as in convert().
-    with job_workspace() as (job_dir, job_in, job_out):
+    # Uploads are staged before taking a job slot, and the result streamed from the
+    # workspace, same as in convert().
+    with ExitStack() as workspace:
+        job_dir, job_in, job_out = workspace.enter_context(job_workspace())
         staged_names: list[str] = []
         total = 0
 
@@ -1170,13 +1195,14 @@ def combine(files: list[UploadFile] = File(...)):
                 # combine_files() reports the reason on stdout and returns False.
                 return _error("Combining failed.", _tail(captured.getvalue()) or None)
 
-            payload = produced[0].read_bytes()
-            filename = produced[0].name
+            result_file = produced[0]
 
-    return Response(
-        content=payload,
+        cleanup = workspace.pop_all().close
+
+    return _StreamedFile(
+        result_file, cleanup,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": _content_disposition(filename)},
+        headers={"Content-Disposition": _content_disposition(result_file.name)},
     )
 
 
