@@ -25,6 +25,9 @@ interface Download {
   filename: string
   // Kept alongside the object URL so View can build a File out of it on demand.
   blob: Blob
+  // Set on a combine result: the picked file names, in order. Combining the same files
+  // again replaces this download, a different set of files never does.
+  combinedFrom?: string
 }
 
 interface Result {
@@ -83,6 +86,17 @@ function mergeDownloads(
 ): Download[] {
   const replaced = new Set(added.map((d) => d.filename))
   return [...existing.filter((d) => sameRun.has(d.url) || !replaced.has(d.filename)), ...added]
+}
+
+// A name none of the listed downloads has: report_combined.txt, then report_combined_2.txt,
+// report_combined_3.txt and so on.
+function uniqueName(filename: string, taken: Download[]): string {
+  const names = new Set(taken.map((d) => d.filename))
+  const ext = extensionOf(filename)
+  const stem = filename.slice(0, filename.length - ext.length)
+  let name = filename
+  for (let n = 2; names.has(name); n++) name = `${stem}_${n}${ext}`
+  return name
 }
 
 // The Markdown formats in the LLM tab, one per script, in registry order. A format has a
@@ -521,6 +535,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       return
     }
     const fileNames = files.map((f) => f.name).join(', ')
+    const combinedFrom = JSON.stringify(files.map((f) => f.name))
     const addLog = (lines: string[], failed: boolean) => {
       const entry: LogEntry = { id: crypto.randomUUID(), fileName: fileNames, convertedTo: null, lines, failed }
       setConversionRuns((current) => [{ id: crypto.randomUUID(), files: [entry] }, ...current].slice(0, MAX_LOG_RUNS))
@@ -529,11 +544,19 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     setStatus({ kind: 'combining' })
     try {
       const { blob, filename } = await combine(files)
-      const download = { url: URL.createObjectURL(blob), filename, blob }
+      // Combining the same files again replaces the earlier result. A different combine
+      // that lands on the same name keeps both, and the new one gets a number.
+      const notThisCombine = (d: Download) => d.combinedFrom !== combinedFrom
+      const download = {
+        url: URL.createObjectURL(blob),
+        filename: uniqueName(filename, (result?.downloads ?? []).filter(notThisCombine)),
+        blob,
+        combinedFrom,
+      }
       // Hold the result and let the user click Download, rather than firing the
       // download automatically.
-      setResult((current) => ({ downloads: mergeDownloads(current?.downloads ?? [], [download]) }))
-      addLog([`Combined ${files.length} files into ${filename}`], false)
+      setResult((current) => ({ downloads: [...(current?.downloads ?? []).filter(notThisCombine), download] }))
+      addLog([`Combined ${files.length} files into ${download.filename}`], false)
       setStatus({ kind: 'idle' })
     } catch (e) {
       const message = (e as Error).message
