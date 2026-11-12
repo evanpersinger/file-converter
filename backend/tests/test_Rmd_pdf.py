@@ -1,8 +1,9 @@
 """Tests for Rmd_pdf.py, which fills in Sys.Date() and renders an Rmd to PDF.
 
 It has its own loop rather than convert_files: it returns True or False and prints. Only
-the date replacement and the early exits are tested, because a real render needs the
-rmarkdown R package or LaTeX packages (microtype and more) that a bare xelatex lacks.
+the date replacement, the early exits and the pandoc fallback's command are tested,
+because a real render needs the rmarkdown R package or LaTeX packages (microtype and
+more) that a bare xelatex lacks.
 """
 
 from datetime import date
