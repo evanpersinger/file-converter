@@ -87,6 +87,19 @@ def test_markup_characters_are_printed_as_text(work_dirs: WorkDirs) -> None:
     assert "1 < 2 & 3 > 2 <b>not bold</b>" in pdf_text(output_dir / "math.pdf")
 
 
+def test_characters_the_font_cannot_draw_are_named_in_a_warning(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The arrow is outside Windows-1252, the é is not, so only the arrow is named."""
+    input_dir, output_dir = work_dirs
+    (input_dir / "arrows.txt").write_text("café → ok\n", encoding="utf-8")
+
+    assert txt_pdf.convert_txt_to_pdf("arrows.txt", None, input_dir, output_dir) is True
+
+    warning = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("Warning"))
+    assert warning.endswith(": →")
+
+
 def test_an_existing_pdf_is_overwritten(work_dirs: WorkDirs) -> None:
     input_dir, output_dir = work_dirs
     (input_dir / "notes.txt").write_text("hello", encoding="utf-8")

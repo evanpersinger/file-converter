@@ -15,6 +15,19 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
 
+MAX_WARNED_CHARS = 20
+
+
+def undrawable_chars(text: str) -> list[str]:
+    """Distinct characters Courier can't draw, since it only covers Windows-1252."""
+    missing = []
+    for char in dict.fromkeys(text):
+        try:
+            char.encode('cp1252')
+        except UnicodeEncodeError:
+            missing.append(char)
+    return missing
+
 
 # Convert a .txt file to PDF
 # returns True if successful, False otherwise
@@ -57,6 +70,12 @@ def convert_txt_to_pdf(
         except UnicodeDecodeError:
             with open(full_input_path, 'r', encoding='cp1252', errors='replace') as file:
                 text_content = file.read()
+
+        missing = undrawable_chars(text_content)
+        if missing:
+            shown = ''.join(missing[:MAX_WARNED_CHARS]) + ('...' if len(missing) > MAX_WARNED_CHARS else '')
+            print(f"Warning: {len(missing)} character(s) can't be drawn and will be blank or wrong "
+                  f"in the PDF: {shown}")
 
         # Create PDF document
         doc = SimpleDocTemplate(str(full_output_path), pagesize=letter)
