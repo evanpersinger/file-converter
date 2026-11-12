@@ -259,3 +259,15 @@ def test_the_output_is_named_after_the_first_file(work_dirs: WorkDirs) -> None:
     assert combine(work_dirs, ["report.txt", "notes.txt"]) is True
     assert combine(work_dirs, ["draft.txt", "final.txt"]) is True
     assert sorted(p.name for p in output_dir.iterdir()) == ["draft_combined.txt", "report_combined.txt"]
+
+
+def test_combines_sharing_a_first_file_get_the_same_name(work_dirs: WorkDirs) -> None:
+    """The name only follows the first file, so the UI tells these combines apart itself."""
+    input_dir, output_dir = work_dirs
+    for name in ("report.txt", "notes.txt", "appendix.txt"):
+        (input_dir / name).write_text(name)
+
+    assert combine(work_dirs, ["report.txt", "notes.txt"]) is True
+    assert combine(work_dirs, ["report.txt", "appendix.txt"]) is True
+    assert [p.name for p in output_dir.iterdir()] == ["report_combined.txt"]
+    assert "appendix" in (output_dir / "report_combined.txt").read_text()
