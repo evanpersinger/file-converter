@@ -1,8 +1,9 @@
 """Tests for Rmd_pdf.py, which fills in Sys.Date() and renders an Rmd to PDF.
 
 It has its own loop rather than convert_files: it returns True or False and prints. Only
-the date replacement and the early exits are tested, because a real render needs the
-rmarkdown R package or LaTeX packages (microtype and more) that a bare xelatex lacks.
+the date replacement, the early exits and the pandoc fallback's command are tested,
+because a real render needs the rmarkdown R package or LaTeX packages (microtype and
+more) that a bare xelatex lacks.
 """
 
 from datetime import date
@@ -49,3 +50,26 @@ def test_a_missing_file_gives_false(
 
     assert Rmd_pdf.convert_rmd_to_pdf("ghost.Rmd", None, input_dir, output_dir) is False
     assert "not found" in capsys.readouterr().out
+
+
+def test_pandoc_fallback_uses_a_highlight_flag_old_pandoc_accepts(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--syntax-highlighting only exists in pandoc 3.8+, so 3.1 (Debian/Ubuntu) rejected
+    every conversion. --no-highlight works on both."""
+    input_dir, output_dir = work_dirs
+    (input_dir / "doc.Rmd").write_text("# Title\n\nText.\n", encoding="utf-8")
+    commands: list[list[str]] = []
+
+    def fake_run_tool(cmd, *args, **kwargs):
+        commands.append(cmd)
+        return type("Result", (), {"returncode": 1, "stdout": "", "stderr": "stub"})()
+
+    monkeypatch.setattr(Rmd_pdf, "command_exists", lambda cmd: cmd == "pandoc")
+    monkeypatch.setattr(Rmd_pdf, "run_tool", fake_run_tool)
+
+    Rmd_pdf.convert_rmd_to_pdf("doc.Rmd", None, input_dir, output_dir)
+
+    pandoc_cmd = next(cmd for cmd in commands if cmd[0] == "pandoc")
+    assert "--no-highlight" in pandoc_cmd
+    assert not any(arg.startswith("--syntax-highlighting") for arg in pandoc_cmd)
