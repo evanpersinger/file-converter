@@ -569,3 +569,78 @@ def test_a_symbol_in_a_cell_is_converted_after_the_table_is_normalized() -> None
 ])
 def test_paren_math_is_converted_with_its_nesting_honored(source: str, expected: str) -> None:
     assert _convert_paren_math_to_dollars(source) == expected
+
+
+# Math delimiters, the rest of normalize_math_delimiters
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("\\[\nx + y\n\\]", "$$\nx + y\n$$"),
+    ("\\[a\\] text \\[b\\]", "$$a$$ text $$b$$"),
+    ("\\(  x + y  \\)", "$x + y$"),
+    ("\\(a\\) and \\(b\\)", "$a$ and $b$"),
+    ("\\(a +\nb\\)", "$a +\nb$"),
+])
+def test_latex_delimiters_are_converted_wherever_they_sit(source: str, expected: str) -> None:
+    """A display block can span lines, each pair is matched on its own, and the padding
+    inside \\( \\) is trimmed because pandoc will not read a padded span as math."""
+    assert normalize_math_delimiters(source) == expected
+
+
+@pytest.mark.parametrize("source", [r"\(a", r"\[a"])
+def test_an_unclosed_latex_delimiter_is_left_alone(source: str) -> None:
+    assert normalize_math_delimiters(source) == source
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    (r"\$\alpha + 1\$", r"$\alpha + 1$"),
+    (r"\$ \alpha \$", r"$\alpha$"),
+    (r"\$ \alpha + 1$", r"$\alpha + 1$"),
+    (r"\$ x = \frac{1}{2}$", r"$x = \frac{1}{2}$"),
+    ("$x\\$", "$x$"),
+    ("$x_{1}\\$", "$x_{1}$"),
+])
+def test_escaped_dollars_around_real_math_become_delimiters(source: str, expected: str) -> None:
+    """Pasted text often escapes the dollars of a math span. When what sits between them
+    is math, they have to be real delimiters or the span prints raw."""
+    assert normalize_math_delimiters(source) == expected
+
+
+@pytest.mark.parametrize("source", [r"cost \$5", r"\$5 and \$10"])
+def test_an_escaped_price_stays_escaped(source: str) -> None:
+    """Two escaped dollars are not a math span unless the text between them is math."""
+    assert normalize_math_delimiters(source) == source
+
+
+def test_space_after_an_opening_dollar_is_trimmed_before_an_equation() -> None:
+    assert normalize_math_delimiters("$ x = 1$") == "$x = 1$"
+
+
+def test_padded_display_math_is_left_alone() -> None:
+    """The trim rules must not eat into a $$ delimiter."""
+    assert normalize_math_delimiters(r"$$ \alpha $$") == r"$$ \alpha $$"
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("```\na — b\n```", "```\na - b\n```"),
+    ("$a – b$", "$a - b$"),
+])
+def test_dashes_are_flattened_in_code_and_in_math_too(source: str, expected: str) -> None:
+    """Deliberate, since a long dash can break LaTeX, but it does reach inside code."""
+    assert normalize_math_delimiters(source) == expected
+
+
+@pytest.mark.parametrize("source", [
+    "\\[\nx + y\n\\]",
+    "\\(  x + y  \\)",
+    r"\$ \alpha \$",
+    r"\$5 and \$10",
+    "$x\\$",
+    "$ x = 1$",
+    "$a — b$",
+    "nothing to do",
+])
+def test_normalizing_twice_changes_nothing(source: str) -> None:
+    once = normalize_math_delimiters(source)
+
+    assert normalize_math_delimiters(once) == once
