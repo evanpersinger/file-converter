@@ -79,6 +79,7 @@ OPERATOR_TO_LATEX = {
     "⌈": r"\lceil", "⌉": r"\rceil", "⌊": r"\lfloor", "⌋": r"\rfloor",
     "⋅": r"\cdot", "∖": r"\setminus", "∣": r"\mid", "∤": r"\nmid",
     "≢": r"\nequiv", "≺": r"\prec", "≻": r"\succ", "⊢": r"\vdash", "⊨": r"\models",
+    "⟶": r"\longrightarrow", "⟹": r"\Longrightarrow",
 }
 
 # Everything we turn into a $\command$: greek + operators, in one pass.
