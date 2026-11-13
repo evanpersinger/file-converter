@@ -94,6 +94,13 @@ from pdf_md import normalize_math
         ("⌊x⌋", r"$\lfloor$x$\rfloor$"),
         ("⌈x⌉", r"$\lceil$x$\rceil$"),
         ("⌊xᵢ⌋", r"$\lfloor x_{i}\rfloor$"),
+        ("⋅", r"$\cdot$"),
+        ("∖", r"$\setminus$"),
+        ("∣", r"$\mid$"),
+        ("∤", r"$\nmid$"),
+        ("a ⋅ b ⋅ c", r"a $\cdot$ b $\cdot$ c"),
+        ("x ∈ A ∖ B", r"x $\in$ A $\setminus$ B"),
+        ("p ∣ n and 3 ∤ 10", r"p $\mid$ n and 3 $\nmid$ 10"),
     ],
 )
 def test_greek_and_operators_become_latex_commands(source: str, expected: str) -> None:
@@ -248,7 +255,7 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$", "$a ⋅ b$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
 
@@ -1311,7 +1318,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉\n")
+    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10\n")
 
     assert MISSING_GLYPH not in text
 
