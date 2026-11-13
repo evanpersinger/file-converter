@@ -15,6 +15,7 @@ from md_pdf import (
     _convert_paren_math_to_dollars,
     _is_ascii_diagram_line,
     clean_control_chars,
+    convert_md_to_pdf,
     convert_symbols,
     ensure_list_spacing,
     normalize_math_delimiters,
@@ -644,3 +645,247 @@ def test_normalizing_twice_changes_nothing(source: str) -> None:
     once = normalize_math_delimiters(source)
 
     assert normalize_math_delimiters(once) == once
+
+
+# convert_md_to_pdf, with pandoc replaced
+
+WorkDirs = tuple[Path, Path]
+PandocCalls = list[dict[str, object]]
+
+
+@pytest.fixture
+def pandoc_calls(monkeypatch: pytest.MonkeyPatch) -> PandocCalls:
+    """Stand in for pandoc: run_pandoc records what it was handed and succeeds, and the
+    pandoc lookup finds it, so none of these tests needs pandoc installed."""
+    calls: PandocCalls = []
+
+    def fake_run_pandoc(rich_md: str, safe_md: str, output_path: Path, input_name: str) -> bool:
+        calls.append({"rich": rich_md, "safe": safe_md, "output": output_path, "name": input_name})
+        return True
+
+    monkeypatch.setattr("md_pdf.run_pandoc", fake_run_pandoc)
+    monkeypatch.setattr("md_pdf.which", lambda name: f"/usr/bin/{name}")
+    return calls
+
+
+def write_md(folder: Path, name: str, text: str = "hello\n") -> Path:
+    path = folder / name
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_the_pdf_is_named_after_the_markdown_file(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md")
+
+    assert convert_md_to_pdf("notes.md", None, input_dir, output_dir) is True
+
+    assert len(pandoc_calls) == 1
+    assert pandoc_calls[0]["output"] == output_dir / "notes.pdf"
+    assert pandoc_calls[0]["name"] == "notes.md"
+
+
+def test_the_output_name_can_be_chosen_and_loses_any_folder(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md")
+
+    convert_md_to_pdf("notes.md", "sub/renamed.pdf", input_dir, output_dir)
+
+    assert pandoc_calls[0]["output"] == output_dir / "renamed.pdf"
+
+
+def test_an_absolute_path_is_used_as_it_is(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls, tmp_path: Path
+) -> None:
+    input_dir, output_dir = work_dirs
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    source = write_md(elsewhere, "abs.md")
+
+    assert convert_md_to_pdf(str(source), None, input_dir, output_dir) is True
+
+    assert pandoc_calls[0]["name"] == "abs.md"
+    assert pandoc_calls[0]["output"] == output_dir / "abs.pdf"
+
+
+def test_the_output_folder_is_created(work_dirs: WorkDirs, pandoc_calls: PandocCalls) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md")
+
+    convert_md_to_pdf("notes.md", None, input_dir, output_dir)
+
+    assert output_dir.is_dir()
+
+
+def test_a_pdf_path_is_refused(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls, capsys: pytest.CaptureFixture[str]
+) -> None:
+    input_dir, output_dir = work_dirs
+
+    assert convert_md_to_pdf("doc.pdf", None, input_dir, output_dir) is False
+
+    assert "already in pdf format" in capsys.readouterr().out
+    assert pandoc_calls == []
+
+
+def test_a_missing_file_is_reported_and_pandoc_is_not_run(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls, capsys: pytest.CaptureFixture[str]
+) -> None:
+    input_dir, output_dir = work_dirs
+
+    assert convert_md_to_pdf("ghost.md", None, input_dir, output_dir) is False
+
+    assert "not found" in capsys.readouterr().out
+    assert pandoc_calls == []
+
+
+def test_a_missing_pandoc_is_reported(
+    work_dirs: WorkDirs,
+    pandoc_calls: PandocCalls,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md")
+    monkeypatch.setattr("md_pdf.which", lambda name: None)
+
+    assert convert_md_to_pdf("notes.md", None, input_dir, output_dir) is False
+
+    assert "pandoc not found" in capsys.readouterr().out
+    assert pandoc_calls == []
+
+
+def test_both_texts_get_the_shared_delimiter_and_list_fixes(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls
+) -> None:
+    """The safe text is what the fallback renders, so it needs the fixes that keep math
+    and lists readable, just without the LaTeX the full render injects."""
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md", "text\n- item\n\n\\(x\\)\n")
+
+    convert_md_to_pdf("notes.md", None, input_dir, output_dir)
+
+    for text in (pandoc_calls[0]["rich"], pandoc_calls[0]["safe"]):
+        assert "text\n\n- item" in text
+        assert "$x$" in text
+
+
+def test_only_the_rich_text_gets_symbol_and_table_rewrites(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md", "x² here\n\n| a |\n|---|\n| 1 |\n")
+
+    convert_md_to_pdf("notes.md", None, input_dir, output_dir)
+
+    rich, safe = pandoc_calls[0]["rich"], pandoc_calls[0]["safe"]
+    assert "$x^{2}$" in rich and "\\nopagebreak" in rich
+    assert "x²" in safe and "\\nopagebreak" not in safe
+
+
+def test_control_characters_are_cleaned_from_both_texts(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md", "a\x07b\n")
+
+    convert_md_to_pdf("notes.md", None, input_dir, output_dir)
+
+    assert "ab" in pandoc_calls[0]["rich"] and "ab" in pandoc_calls[0]["safe"]
+    assert "\x07" not in pandoc_calls[0]["rich"] and "\x07" not in pandoc_calls[0]["safe"]
+
+
+def test_windows_line_endings_are_read_as_newlines(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls
+) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "notes.md").write_bytes(b"a\r\nb\r\n")
+
+    convert_md_to_pdf("notes.md", None, input_dir, output_dir)
+
+    assert pandoc_calls[0]["safe"] == "a\nb\n"
+
+
+def test_a_windows_1252_file_is_read(work_dirs: WorkDirs, pandoc_calls: PandocCalls) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "notes.md").write_bytes("café\n".encode("cp1252"))
+
+    assert convert_md_to_pdf("notes.md", None, input_dir, output_dir) is True
+
+    assert "café" in pandoc_calls[0]["safe"]
+
+
+def test_a_utf_16_file_is_reported_and_not_converted(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls, capsys: pytest.CaptureFixture[str]
+) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "notes.md").write_bytes("hi there".encode("utf-16"))
+
+    assert convert_md_to_pdf("notes.md", None, input_dir, output_dir) is False
+
+    assert "UTF-16" in capsys.readouterr().out
+    assert pandoc_calls == []
+
+
+def test_an_overwrite_is_announced(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls, capsys: pytest.CaptureFixture[str]
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md")
+    output_dir.mkdir()
+    (output_dir / "notes.pdf").write_bytes(b"stale")
+
+    assert convert_md_to_pdf("notes.md", None, input_dir, output_dir) is True
+
+    assert "Overwrote existing file: notes.pdf" in capsys.readouterr().out
+
+
+def test_a_first_conversion_does_not_claim_an_overwrite(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls, capsys: pytest.CaptureFixture[str]
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md")
+
+    convert_md_to_pdf("notes.md", None, input_dir, output_dir)
+
+    assert "Overwrote" not in capsys.readouterr().out
+
+
+def test_a_failed_render_is_returned_and_not_announced_as_an_overwrite(
+    work_dirs: WorkDirs,
+    pandoc_calls: PandocCalls,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md")
+    output_dir.mkdir()
+    (output_dir / "notes.pdf").write_bytes(b"stale")
+    monkeypatch.setattr("md_pdf.run_pandoc", lambda *args: False)
+
+    assert convert_md_to_pdf("notes.md", None, input_dir, output_dir) is False
+
+    assert "Overwrote" not in capsys.readouterr().out
+
+
+def test_an_unexpected_error_is_reported_not_raised(
+    work_dirs: WorkDirs,
+    pandoc_calls: PandocCalls,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md")
+
+    def explode(*args: object) -> bool:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("md_pdf.run_pandoc", explode)
+
+    assert convert_md_to_pdf("notes.md", None, input_dir, output_dir) is False
+
+    assert "Unexpected error running pandoc: boom" in capsys.readouterr().out
