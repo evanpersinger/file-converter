@@ -703,6 +703,10 @@ def convert_symbols(md):
     for var, latex in BAR_VARIABLES.items():
         md = re.sub(r"(?<!\$)" + re.escape(var) + r"(?!\$)", latex, md)
 
+    # A precomposed ŷ or Ŷ is a y with a hat, so it takes scripts the way x̂ does. Other
+    # circumflex letters (â ê î ô û) are left alone, they are ordinary French words.
+    md = md.replace("ŷ", "ŷ").replace("Ŷ", "Ŷ")
+
     # Hatted variables: base + combining hat + optional subscript run
     # (β̂₁ -> $\hat{\beta}_{1}$). Must run before _convert_scripts, which can't see
     # past the hat to the subscript.
@@ -711,7 +715,9 @@ def convert_symbols(md):
         idx = "".join(SUBSCRIPT_TO_LATEX.get(c, c) for c in m.group(2))
         exp = "".join(SUPERSCRIPT_TO_LATEX[c] for c in m.group(3))
         hatted = rf"\hat{{{base}}}" + (f"_{{{idx}}}" if idx else "") + (f"^{{{exp}}}" if exp else "")
-        return f"${hatted}$"
+        # Inside an existing $..$ the delimiters are already there
+        wrap = "" if _in_math(m.string, m.start()) else "$"
+        return f"{wrap}{hatted}{wrap}"
 
     md = re.sub(rf"([A-Za-z{_GREEK_CLASS}])̂((?:{_SUB_RUN})?)((?:[{_SUP_CHARS}]+)?)", hat_repl, md)
 

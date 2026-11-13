@@ -231,10 +231,33 @@ def test_a_barred_variable_becomes_a_bar_command() -> None:
         ("α̂ᵢ²", r"$\hat{\alpha}_{i}^{2}$"),
         ("x̂ⁿ", r"$\hat{x}^{n}$"),
         ("σ̂² = 1", r"$\hat{\sigma}^{2}$ = 1"),
+        ("ŷ", r"$\hat{y}$"),
+        ("ŷᵢ", r"$\hat{y}_{i}$"),
+        ("Ŷᵢ", r"$\hat{Y}_{i}$"),
+        ("ŷ²", r"$\hat{y}^{2}$"),
+        ("eᵢ = yᵢ − ŷᵢ", r"$e_{i} = y_{i}$ − $\hat{y}_{i}$"),
     ],
 )
 def test_a_hatted_variable_keeps_its_hat_and_subscript(source: str, expected: str) -> None:
     assert convert_symbols(source) == expected
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("$x̂$", r"$\hat{x}$"),
+    ("$β̂₁ = 2$", r"$\hat{\beta}_{1} = 2$"),
+    ("$ŷᵢ + 1$", r"$\hat{y}_{i} + 1$"),
+    ("$$ŷᵢ$$", r"$$\hat{y}_{i}$$"),
+])
+def test_a_hat_inside_a_math_span_adds_no_delimiters_of_its_own(source: str, expected: str) -> None:
+    """The hat pass used to wrap its result in $..$ even inside a span, which turned $x̂$
+    into the display delimiter $$\\hat{x}$$ and mangled whatever followed."""
+    assert convert_symbols(source) == expected
+
+
+@pytest.mark.parametrize("source", ["crêpe", "fête", "être", "côte", "âge", "naïve"])
+def test_circumflex_letters_in_ordinary_words_are_not_turned_into_hats(source: str) -> None:
+    """Only ŷ and Ŷ are read as a letter with a hat, since they never occur in a word."""
+    assert convert_symbols(source) == source
 
 
 def test_a_bare_greek_command_in_prose_is_wrapped_in_math_mode() -> None:
@@ -1371,7 +1394,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u v 𝔼[X] w 𝔼ₓ[f(x)] x Var(X) = 𝔼[X²] − 𝔼[X]² y ℙ(A | B) = ℙ(A ∩ B) / ℙ(B) z yᵢ = βxᵢ + ϵᵢ and ϕ₁ and ϵ̂ᵢ and ℓ₂ norm and ℓ(θ) and ε ~ 𝒩(0, σ²) and 𝒩ₚ(μ, Σ) and a₁ + a₂ + ⋯ + aₙ and 1, 2, ⋯, n and σ̂² and β̂₁² and α̂ᵢ\n")
+    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u v 𝔼[X] w 𝔼ₓ[f(x)] x Var(X) = 𝔼[X²] − 𝔼[X]² y ℙ(A | B) = ℙ(A ∩ B) / ℙ(B) z yᵢ = βxᵢ + ϵᵢ and ϕ₁ and ϵ̂ᵢ and ℓ₂ norm and ℓ(θ) and ε ~ 𝒩(0, σ²) and 𝒩ₚ(μ, Σ) and a₁ + a₂ + ⋯ + aₙ and 1, 2, ⋯, n and σ̂² and β̂₁² and α̂ᵢ and eᵢ = yᵢ − ŷᵢ and $β̂₁ = 2$\n")
 
     assert "safe mode" not in log, "a mapped command does not exist, so the whole file fell back"
     assert MISSING_GLYPH not in text
