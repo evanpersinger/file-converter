@@ -16,15 +16,23 @@ from pathlib import Path
 import fitz
 import pytest
 
+import md_pdf
 from external_tool import ToolTimeout
 from md_pdf import (
+    _TEXT_DOLLAR,
     LATEX_HEADER,
     PANDOC_FROM,
     PANDOC_FROM_SAFE,
+    _combine_adjacent_math,
     _convert_paren_math_to_dollars,
+    _convert_underscores_in_math,
     _extract_bad_command,
+    _hide_text_dollars,
+    _in_math,
     _is_ascii_diagram_line,
+    _merge_touching_math,
     _pandoc_once,
+    _stash_indented_code,
     clean_control_chars,
     convert_md_to_pdf,
     convert_symbols,
@@ -1379,3 +1387,265 @@ def test_the_example_in_the_md_best_practices_skill_renders_in_full(
     assert "safe mode" not in log
     assert "$" not in text and MISSING_GLYPH not in text
     assert "Var" in text
+
+
+# The $-handling helpers, directly
+
+T = _TEXT_DOLLAR
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("", ""),
+    ("$", T),
+    ("a$", f"a{T}"),
+    ("$a", f"{T}a"),
+    ("$$a", f"{T}{T}a"),
+    ("a $$ b", f"a {T}{T} b"),
+    ("$a$", "$a$"),
+    ("$$a$$", "$$a$$"),
+    ("$ a $", f"{T} a {T}"),
+    ("\\$", T),
+    ("\\\\$a$", "\\\\$a$"),
+    ("$a\\$b$", "$a\\$b$"),
+    ("$a$5", f"{T}a{T}5"),
+    ("$x$ and $5", f"$x$ and {T}5"),
+    ("$5-$10", f"{T}5-{T}10"),
+    ("$a\n\nb$", f"{T}a\n\nb{T}"),
+    ("$$\n\n$$", f"{T}{T}\n\n{T}{T}"),
+])
+def test_only_a_dollar_pandoc_reads_as_text_is_hidden(source: str, expected: str) -> None:
+    """An opener needs a non-space after it, a closer a non-space before it and no digit
+    after it, math never crosses a blank line, and an escaped dollar is never a delimiter."""
+    assert _hide_text_dollars(source) == expected
+
+
+def stash_blocks(source: str) -> tuple[str, list[str]]:
+    stashed: list[str] = []
+
+    def stash(block: str) -> str:
+        stashed.append(block)
+        return f"<S{len(stashed) - 1}>"
+
+    return _stash_indented_code(source, stash), stashed
+
+
+@pytest.mark.parametrize(("source", "expected", "blocks"), [
+    ("", "", []),
+    ("plain", "plain", []),
+    ("    code", "<S0>", ["    code"]),
+    ("\tcode", "<S0>", ["\tcode"]),
+    ("text\n\n    code", "text\n\n<S0>", ["    code"]),
+    ("    code\ntext", "<S0>\ntext", ["    code"]),
+    ("text\n\n    code\n    more\n\ntail", "text\n\n<S0>\n\ntail", ["    code\n    more"]),
+    ("a\n\n    one\n\n    two\n\nb", "a\n\n<S0>\n\nb", ["    one\n\n    two"]),
+    ("    code\n\n\ntail", "<S0>\n\n\ntail", ["    code"]),
+])
+def test_an_indented_block_is_stashed_whole_without_its_trailing_blank_lines(
+    source: str, expected: str, blocks: list[str]
+) -> None:
+    assert stash_blocks(source) == (expected, blocks)
+
+
+def test_an_indented_line_straight_after_a_paragraph_is_not_code() -> None:
+    """Markdown lets a paragraph continue onto an indented line, and indented code cannot
+    interrupt a paragraph."""
+    assert stash_blocks("text\n    more text") == ("text\n    more text", [])
+
+
+@pytest.mark.parametrize(("text", "pos", "expected"), [
+    ("", 0, False),
+    ("$a$ b", 1, True),
+    ("$a$ b", 4, False),
+    ("a $b$ c $d$", 4, True),
+    ("a $b$ c $d$", 7, False),
+    ("a $b$ c $d$", 10, True),
+    ("$$x$$ y", 3, True),
+    ("$$x$$ y", 6, False),
+])
+def test_a_position_is_in_math_when_an_odd_number_of_delimiters_precede_it(
+    text: str, pos: int, expected: bool
+) -> None:
+    assert _in_math(text, pos) is expected
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("$a$$b$", "$a b$"),
+    ("$a$$b$$c$", "$a b c$"),
+    ("a$b$$c$d", "a$b c$d"),
+    ("$$x$$ and $a$$b$", "$$x$$ and $a b$"),
+    ("$$x$$", "$$x$$"),
+    ("$a$ $b$", "$a$ $b$"),
+])
+def test_touching_spans_merge_but_display_math_and_spaced_spans_do_not(source: str, expected: str) -> None:
+    assert _merge_touching_math(source) == expected
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("x_12", "x_{12}"),
+    ("k_1x", "k_{1}x"),
+    ("x_ij", "x_{ij}"),
+    ("α_i", r"\alpha_i"),
+    ("x_1", "x_1"),
+    ("x_{ab}", "x_{ab}"),
+    (r"\beta_1", r"\beta_1"),
+    (r"a\_b", r"a\_b"),
+    ("|a_b|", "|a_b|"),
+])
+def test_underscore_subscripts_in_math_are_grouped_when_they_need_to_be(source: str, expected: str) -> None:
+    """A multi-letter or multi-digit subscript needs braces, a lone one does not, an
+    escaped underscore is literal, and a table separator's pipe is not a variable."""
+    assert _convert_underscores_in_math(source) == expected
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("$a$ = $b$ = $c$", "$a = b = c$"),
+    ("$a$ - $b$ - $c$", "$a - b - c$"),
+    ("$a$+$b$", "$a + b$"),
+    ("$a$ +  $b$", "$a + b$"),
+    ("$a$ * $b$", "$a$ * $b$"),
+])
+def test_a_chain_of_spans_joined_by_operators_becomes_one_span(source: str, expected: str) -> None:
+    assert _combine_adjacent_math(source) == expected
+
+
+# Things that must hold for any input
+
+
+CONVERT_SYMBOLS_SAMPLES = [
+    "α ≤ β and ∑ x²",
+    "θ₀ + β̂₁",
+    "√(σ²) and √2",
+    "cost $5 and α",
+    "$a$ + α",
+    "x̄ = 0",
+    "∑xᵢ",
+    "Qᵀ ∴ x",
+    "$$\nα\n$$",
+    "`α` and α",
+    "- $a$\n\n- $b$",
+    "\\beta_1 and \\hat\\beta",
+    "t_{0.975,10}",
+    "~~~\nPRICE=$5\n~~~",
+    "Run:\n\n    echo $HOME\n\nDone.",
+]
+
+
+@pytest.mark.parametrize("source", CONVERT_SYMBOLS_SAMPLES)
+def test_converting_symbols_twice_changes_nothing(source: str) -> None:
+    """The output is already in the form every pass is looking for, so running the pass
+    again must not wrap, escape or merge anything a second time."""
+    once = convert_symbols(source)
+
+    assert convert_symbols(once) == once
+
+
+@pytest.mark.parametrize("source", [
+    "",
+    "$",
+    "$$",
+    "$" * 50,
+    "\\",
+    "\\\\\\",
+    "\x00",
+    "$\x00$",
+    "√",
+    "√(",
+    "√((",
+    "̂",
+    "x̂",
+    "```",
+    "`",
+    "∑" * 200,
+    "a" * 5000,
+])
+def test_odd_input_never_raises_in_the_symbol_pass(source: str) -> None:
+    assert isinstance(convert_symbols(source), str)
+
+
+# The command line
+
+
+@pytest.fixture
+def cli_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str | None]]:
+    """Replace the conversion with one that records its arguments and fails for any file
+    whose name starts with "bad"."""
+    calls: list[tuple[str, str | None]] = []
+
+    def fake_convert(md_path: str, output_path: str | None = None, *rest: object) -> bool:
+        calls.append((md_path, output_path))
+        return not md_path.startswith("bad")
+
+    monkeypatch.setattr("md_pdf.convert_md_to_pdf", fake_convert)
+    return calls
+
+
+def test_with_no_arguments_and_no_files_it_says_how_to_use_it(
+    cli_calls: list[tuple[str, str | None]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["md_pdf.py"])
+    monkeypatch.setattr("md_pdf.INPUT_DIR", tmp_path)
+
+    md_pdf.main()
+
+    out = capsys.readouterr().out
+    assert "No .md files found in input folder" in out and "Usage: python md_pdf.py" in out
+    assert cli_calls == []
+
+
+def test_with_no_arguments_it_converts_every_markdown_file_in_the_input_folder(
+    cli_calls: list[tuple[str, str | None]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    for name in ("a.md", "B.MD", "notes.txt"):
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["md_pdf.py"])
+    monkeypatch.setattr("md_pdf.INPUT_DIR", tmp_path)
+
+    md_pdf.main()
+
+    assert sorted(cli_calls) == [("B.MD", None), ("a.md", None)]
+
+
+def test_one_failure_in_the_batch_still_converts_the_rest_and_exits_nonzero(
+    cli_calls: list[tuple[str, str | None]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    for name in ("bad.md", "good.md"):
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["md_pdf.py"])
+    monkeypatch.setattr("md_pdf.INPUT_DIR", tmp_path)
+
+    with pytest.raises(SystemExit) as exit_info:
+        md_pdf.main()
+
+    assert exit_info.value.code == 1
+    assert {name for name, _ in cli_calls} == {"bad.md", "good.md"}
+
+
+@pytest.mark.parametrize(("argv", "expected"), [
+    (["md_pdf.py", "notes.md"], [("notes.md", None)]),
+    (["md_pdf.py", "notes.md", "out.pdf"], [("notes.md", "out.pdf")]),
+])
+def test_a_named_file_is_converted_with_the_output_name_if_one_is_given(
+    cli_calls: list[tuple[str, str | None]],
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+    expected: list[tuple[str, str | None]],
+) -> None:
+    monkeypatch.setattr(sys, "argv", argv)
+
+    md_pdf.main()
+
+    assert cli_calls == expected
+
+
+def test_a_named_file_that_fails_exits_nonzero(
+    cli_calls: list[tuple[str, str | None]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["md_pdf.py", "bad.md"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        md_pdf.main()
+
+    assert exit_info.value.code == 1
