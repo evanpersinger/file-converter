@@ -103,6 +103,7 @@ _SCRIPT_BASE = r"A-Za-z0-9ℝℕℤℚℂ𝔼ℙℓ𝒩" + _GREEK_CLASS + r"\)\]
 # A subscript run. There is no unicode subscript "." or ",", so one between subscript
 # characters stays inside the run (t₀.₉₇₅,₁₀ -> t_{0.975,10}); a trailing one does not.
 _SUB_CHARS = "".join(re.escape(c) for c in SUBSCRIPT_TO_LATEX)
+_SUP_CHARS = "".join(re.escape(c) for c in SUPERSCRIPT_TO_LATEX)
 _SUB_RUN = rf"[{_SUB_CHARS}]+(?:[.,][{_SUB_CHARS}]+)*"
 
 # Config: LaTeX preamble injected into every render
@@ -439,7 +440,7 @@ def normalize_tables(md):
 # Preprocessing: unicode math -> LaTeX (code spans/blocks protected)
 def _convert_scripts(md):
     """Convert unicode super/subscript runs to LaTeX, e.g. x² -> $x^{2}$, xᵢ -> $x_{i}$."""
-    sup = "".join(re.escape(c) for c in SUPERSCRIPT_TO_LATEX)
+    sup = _SUP_CHARS
 
     def sup_repl(m):
         base = SYMBOL_TO_LATEX.get(m.group(1), m.group(1))
@@ -708,9 +709,11 @@ def convert_symbols(md):
     def hat_repl(m):
         base = GREEK_TO_LATEX.get(m.group(1), m.group(1))
         idx = "".join(SUBSCRIPT_TO_LATEX.get(c, c) for c in m.group(2))
-        return rf"$\hat{{{base}}}_{{{idx}}}$" if idx else rf"$\hat{{{base}}}$"
+        exp = "".join(SUPERSCRIPT_TO_LATEX[c] for c in m.group(3))
+        hatted = rf"\hat{{{base}}}" + (f"_{{{idx}}}" if idx else "") + (f"^{{{exp}}}" if exp else "")
+        return f"${hatted}$"
 
-    md = re.sub(rf"([A-Za-z{_GREEK_CLASS}])̂((?:{_SUB_RUN})?)", hat_repl, md)
+    md = re.sub(rf"([A-Za-z{_GREEK_CLASS}])̂((?:{_SUB_RUN})?)((?:[{_SUP_CHARS}]+)?)", hat_repl, md)
 
     # Unicode super/subscripts -> LaTeX (θ₀ -> $\theta_{0}$, x² -> $x^{2}$)
     md = _convert_scripts(md)

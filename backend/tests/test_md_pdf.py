@@ -225,6 +225,12 @@ def test_a_barred_variable_becomes_a_bar_command() -> None:
         ("β̂₀", r"$\hat{\beta}_{0}$"),
         ("β̂", r"$\hat{\beta}$"),
         ("ϵ̂ᵢ", r"$\hat{\epsilon}_{i}$"),
+        ("σ̂²", r"$\hat{\sigma}^{2}$"),
+        ("β̂²", r"$\hat{\beta}^{2}$"),
+        ("β̂₁²", r"$\hat{\beta}_{1}^{2}$"),
+        ("α̂ᵢ²", r"$\hat{\alpha}_{i}^{2}$"),
+        ("x̂ⁿ", r"$\hat{x}^{n}$"),
+        ("σ̂² = 1", r"$\hat{\sigma}^{2}$ = 1"),
     ],
 )
 def test_a_hatted_variable_keeps_its_hat_and_subscript(source: str, expected: str) -> None:
@@ -1365,7 +1371,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u v 𝔼[X] w 𝔼ₓ[f(x)] x Var(X) = 𝔼[X²] − 𝔼[X]² y ℙ(A | B) = ℙ(A ∩ B) / ℙ(B) z yᵢ = βxᵢ + ϵᵢ and ϕ₁ and ϵ̂ᵢ and ℓ₂ norm and ℓ(θ) and ε ~ 𝒩(0, σ²) and 𝒩ₚ(μ, Σ) and a₁ + a₂ + ⋯ + aₙ and 1, 2, ⋯, n\n")
+    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u v 𝔼[X] w 𝔼ₓ[f(x)] x Var(X) = 𝔼[X²] − 𝔼[X]² y ℙ(A | B) = ℙ(A ∩ B) / ℙ(B) z yᵢ = βxᵢ + ϵᵢ and ϕ₁ and ϵ̂ᵢ and ℓ₂ norm and ℓ(θ) and ε ~ 𝒩(0, σ²) and 𝒩ₚ(μ, Σ) and a₁ + a₂ + ⋯ + aₙ and 1, 2, ⋯, n and σ̂² and β̂₁² and α̂ᵢ\n")
 
     assert "safe mode" not in log, "a mapped command does not exist, so the whole file fell back"
     assert MISSING_GLYPH not in text
