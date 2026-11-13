@@ -82,7 +82,7 @@ OPERATOR_TO_LATEX = {
     "⋅": r"\cdot", "∖": r"\setminus", "∣": r"\mid", "∤": r"\nmid",
     "≢": r"\nequiv", "≺": r"\prec", "≻": r"\succ", "⊢": r"\vdash", "⊨": r"\models",
     "⟶": r"\longrightarrow", "⟹": r"\Longrightarrow",
-    "𝔼": r"\mathbb{E}", "ℙ": r"\mathbb{P}",
+    "𝔼": r"\mathbb{E}", "ℙ": r"\mathbb{P}", "ℓ": r"\ell",
 }
 
 # Everything we turn into a $\command$: greek + operators, in one pass.
@@ -99,7 +99,7 @@ BAR_VARIABLES = {
 
 # Character classes reused across the script regexes.
 _GREEK_CLASS = "α-ωΑ-Ωθεϵϕ"
-_SCRIPT_BASE = r"A-Za-z0-9ℝℕℤℚℂ𝔼ℙ" + _GREEK_CLASS + r"\)\]"
+_SCRIPT_BASE = r"A-Za-z0-9ℝℕℤℚℂ𝔼ℙℓ" + _GREEK_CLASS + r"\)\]"
 # A subscript run. There is no unicode subscript "." or ",", so one between subscript
 # characters stays inside the run (t₀.₉₇₅,₁₀ -> t_{0.975,10}); a trailing one does not.
 _SUB_CHARS = "".join(re.escape(c) for c in SUBSCRIPT_TO_LATEX)
