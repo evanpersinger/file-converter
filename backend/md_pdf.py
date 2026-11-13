@@ -544,6 +544,107 @@ def _convert_sqrt(md, bare=False):
     return "".join(out)
 
 
+# Stands in for a $ that is plain text (a price) while the symbol passes run, so their
+# $-pairing regexes only ever see real math delimiters. Restored as \$ at the end.
+_TEXT_DOLLAR = "\x01"
+
+
+def _is_escaped(text, pos):
+    """True if the character at pos follows an odd number of backslashes."""
+    count = 0
+    while pos - count - 1 >= 0 and text[pos - count - 1] == "\\":
+        count += 1
+    return count % 2 == 1
+
+
+def _hide_text_dollars(md):
+    r"""Swap every $ that pandoc would read as plain text (and every \$ outside math)
+    for _TEXT_DOLLAR.
+
+    Uses pandoc's tex_math_dollars rule: an opening $ must be followed by a non-space,
+    and the next unescaped $ closes it only if it follows a non-space and isn't followed
+    by a digit. Math never spans a blank line, and \$ is never a delimiter. So
+    "costs $5 and $10" is text, "$5 and $x$" is text then math, and "$a$" is math.
+    """
+    out = list(md)
+    n = len(md)
+    i = 0
+    while i < n:
+        if md[i] != "$":
+            i += 1
+            continue
+        if _is_escaped(md, i):
+            # Already plain text, but the pairing passes would still count it.
+            out[i - 1], out[i] = "", _TEXT_DOLLAR
+            i += 1
+            continue
+        if md.startswith("$$", i):
+            end = md.find("$$", i + 2)
+            while end != -1 and _is_escaped(md, end):
+                end = md.find("$$", end + 1)
+            if end != -1 and "\n\n" not in md[i + 2:end]:
+                i = end + 2
+                continue
+            out[i] = out[i + 1] = _TEXT_DOLLAR
+            i += 2
+            continue
+        close = None
+        if i + 1 < n and not md[i + 1].isspace():
+            j = i + 1
+            while j < n:
+                if md[j] == "$" and not _is_escaped(md, j):
+                    break
+                j += 1
+            # ASCII digits only, like pandoc: str.isdigit() is also true for "²" and "₁"
+            ok = (
+                j < n
+                and "\n\n" not in md[i + 1:j]
+                and not md[j - 1].isspace()
+                and not (j + 1 < n and md[j + 1] in "0123456789")
+                and not md.startswith("$$", j)
+            )
+            close = j if ok else None
+        if close is None:
+            out[i] = _TEXT_DOLLAR
+            i += 1
+        else:
+            i = close + 1
+    return "".join(out)
+
+
+def _stash_indented_code(md, stash):
+    """Stash each indented code block (4 spaces or a tab, after a blank line).
+
+    A 4-space paragraph continuing a list item looks the same, so it is stashed too and
+    just skips symbol conversion.
+    """
+    out = []
+    block = []
+    prev_blank = True
+
+    def flush():
+        trailing = 0
+        while block and not block[-1].strip():
+            block.pop()
+            trailing += 1
+        if block:
+            out.append(stash("\n".join(block)))
+        out.extend([""] * trailing)
+        block.clear()
+
+    for line in md.split("\n"):
+        if line.startswith(("    ", "\t")) and (block or prev_blank):
+            block.append(line)
+        elif block and not line.strip():
+            block.append(line)
+        else:
+            flush()
+            out.append(line)
+        prev_blank = not line.strip()
+    flush()
+    return "\n".join(out)
+
+
 def convert_symbols(md):
     """Convert unicode math notation to LaTeX so xelatex renders it.
 
@@ -556,8 +657,12 @@ def convert_symbols(md):
         protected.append(s)
         return f"\x00{len(protected) - 1}\x00"
 
-    md = re.sub(r"```.*?```", lambda m: stash(m.group(0)), md, flags=re.S)
+    md = re.sub(r"(```|~~~).*?\1", lambda m: stash(m.group(0)), md, flags=re.S)
+    md = _stash_indented_code(md, stash)
     md = re.sub(r"`[^`\n]*`", lambda m: stash(m.group(0)), md)
+
+    # A price like "$5" would throw off every $-pairing pass below, so hide it first.
+    md = _hide_text_dollars(md)
 
     # Horizontal rules -> paragraph break (spacing)
     md = re.sub(r"^---\s*$", r"\n\n", md, flags=re.MULTILINE)
@@ -634,6 +739,9 @@ def convert_symbols(md):
                 lambda m: f"${m.group(1).strip()}$", md)
 
     md = _convert_sqrt(md)
+
+    # Escaped, so a $ next to math added above can't be read as a delimiter
+    md = md.replace(_TEXT_DOLLAR, r"\$")
 
     # Restore protected code (loop in case a span nested another placeholder)
     for _ in range(5):

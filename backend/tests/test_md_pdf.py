@@ -394,3 +394,31 @@ def test_a_pandoc_timeout_is_not_retried_in_safe_mode(
 
     assert run_pandoc("# hi", "# hi", tmp_path / "out.pdf", "hi.md") is False
     assert len(calls) == 1
+
+
+# A $ that is plain text (a price)
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("cost $5 and α here", r"cost \$5 and $\alpha$ here"),
+    ("costs $5 and $10, with α and β here", r"costs \$5 and \$10, with $\alpha$ and $\beta$ here"),
+    ("Price $5.\n\nLater β and ∑xᵢ here", "Price \\$5.\n\nLater $\\beta$ and $\\sum x_{i}$ here"),
+    ("$5 and $x$ α", r"\$5 and $x$ $\alpha$"),
+    (r"x \$ y α", r"x \$ y $\alpha$"),
+])
+def test_a_dollar_that_is_text_does_not_throw_off_symbol_conversion(source: str, expected: str) -> None:
+    """Follows pandoc's tex_math_dollars rule: "$5 and $10" is text, not a math span."""
+    assert convert_symbols(source) == expected
+
+
+@pytest.mark.parametrize("source", [
+    "$a$ and $b$",
+    "$$x$$",
+    "$$a\nb$$ then $c$",
+    "`$5` and `$x$`",
+    "~~~\nPRICE=$5\n~~~",
+    "Run:\n\n    echo $HOME\n\nDone.",
+    "The fit has $r$² of 0.9",
+])
+def test_real_math_and_code_dollars_are_unchanged(source: str) -> None:
+    assert convert_symbols(source) == source
