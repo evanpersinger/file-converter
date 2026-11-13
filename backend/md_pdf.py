@@ -76,6 +76,7 @@ OPERATOR_TO_LATEX = {
     "⊕": r"\oplus", "⊗": r"\otimes", "∘": r"\circ", "⊤": r"\top",
     "≅": r"\cong", "≃": r"\simeq", "≪": r"\ll", "≫": r"\gg",
     "′": r"\prime", "″": r"\dprime",
+    "⌈": r"\lceil", "⌉": r"\rceil", "⌊": r"\lfloor", "⌋": r"\rfloor",
 }
 
 # Everything we turn into a $\command$: greek + operators, in one pass.
