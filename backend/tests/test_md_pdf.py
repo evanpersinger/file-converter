@@ -411,6 +411,14 @@ def test_a_dollar_that_is_text_does_not_throw_off_symbol_conversion(source: str,
     assert convert_symbols(source) == expected
 
 
-@pytest.mark.parametrize("source", ["$a$ and $b$", "$$x$$", "$$a\nb$$ then $c$", "`$5` and `$x$`"])
+@pytest.mark.parametrize("source", [
+    "$a$ and $b$",
+    "$$x$$",
+    "$$a\nb$$ then $c$",
+    "`$5` and `$x$`",
+    "~~~\nPRICE=$5\n~~~",
+    "Run:\n\n    echo $HOME\n\nDone.",
+    "The fit has $r$² of 0.9",
+])
 def test_real_math_and_code_dollars_are_unchanged(source: str) -> None:
     assert convert_symbols(source) == source

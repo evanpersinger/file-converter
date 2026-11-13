@@ -595,11 +595,12 @@ def _hide_text_dollars(md):
                 if md[j] == "$" and not _is_escaped(md, j):
                     break
                 j += 1
+            # ASCII digits only, like pandoc: str.isdigit() is also true for "²" and "₁"
             ok = (
                 j < n
                 and "\n\n" not in md[i + 1:j]
                 and not md[j - 1].isspace()
-                and not (j + 1 < n and md[j + 1].isdigit())
+                and not (j + 1 < n and md[j + 1] in "0123456789")
                 and not md.startswith("$$", j)
             )
             close = j if ok else None
@@ -609,6 +610,39 @@ def _hide_text_dollars(md):
         else:
             i = close + 1
     return "".join(out)
+
+
+def _stash_indented_code(md, stash):
+    """Stash each indented code block (4 spaces or a tab, after a blank line).
+
+    A 4-space paragraph continuing a list item looks the same, so it is stashed too and
+    just skips symbol conversion.
+    """
+    out = []
+    block = []
+    prev_blank = True
+
+    def flush():
+        trailing = 0
+        while block and not block[-1].strip():
+            block.pop()
+            trailing += 1
+        if block:
+            out.append(stash("\n".join(block)))
+        out.extend([""] * trailing)
+        block.clear()
+
+    for line in md.split("\n"):
+        if line.startswith(("    ", "\t")) and (block or prev_blank):
+            block.append(line)
+        elif block and not line.strip():
+            block.append(line)
+        else:
+            flush()
+            out.append(line)
+        prev_blank = not line.strip()
+    flush()
+    return "\n".join(out)
 
 
 def convert_symbols(md):
@@ -623,7 +657,8 @@ def convert_symbols(md):
         protected.append(s)
         return f"\x00{len(protected) - 1}\x00"
 
-    md = re.sub(r"```.*?```", lambda m: stash(m.group(0)), md, flags=re.S)
+    md = re.sub(r"(```|~~~).*?\1", lambda m: stash(m.group(0)), md, flags=re.S)
+    md = _stash_indented_code(md, stash)
     md = re.sub(r"`[^`\n]*`", lambda m: stash(m.group(0)), md)
 
     # A price like "$5" would throw off every $-pairing pass below, so hide it first.
