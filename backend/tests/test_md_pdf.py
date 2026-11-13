@@ -69,6 +69,13 @@ from pdf_md import normalize_math
         ("⟩", r"$\rangle$"),
         ("⟨x, y⟩", r"$\langle$x, y$\rangle$"),
         ("⟨xᵢ, yᵢ⟩", r"$\langle x_{i}$, $y_{i}\rangle$"),
+        ("⊕", r"$\oplus$"),
+        ("⊗", r"$\otimes$"),
+        ("∘", r"$\circ$"),
+        ("⊤", r"$\top$"),
+        ("V ⊕ W", r"V $\oplus$ W"),
+        ("A ⊗ B ⊗ C", r"A $\otimes$ B $\otimes$ C"),
+        ("f ∘ g ∘ h", r"f $\circ$ g $\circ$ h"),
     ],
 )
 def test_greek_and_operators_become_latex_commands(source: str, expected: str) -> None:
@@ -223,7 +230,7 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
 
@@ -412,10 +419,10 @@ def test_a_numeric_markdown_table_survives() -> None:
 # Symbols outside the maps
 
 
-@pytest.mark.parametrize("source", ["a ⨁ b", "ℵ", "a ⊗ b"])
+@pytest.mark.parametrize("source", ["a ⨁ b", "ℵ"])
 def test_unmapped_symbols_pass_through_untouched(source: str) -> None:
-    """Nothing in the maps matches these, and guessing a LaTeX command for them would
-    be worse than leaving the character for the font to handle."""
+    """Nothing in the maps matches these, so they stay as typed. The text font has no
+    glyph for them, so they draw blank until someone maps them."""
     assert convert_symbols(source) == source
 
 
@@ -1286,7 +1293,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩\n")
+    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤\n")
 
     assert MISSING_GLYPH not in text
 
