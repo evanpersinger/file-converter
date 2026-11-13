@@ -59,7 +59,12 @@ from pdf_md import normalize_math
         ("∴", r"$\therefore$"),
         ("∵", r"$\because$"),
         ("ℝ", r"$\mathbb{R}$"),
+        ("ℕ", r"$\mathbb{N}$"),
+        ("ℤ", r"$\mathbb{Z}$"),
+        ("ℚ", r"$\mathbb{Q}$"),
+        ("ℂ", r"$\mathbb{C}$"),
         ("f: ℝ → ℝ", r"f: $\mathbb{R}$ $\rightarrow$ $\mathbb{R}$"),
+        ("n ∈ ℕ", r"n $\in$ $\mathbb{N}$"),
     ],
 )
 def test_greek_and_operators_become_latex_commands(source: str, expected: str) -> None:
@@ -86,6 +91,10 @@ def test_some_symbols_stay_unicode_but_move_into_math_mode(symbol: str) -> None:
         ("ℝ²", r"$\mathbb{R}^{2}$"),
         ("ℝ₊", r"$\mathbb{R}_{+}$"),
         ("x ∈ ℝⁿ", r"x $\in$ $\mathbb{R}^{n}$"),
+        ("ℕ²", r"$\mathbb{N}^{2}$"),
+        ("ℤₙ", r"$\mathbb{Z}_{n}$"),
+        ("ℚ₊", r"$\mathbb{Q}_{+}$"),
+        ("ℂⁿ", r"$\mathbb{C}^{n}$"),
     ],
 )
 def test_unicode_scripts_become_latex_scripts(source: str, expected: str) -> None:
@@ -210,7 +219,7 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
 
@@ -1273,7 +1282,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊\n")
+    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ\n")
 
     assert MISSING_GLYPH not in text
 
