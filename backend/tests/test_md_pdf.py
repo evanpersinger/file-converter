@@ -198,6 +198,17 @@ def test_adjacent_math_blocks_are_merged() -> None:
     """Converting symbols one at a time leaves a run of separate $..$ blocks, which
     xelatex sets with visible gaps. They get folded back into one."""
     assert convert_symbols("$a$ + $b$") == "$a + b$"
+    assert convert_symbols("$a$ - $b$") == "$a - b$"
+
+
+@pytest.mark.parametrize("source", [
+    "- $a = 1$\n\n- $b = 2$",
+    "- $a$\n- $b$",
+    "+ $a$\n+ $b$",
+])
+def test_math_only_bullets_are_not_merged_into_one(source: str) -> None:
+    """The merge used to cross the newline and read the list dash as a minus sign."""
+    assert convert_symbols(source) == source
 
 
 # Code protection

@@ -466,9 +466,12 @@ def _convert_underscores_in_math(math_content):
 
 
 def _combine_adjacent_math(md):
-    """Merge "$a$ op $b$" (op in + - =) into a single "$a op b$" block."""
+    """Merge "$a$ op $b$" (op in + - =) on one line into a single "$a op b$" block.
+
+    Spaces and tabs only between the parts: across a newline, a "-" or "+" is a list bullet.
+    """
     while True:
-        combined = re.sub(r"\$([^$]+)\$\s*([+\-=])\s*\$([^$]+)\$", r"$\1 \2 \3$", md)
+        combined = re.sub(r"\$([^$]+)\$[ \t]*([+\-=])[ \t]*\$([^$]+)\$", r"$\1 \2 \3$", md)
         if combined == md:
             break
         md = combined
