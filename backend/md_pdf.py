@@ -29,7 +29,7 @@ PANDOC_FROM_SAFE = (
 SUPERSCRIPT_TO_LATEX = {
     "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5",
     "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9", "⁺": "+", "⁻": "-",
-    "⁼": "=", "⁽": "(", "⁾": ")", "ⁿ": "n", "ⁱ": "i",
+    "⁼": "=", "⁽": "(", "⁾": ")", "ⁿ": "n", "ⁱ": "i", "ᵀ": "T",
 }
 SUBSCRIPT_TO_LATEX = {
     "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4", "₅": "5",
@@ -70,7 +70,7 @@ OPERATOR_TO_LATEX = {
     "→": r"\rightarrow", "←": r"\leftarrow", "⇒": r"\Rightarrow",
     "⇐": r"\Leftarrow", "↔": r"\leftrightarrow", "⇔": r"\Leftrightarrow",
     "↦": r"\mapsto", "∠": r"\angle", "⊥": r"\perp", "∥": r"\parallel",
-    "⋈": r"\bowtie",
+    "⋈": r"\bowtie", "∴": r"\therefore", "∵": r"\because",
 }
 
 # Everything we turn into a $\command$: greek + operators, in one pass.

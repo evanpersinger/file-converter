@@ -34,6 +34,8 @@ from pdf_md import normalize_math
         ("∑", r"$\sum$"),
         ("∞", r"$\infty$"),
         ("∀", r"$\forall$"),
+        ("∴", r"$\therefore$"),
+        ("∵", r"$\because$"),
     ],
 )
 def test_greek_and_operators_become_latex_commands(source: str, expected: str) -> None:
@@ -54,6 +56,8 @@ def test_some_symbols_stay_unicode_but_move_into_math_mode(symbol: str) -> None:
         ("x⁻¹", r"$x^{-1}$"),
         ("xᵢ", r"$x_{i}$"),
         ("x₁₂", r"$x_{12}$"),
+        ("Qᵀ", r"$Q^{T}$"),
+        ("J = Qᵀe", r"J = $Q^{T}$e"),
     ],
 )
 def test_unicode_scripts_become_latex_scripts(source: str, expected: str) -> None:
