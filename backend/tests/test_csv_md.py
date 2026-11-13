@@ -74,6 +74,15 @@ def test_a_windows_1252_csv_is_read(tmp_path: Path) -> None:
     assert "| José | Zürich |" in _convert(tmp_path, "name,city\nJosé,Zürich\n".encode("cp1252"))
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="the delimiter is always a comma, so a semicolon CSV comes out as one column",
+)
+def test_a_semicolon_csv_gets_one_column_per_field(tmp_path: Path) -> None:
+    """Excel in many European locales saves CSV with semicolons."""
+    assert _convert(tmp_path, b"name;city\nAda;Paris\n").startswith("| name | city |")
+
+
 def test_a_utf_16_csv_is_reported_not_converted(work_dirs: WorkDirs) -> None:
     """UTF-16 text is full of NUL bytes. Reading it as Windows-1252 wrote them into the
     table and still reported success."""
