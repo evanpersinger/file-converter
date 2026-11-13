@@ -74,7 +74,8 @@ OPERATOR_TO_LATEX = {
     "ℝ": r"\mathbb{R}", "ℕ": r"\mathbb{N}", "ℤ": r"\mathbb{Z}", "ℚ": r"\mathbb{Q}", "ℂ": r"\mathbb{C}",
     "⟨": r"\langle", "⟩": r"\rangle",
     "⊕": r"\oplus", "⊗": r"\otimes", "∘": r"\circ", "⊤": r"\top",
-    "≅": r"\cong", "≃": r"\simeq",
+    "≅": r"\cong", "≃": r"\simeq", "≪": r"\ll", "≫": r"\gg",
+    "′": r"\prime", "″": r"\dprime",
 }
 
 # Everything we turn into a $\command$: greek + operators, in one pass.

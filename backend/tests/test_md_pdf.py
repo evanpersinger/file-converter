@@ -80,6 +80,13 @@ from pdf_md import normalize_math
         ("≃", r"$\simeq$"),
         ("G ≅ H", r"G $\cong$ H"),
         ("a ≃ b ≅ c", r"a $\simeq$ b $\cong$ c"),
+        ("≪", r"$\ll$"),
+        ("≫", r"$\gg$"),
+        ("a ≪ b ≫ c", r"a $\ll$ b $\gg$ c"),
+        ("′", r"$\prime$"),
+        ("″", r"$\dprime$"),
+        ("f′(x)", r"f$\prime$(x)"),
+        ("f″(x)", r"f$\dprime$(x)"),
     ],
 )
 def test_greek_and_operators_become_latex_commands(source: str, expected: str) -> None:
@@ -234,7 +241,7 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
 
@@ -1297,7 +1304,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b\n")
+    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″\n")
 
     assert MISSING_GLYPH not in text
 
