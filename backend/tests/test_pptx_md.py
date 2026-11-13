@@ -79,6 +79,21 @@ def test_large_font_text_becomes_a_one_line_heading(tmp_path: Path) -> None:
     assert "### Line one Line two Second paragraph\n\n" in extract(prs, tmp_path)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="a shape whose first run is over 15.75pt is joined into one ### line, bullets and all",
+)
+def test_bullets_in_a_large_font_body_stay_on_separate_lines(tmp_path: Path) -> None:
+    prs, slide = new_slide()
+    frame = add_textbox(slide, "First bullet\nSecond bullet")
+    for paragraph in frame.paragraphs:
+        paragraph.runs[0].font.size = Pt(24)
+
+    lines = extract(prs, tmp_path).splitlines()
+
+    assert not any("First bullet" in line and "Second bullet" in line for line in lines)
+
+
 @pytest.mark.parametrize("source, expected", [
     ("*star*", "\\*star\\*"),
     ("`code`", "\\`code\\`"),
