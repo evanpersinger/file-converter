@@ -65,6 +65,10 @@ from pdf_md import normalize_math
         ("ℂ", r"$\mathbb{C}$"),
         ("f: ℝ → ℝ", r"f: $\mathbb{R}$ $\rightarrow$ $\mathbb{R}$"),
         ("n ∈ ℕ", r"n $\in$ $\mathbb{N}$"),
+        ("⟨", r"$\langle$"),
+        ("⟩", r"$\rangle$"),
+        ("⟨x, y⟩", r"$\langle$x, y$\rangle$"),
+        ("⟨xᵢ, yᵢ⟩", r"$\langle x_{i}$, $y_{i}\rangle$"),
     ],
 )
 def test_greek_and_operators_become_latex_commands(source: str, expected: str) -> None:
@@ -219,7 +223,7 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
 
@@ -1282,7 +1286,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ\n")
+    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩\n")
 
     assert MISSING_GLYPH not in text
 
