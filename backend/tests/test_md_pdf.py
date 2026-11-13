@@ -113,6 +113,9 @@ from pdf_md import normalize_math
         ("⟹", r"$\Longrightarrow$"),
         ("f: A ⟶ B", r"f: A $\longrightarrow$ B"),
         ("a → b ⟶ c ⇒ d ⟹ e", r"a $\rightarrow$ b $\longrightarrow$ c $\Rightarrow$ d $\Longrightarrow$ e"),
+        ("𝔼", r"$\mathbb{E}$"),
+        ("𝔼[X]", r"$\mathbb{E}$[X]"),
+        ("𝔼[X²]", r"$\mathbb{E}$[$X^{2}$]"),
     ],
 )
 def test_greek_and_operators_become_latex_commands(source: str, expected: str) -> None:
@@ -143,6 +146,7 @@ def test_some_symbols_stay_unicode_but_move_into_math_mode(symbol: str) -> None:
         ("ℤₙ", r"$\mathbb{Z}_{n}$"),
         ("ℚ₊", r"$\mathbb{Q}_{+}$"),
         ("ℂⁿ", r"$\mathbb{C}^{n}$"),
+        ("𝔼ₓ[f(x)]", r"$\mathbb{E}_{x}$[f(x)]"),
     ],
 )
 def test_unicode_scripts_become_latex_scripts(source: str, expected: str) -> None:
@@ -267,7 +271,7 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$", "$a ⋅ b$", "$Γ ⊢ A$", "$A ⟹ B$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$", "$a ⋅ b$", "$Γ ⊢ A$", "$A ⟹ B$", "$𝔼[X]$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
 
@@ -1330,7 +1334,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u\n")
+    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u v 𝔼[X] w 𝔼ₓ[f(x)] x Var(X) = 𝔼[X²] − 𝔼[X]²\n")
 
     assert "safe mode" not in log, "a mapped command does not exist, so the whole file fell back"
     assert MISSING_GLYPH not in text
