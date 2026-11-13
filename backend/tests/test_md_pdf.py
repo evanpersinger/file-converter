@@ -1,15 +1,19 @@
 """Tests for the Markdown preprocessing in md_pdf.py.
 
-Pandoc and xelatex are not under test, and neither is reachable from a unit test
-anyway. What is testable is everything that runs before them: the unicode -> LaTeX
+Pandoc is replaced in nearly all of these, because neither it nor xelatex is reachable
+from a unit test. What they test is everything that runs before it: the unicode -> LaTeX
 maps, the delimiter normalization, and the code-protection that has to survive all of
-it. These are the inverse of pdf_md.py's, so the last section checks the pair lines up.
+it. These are the inverse of pdf_md.py's, so the round-trip section checks the pair lines
+up. The last section renders real PDFs and is skipped without pandoc, xelatex and macOS.
 """
 
+import shutil
 import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
+import fitz
 import pytest
 
 from external_tool import ToolTimeout
@@ -1200,3 +1204,178 @@ def test_the_error_file_mermaid_filter_leaves_behind_is_removed(
     _pandoc_once("# hi", out, PANDOC_FROM, "h.tex", "/bin/mermaid-filter")
 
     assert not (tmp_path / "mermaid-filter.err").exists()
+
+
+# Real PDFs, through real pandoc and xelatex
+
+needs_latex = pytest.mark.skipif(
+    sys.platform != "darwin" or not (shutil.which("pandoc") and shutil.which("xelatex")),
+    reason="needs pandoc, xelatex and macOS (the header asks for the Menlo font)",
+)
+
+# What xelatex draws in place of a character the font has no glyph for
+MISSING_GLYPH = "\uffff"
+
+
+def render(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str], markdown: str) -> tuple[str, str]:
+    """Convert markdown with the real converter and return (what it printed, the PDF's text)."""
+    input_dir, output_dir = work_dirs
+    (input_dir / "doc.md").write_text(markdown, encoding="utf-8")
+    converted = convert_md_to_pdf("doc.md", None, input_dir, output_dir)
+    log = capsys.readouterr().out
+    assert converted, log
+    with fitz.open(output_dir / "doc.pdf") as document:
+        return log, "\n".join(page.get_text() for page in document)
+
+
+@needs_latex
+def test_well_formed_math_renders_in_full(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
+    log, text = render(work_dirs, capsys, "The estimator $\\hat{\\beta}$ is $\\alpha \\le \\beta$.\n")
+
+    assert "safe mode" not in log
+    assert "$" not in text
+    assert "≤" in text
+
+
+@needs_latex
+def test_unicode_math_and_the_same_math_in_latex_render_alike(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, from_unicode = render(work_dirs, capsys, "α ≤ β and ∑ x²\n")
+    _, from_latex = render(work_dirs, capsys, "$\\alpha \\le \\beta$ and $\\sum x^2$\n")
+
+    assert from_unicode == from_latex
+
+
+@needs_latex
+def test_the_transpose_and_therefore_signs_are_drawn(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, text = render(work_dirs, capsys, "Qᵀ and ∴ done\n")
+
+    assert "∴" in text and "𝑇" in text
+    assert MISSING_GLYPH not in text
+
+
+@needs_latex
+def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
+    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n\n")
+
+    assert MISSING_GLYPH not in text
+
+
+@needs_latex
+def test_an_unknown_command_sends_the_file_to_safe_mode_with_its_math_as_text(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log, text = render(work_dirs, capsys, "Here $\\foo{x}$ is odd.\n")
+
+    assert "safe mode" in log
+    assert "\\foo" in text
+
+
+@needs_latex
+def test_a_span_with_a_space_after_the_opening_dollar_sends_the_file_to_safe_mode(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The line from anova-proofs.md that failed: pandoc does not read "$ A" as math, so its
+    \\frac lands outside math and xelatex stops."""
+    line = (
+        "$$ SSR = \\sum (\\hat{Y}_i - \\bar{Y})^2 $$ where $ A = \\frac{1}{n} "
+        "\\begin{pmatrix} 1 & \\cdots & 1 \\end{pmatrix} \\rightarrow 1/n $$\n"
+    )
+
+    log, _ = render(work_dirs, capsys, line)
+
+    assert "safe mode" in log
+
+
+@needs_latex
+def test_display_math_with_a_blank_line_inside_is_printed_raw(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The md-best-practices skill tells Claude never to leave a blank line inside $$. If
+    this starts rendering as math, update the skill."""
+    _, text = render(work_dirs, capsys, "$$\na = b\n\nc = d\n$$\n")
+
+    assert "$$" in text
+
+
+@needs_latex
+def test_a_space_after_an_opening_dollar_is_printed_raw(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Also in the md-best-practices skill, for spans the trimming rules do not reach."""
+    _, text = render(work_dirs, capsys, "Here $ x + y$ is math.\n")
+
+    assert "$ x + y$" in text
+
+
+@needs_latex
+def test_an_escaped_price_and_a_dollar_in_code_survive(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log, text = render(work_dirs, capsys, "It costs \\$5 and `$HOME` stays.\n")
+
+    assert "safe mode" not in log
+    assert "It costs $5 and $HOME stays." in text
+
+
+@needs_latex
+def test_math_only_bullets_come_out_as_separate_bullets(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, text = render(work_dirs, capsys, "Formulas\n\n- $a = 1$\n\n- $b = 2$\n\n- $c = 3$\n")
+
+    assert text.count("•") == 3
+
+
+@needs_latex
+def test_a_table_cell_keeps_its_math_and_its_negative_number(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log, text = render(work_dirs, capsys, "| x | y |\n|---|---|\n| $\\alpha$ | -5 |\n")
+
+    assert "safe mode" not in log
+    assert "𝛼" in text and "-5" in text
+
+
+@needs_latex
+def test_a_narrow_header_row_is_drawn_as_a_title_above_the_table(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log, text = render(work_dirs, capsys, "| Title |\n| a | b | c | d |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |\n")
+
+    assert "safe mode" not in log
+    assert text.startswith("Title")
+
+
+@needs_latex
+def test_a_tag_in_backticks_is_drawn_and_a_dash_is_flattened(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, text = render(work_dirs, capsys, "Use the `<tag>` here, one \u2014 two.\n")
+
+    assert "<tag>" in text
+    assert "one - two" in text
+
+
+@needs_latex
+def test_the_example_in_the_md_best_practices_skill_renders_in_full(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keeps the skill's example honest: if it stops rendering, the skill is teaching a
+    pattern that no longer works."""
+    example = (
+        "The Gauss-Markov theorem says $\\hat{\\beta}$ is the BLUE (Best Linear Unbiased Estimator).\n\n"
+        "Since $\\hat{\\beta}$ is unbiased, $E(\\hat{\\beta}) = C \\cdot X\\beta = \\beta$, "
+        "so $CX = I_{p \\times p}$.\n\n"
+        "$$\n\\begin{aligned}\n\\text{Var}(\\hat{\\beta}) &= \\sigma^2 C C^T \\\\\n"
+        "&\\ge \\text{Var}(\\hat{\\beta})\n\\end{aligned}\n$$\n"
+    )
+
+    log, text = render(work_dirs, capsys, example)
+
+    assert "safe mode" not in log
+    assert "$" not in text and MISSING_GLYPH not in text
+    assert "Var" in text
