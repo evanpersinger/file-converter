@@ -120,6 +120,11 @@ from pdf_md import normalize_math
         ("ℙ(A)", r"$\mathbb{P}$(A)"),
         ("ℙ(X ≤ x)", r"$\mathbb{P}$(X $≤$ x)"),
         ("ℙ and 𝔼", r"$\mathbb{P}$ and $\mathbb{E}$"),
+        ("ϵ", r"$\epsilon$"),
+        ("ϕ", r"$\phi$"),
+        ("ε and ϵ", r"$\varepsilon$ and $\epsilon$"),
+        ("ϕ(x)", r"$\phi$(x)"),
+        ("ϵ ~ N(0, σ²)", r"$\epsilon$ ~ N(0, $\sigma^{2}$)"),
     ],
 )
 def test_greek_and_operators_become_latex_commands(source: str, expected: str) -> None:
@@ -152,6 +157,10 @@ def test_some_symbols_stay_unicode_but_move_into_math_mode(symbol: str) -> None:
         ("ℂⁿ", r"$\mathbb{C}^{n}$"),
         ("𝔼ₓ[f(x)]", r"$\mathbb{E}_{x}$[f(x)]"),
         ("ℙₓ(A)", r"$\mathbb{P}_{x}$(A)"),
+        ("ϵᵢ", r"$\epsilon_{i}$"),
+        ("ϕ₁", r"$\phi_{1}$"),
+        ("ϵ²", r"$\epsilon^{2}$"),
+        ("yᵢ = βxᵢ + ϵᵢ", r"$y_{i} = \beta x_{i} + \epsilon_{i}$"),
     ],
 )
 def test_unicode_scripts_become_latex_scripts(source: str, expected: str) -> None:
@@ -201,6 +210,7 @@ def test_a_barred_variable_becomes_a_bar_command() -> None:
         ("β̂₁", r"$\hat{\beta}_{1}$"),
         ("β̂₀", r"$\hat{\beta}_{0}$"),
         ("β̂", r"$\hat{\beta}$"),
+        ("ϵ̂ᵢ", r"$\hat{\epsilon}_{i}$"),
     ],
 )
 def test_a_hatted_variable_keeps_its_hat_and_subscript(source: str, expected: str) -> None:
@@ -219,6 +229,8 @@ def test_a_bare_greek_command_in_prose_is_wrapped_in_math_mode() -> None:
         (r"\hat\beta_1", r"$\hat\beta_1$"),
         (r"\hat{\beta}_1", r"$\hat{\beta}_1$"),
         (r"t_{0.975,10}", r"$t_{0.975,10}$"),
+        (r"\epsilon_i", r"$\epsilon_i$"),
+        (r"\epsilon in prose", r"$\epsilon$ in prose"),
     ],
 )
 def test_a_typed_command_or_braced_subscript_is_wrapped_with_its_script(source: str, expected: str) -> None:
@@ -276,7 +288,7 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$", "$a ⋅ b$", "$Γ ⊢ A$", "$A ⟹ B$", "$𝔼[X]$", "$ℙ(A)$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$", "$a ⋅ b$", "$Γ ⊢ A$", "$A ⟹ B$", "$𝔼[X]$", "$ℙ(A)$", "$ϵ + ϕ$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
 
@@ -1339,7 +1351,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u v 𝔼[X] w 𝔼ₓ[f(x)] x Var(X) = 𝔼[X²] − 𝔼[X]² y ℙ(A | B) = ℙ(A ∩ B) / ℙ(B)\n")
+    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u v 𝔼[X] w 𝔼ₓ[f(x)] x Var(X) = 𝔼[X²] − 𝔼[X]² y ℙ(A | B) = ℙ(A ∩ B) / ℙ(B) z yᵢ = βxᵢ + ϵᵢ and ϕ₁ and ϵ̂ᵢ\n")
 
     assert "safe mode" not in log, "a mapped command does not exist, so the whole file fell back"
     assert MISSING_GLYPH not in text

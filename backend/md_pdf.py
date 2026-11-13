@@ -50,6 +50,8 @@ GREEK_TO_LATEX = {
     "ν": r"\nu", "ξ": r"\xi", "π": r"\pi", "ρ": r"\rho",
     "σ": r"\sigma", "τ": r"\tau", "υ": r"\upsilon", "φ": r"\phi",
     "χ": r"\chi", "ψ": r"\psi", "ω": r"\omega",
+    # the lunate epsilon and the phi symbol, the other forms of ε and φ
+    "ϵ": r"\epsilon", "ϕ": r"\phi",
     # uppercase (only those with a dedicated command; the rest look like Latin)
     "Γ": r"\Gamma", "Δ": r"\Delta", "Θ": r"\Theta", "Λ": r"\Lambda",
     "Ξ": r"\Xi", "Π": r"\Pi", "Σ": r"\Sigma", "Φ": r"\Phi",
@@ -96,7 +98,7 @@ BAR_VARIABLES = {
 }
 
 # Character classes reused across the script regexes.
-_GREEK_CLASS = "α-ωΑ-Ωθε"
+_GREEK_CLASS = "α-ωΑ-Ωθεϵϕ"
 _SCRIPT_BASE = r"A-Za-z0-9ℝℕℤℚℂ𝔼ℙ" + _GREEK_CLASS + r"\)\]"
 # A subscript run. There is no unicode subscript "." or ",", so one between subscript
 # characters stays inside the run (t₀.₉₇₅,₁₀ -> t_{0.975,10}); a trailing one does not.
