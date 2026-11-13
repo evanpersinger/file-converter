@@ -42,6 +42,22 @@ def test_the_page_matches_the_image_at_100_dpi(work_dirs: WorkDirs) -> None:
     assert red > 200 and green < 50 and blue < 50
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="save_pdf converts RGBA to RGB without flattening, so transparent pixels turn black",
+)
+def test_transparent_areas_come_out_white(work_dirs: WorkDirs) -> None:
+    input_dir, output_dir = work_dirs
+    Image.new("RGBA", (100, 50), (0, 0, 0, 0)).save(input_dir / "clear.png")
+
+    png_pdf.convert_png_to_pdf(input_dir, output_dir)
+
+    with fitz.open(output_dir / "clear.pdf") as document:
+        pixmap = document[0].get_pixmap()
+        pixel = pixmap.pixel(pixmap.width // 2, pixmap.height // 2)
+    assert pixel == (255, 255, 255)
+
+
 @pytest.mark.parametrize("mode", ["RGBA", "L", "P"])
 def test_other_color_modes_convert(work_dirs: WorkDirs, mode: str) -> None:
     input_dir, output_dir = work_dirs
