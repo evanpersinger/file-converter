@@ -58,6 +58,8 @@ from pdf_md import normalize_math
         ("∀", r"$\forall$"),
         ("∴", r"$\therefore$"),
         ("∵", r"$\because$"),
+        ("ℝ", r"$\mathbb{R}$"),
+        ("f: ℝ → ℝ", r"f: $\mathbb{R}$ $\rightarrow$ $\mathbb{R}$"),
     ],
 )
 def test_greek_and_operators_become_latex_commands(source: str, expected: str) -> None:
@@ -80,6 +82,10 @@ def test_some_symbols_stay_unicode_but_move_into_math_mode(symbol: str) -> None:
         ("x₁₂", r"$x_{12}$"),
         ("Qᵀ", r"$Q^{T}$"),
         ("J = Qᵀe", r"J = $Q^{T}$e"),
+        ("ℝⁿ", r"$\mathbb{R}^{n}$"),
+        ("ℝ²", r"$\mathbb{R}^{2}$"),
+        ("ℝ₊", r"$\mathbb{R}_{+}$"),
+        ("x ∈ ℝⁿ", r"x $\in$ $\mathbb{R}^{n}$"),
     ],
 )
 def test_unicode_scripts_become_latex_scripts(source: str, expected: str) -> None:
@@ -204,7 +210,7 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
 
@@ -1267,7 +1273,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n\n")
+    _, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊\n")
 
     assert MISSING_GLYPH not in text
 

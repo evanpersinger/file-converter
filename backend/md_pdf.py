@@ -70,7 +70,7 @@ OPERATOR_TO_LATEX = {
     "→": r"\rightarrow", "←": r"\leftarrow", "⇒": r"\Rightarrow",
     "⇐": r"\Leftarrow", "↔": r"\leftrightarrow", "⇔": r"\Leftrightarrow",
     "↦": r"\mapsto", "∠": r"\angle", "⊥": r"\perp", "∥": r"\parallel",
-    "⋈": r"\bowtie", "∴": r"\therefore", "∵": r"\because",
+    "⋈": r"\bowtie", "∴": r"\therefore", "∵": r"\because", "ℝ": r"\mathbb{R}",
 }
 
 # Everything we turn into a $\command$: greek + operators, in one pass.
@@ -87,7 +87,7 @@ BAR_VARIABLES = {
 
 # Character classes reused across the script regexes.
 _GREEK_CLASS = "α-ωΑ-Ωθε"
-_SCRIPT_BASE = r"A-Za-z0-9" + _GREEK_CLASS + r"\)\]"
+_SCRIPT_BASE = r"A-Za-z0-9ℝ" + _GREEK_CLASS + r"\)\]"
 # A subscript run. There is no unicode subscript "." or ",", so one between subscript
 # characters stays inside the run (t₀.₉₇₅,₁₀ -> t_{0.975,10}); a trailing one does not.
 _SUB_CHARS = "".join(re.escape(c) for c in SUBSCRIPT_TO_LATEX)
@@ -430,12 +430,12 @@ def _convert_scripts(md):
     sup = "".join(re.escape(c) for c in SUPERSCRIPT_TO_LATEX)
 
     def sup_repl(m):
-        base = GREEK_TO_LATEX.get(m.group(1), m.group(1))
+        base = SYMBOL_TO_LATEX.get(m.group(1), m.group(1))
         exp = "".join(SUPERSCRIPT_TO_LATEX[c] for c in m.group(2))
         return f"${base}^{{{exp}}}$"
 
     def sub_repl(m):
-        base = GREEK_TO_LATEX.get(m.group(1), m.group(1))
+        base = SYMBOL_TO_LATEX.get(m.group(1), m.group(1))
         idx = "".join(SUBSCRIPT_TO_LATEX.get(c, c) for c in m.group(2))
         return f"${base}_{{{idx}}}$"
 
