@@ -12,11 +12,13 @@ import pytest
 
 from external_tool import ToolTimeout
 from md_pdf import (
+    _convert_paren_math_to_dollars,
     _is_ascii_diagram_line,
     clean_control_chars,
     convert_symbols,
     ensure_list_spacing,
     normalize_math_delimiters,
+    normalize_tables,
     run_pandoc,
     wrap_ascii_diagrams,
 )
@@ -437,3 +439,133 @@ def test_a_dollar_that_is_text_does_not_throw_off_symbol_conversion(source: str,
 ])
 def test_real_math_and_code_dollars_are_unchanged(source: str) -> None:
     assert convert_symbols(source) == source
+
+
+# Tables
+
+# What normalize_tables puts in front of a table, and after it once the text resumes
+BEFORE_TABLE = "\n\\nopagebreak[4]\n\n"
+AFTER_TABLE = "\\nopagebreak[4]\n\n"
+
+
+def test_a_table_is_guarded_against_page_breaks() -> None:
+    result = normalize_tables("| a | b |\n|---|---|\n| 1 | 2 |")
+
+    assert result == BEFORE_TABLE + "| a | b |\n| --- | --- |\n| 1 | 2 |"
+
+
+def test_pipe_spacing_is_normalized() -> None:
+    result = normalize_tables("|a|b|\n|--|--|\n|1|2|")
+
+    assert result == BEFORE_TABLE + "| a | b |\n| -- | -- |\n| 1 | 2 |"
+
+
+def test_column_alignment_colons_survive() -> None:
+    result = normalize_tables("| a | b | c |\n|:--|:-:|--:|\n| 1 | 2 | 3 |")
+
+    assert "| :-- | :-: | --: |" in result
+
+
+def test_the_guard_is_closed_when_text_resumes() -> None:
+    result = normalize_tables("| a |\n|---|\n| 1 |\nafter")
+
+    assert result.endswith("| 1 |\n" + AFTER_TABLE + "after")
+
+
+def test_text_before_a_table_gets_a_blank_line_so_pandoc_sees_the_table() -> None:
+    result = normalize_tables("before\n| a |\n|---|\n| 1 |")
+
+    assert result.startswith("before\n" + BEFORE_TABLE + "| a |")
+
+
+def test_every_table_gets_its_own_guard() -> None:
+    result = normalize_tables("| a |\n|---|\n| 1 |\n\n| b |\n|---|\n| 2 |")
+
+    assert BEFORE_TABLE + "| a |" in result
+    assert BEFORE_TABLE + "| b |" in result
+
+
+@pytest.mark.parametrize("source", [
+    "```\n| a | b |\n|---|---|\n```",
+    "$$\n| a | b |\n$$",
+    "a | b",
+    "",
+])
+def test_text_that_is_not_a_table_is_left_alone(source: str) -> None:
+    """Rows inside a code fence or a $$ block are not tables, and a pipe in the middle of
+    a line is not a row."""
+    assert normalize_tables(source) == source
+
+
+def test_paren_math_in_a_cell_becomes_dollar_math() -> None:
+    result = normalize_tables("| \\(x\\) | b |\n|---|---|\n| 1 | 2 |")
+
+    assert "| $x$ | b |" in result
+
+
+def test_adjacent_math_in_a_cell_is_combined_into_one_span() -> None:
+    result = normalize_tables("| a |\n|---|\n| $d_i$ = $y_i$ - $x_i$ |")
+
+    assert result.endswith("| $d_i = y_i - x_i$ |")
+
+
+@pytest.mark.parametrize(("cell", "expected"), [
+    ("-5", "\\mbox{-5}"),
+    ("$-5$", "$-5$"),
+    ("x = -5 and $-6$", "x = \\mbox{-5} and $-6$"),
+])
+def test_a_negative_number_is_kept_whole_but_not_inside_math(cell: str, expected: str) -> None:
+    """A line break between the minus and the digits would read as a different number."""
+    result = normalize_tables(f"| a |\n|---|\n| {cell} |")
+
+    assert result.endswith(f"| {expected} |")
+
+
+def test_a_header_row_narrower_than_the_table_becomes_a_centered_caption() -> None:
+    """A row with fewer cells than the table under it breaks the table parser."""
+    result = normalize_tables("| Title |\n| a | b | c | d |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |")
+
+    assert result == (
+        BEFORE_TABLE
+        + "\\begin{center}\\textbf{Title}\\end{center}\n\n"
+        + "| a | b | c | d |\n| --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 |"
+    )
+
+
+def test_a_caption_has_its_latex_characters_escaped() -> None:
+    result = normalize_tables("| A_1 & 50% |\n| a | b | c | d |\n|---|---|---|---|")
+
+    assert "\\textbf{A\\_1 \\& 50\\%}" in result
+
+
+def test_a_row_only_one_cell_shorter_is_not_a_caption() -> None:
+    """The next row has to be at least two cells wider, or it is just a ragged table."""
+    result = normalize_tables("| a |\n| b | c |\n|---|---|")
+
+    assert "\\begin{center}" not in result
+
+
+def test_a_price_in_a_cell_keeps_its_escape_through_the_symbol_pass() -> None:
+    """normalize_tables drops the backslash, and convert_symbols has to put it back, or the
+    $ could pair with another one in the row."""
+    result = convert_symbols(normalize_tables("| a | b |\n|---|---|\n| \\$5 | \\$10 |"))
+
+    assert result.endswith("| \\$5 | \\$10 |")
+
+
+def test_a_symbol_in_a_cell_is_converted_after_the_table_is_normalized() -> None:
+    result = convert_symbols(normalize_tables("|a|\n|-|\n|α|"))
+
+    assert result.endswith("| $\\alpha$ |")
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    (r"\(x\)", "$x$"),
+    (r"\(a\) and \(b\)", "$a$ and $b$"),
+    (r"if \(x > 1\) then", "if $x > 1$ then"),
+    (r"\(a \(b\) c\)", r"$a \(b\) c$"),
+    (r"\(a", r"\(a"),
+    ("plain", "plain"),
+])
+def test_paren_math_is_converted_with_its_nesting_honored(source: str, expected: str) -> None:
+    assert _convert_paren_math_to_dollars(source) == expected
