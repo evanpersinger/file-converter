@@ -6,14 +6,21 @@ maps, the delimiter normalization, and the code-protection that has to survive a
 it. These are the inverse of pdf_md.py's, so the last section checks the pair lines up.
 """
 
+import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from external_tool import ToolTimeout
 from md_pdf import (
+    LATEX_HEADER,
+    PANDOC_FROM,
+    PANDOC_FROM_SAFE,
     _convert_paren_math_to_dollars,
+    _extract_bad_command,
     _is_ascii_diagram_line,
+    _pandoc_once,
     clean_control_chars,
     convert_md_to_pdf,
     convert_symbols,
@@ -889,3 +896,307 @@ def test_an_unexpected_error_is_reported_not_raised(
     assert convert_md_to_pdf("notes.md", None, input_dir, output_dir) is False
 
     assert "Unexpected error running pandoc: boom" in capsys.readouterr().out
+
+
+# Naming the command xelatex choked on
+
+UNDEFINED_COMMAND_ERROR = "! Undefined control sequence.\nl.12 Here $\\foo\n                {x}$ is odd.\n"
+
+
+@pytest.mark.parametrize(("error", "expected"), [
+    (UNDEFINED_COMMAND_ERROR, "\\foo"),
+    ("! Undefined control sequence.\nl.3 \\alpha and \\bar\n", "\\bar"),
+    ("! Undefined control sequence.\nl.7 plain words only\n", None),
+    ("! Missing $ inserted.\nl.185 \\frac{1}{n}", None),
+    ("", None),
+])
+def test_the_command_xelatex_stopped_on_is_named(error: str, expected: str | None) -> None:
+    """The last command on the error's source line is the one TeX stopped at, and any other
+    kind of error names none."""
+    assert _extract_bad_command(error) == expected
+
+
+# run_pandoc, with each pandoc run scripted
+
+ScriptedPandoc = Callable[..., PandocCalls]
+
+
+@pytest.fixture
+def scripted_pandoc(monkeypatch: pytest.MonkeyPatch) -> ScriptedPandoc:
+    """Replace _pandoc_once with one that returns each (ok, error) given, in turn, and
+    records what it was handed. No mermaid filter is found unless a test says so."""
+
+    def install(*results: tuple[bool, str]) -> PandocCalls:
+        calls: PandocCalls = []
+        remaining = list(results)
+
+        def fake(md_text: str, output_path: Path, from_fmt: str, header_path: str, mermaid_filter: str | None):
+            calls.append({
+                "text": md_text,
+                "output": output_path,
+                "from": from_fmt,
+                "header": Path(header_path),
+                "header_text": Path(header_path).read_text(encoding="utf-8"),
+                "mermaid": mermaid_filter,
+            })
+            return remaining.pop(0)
+
+        monkeypatch.setattr("md_pdf._pandoc_once", fake)
+        monkeypatch.setattr("md_pdf.which", lambda name: None)
+        return calls
+
+    return install
+
+
+def test_a_good_full_render_is_the_only_render(
+    scripted_pandoc: ScriptedPandoc, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = scripted_pandoc((True, ""))
+
+    assert run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md") is True
+
+    assert len(calls) == 1
+    assert calls[0]["text"] == "RICH" and calls[0]["from"] == PANDOC_FROM
+    assert "Converted notes.md to out.pdf" in capsys.readouterr().out
+
+
+def test_a_failed_full_render_retries_the_safe_text_with_math_off(
+    scripted_pandoc: ScriptedPandoc, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = scripted_pandoc((False, UNDEFINED_COMMAND_ERROR), (True, ""))
+
+    assert run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md") is True
+
+    assert [call["text"] for call in calls] == ["RICH", "SAFE"]
+    assert [call["from"] for call in calls] == [PANDOC_FROM, PANDOC_FROM_SAFE]
+    out = capsys.readouterr().out
+    assert "undefined LaTeX command '\\foo'" in out
+    assert "safe mode (math shown as text): notes.md to out.pdf" in out
+
+
+def test_an_error_that_names_no_command_still_retries_in_safe_mode(
+    scripted_pandoc: ScriptedPandoc, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    scripted_pandoc((False, "! Missing $ inserted."), (True, ""))
+
+    assert run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md") is True
+
+    out = capsys.readouterr().out
+    assert "full render failed; retrying in safe mode" in out
+    assert "undefined LaTeX command" not in out
+
+
+def test_when_both_renders_fail_the_safe_error_is_reported(
+    scripted_pandoc: ScriptedPandoc, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    scripted_pandoc((False, "first error"), (False, "second error"))
+
+    assert run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md") is False
+
+    assert "pandoc failed: second error" in capsys.readouterr().out
+
+
+def test_both_renders_get_the_latex_header_and_it_is_removed_afterwards(
+    scripted_pandoc: ScriptedPandoc, tmp_path: Path
+) -> None:
+    calls = scripted_pandoc((False, "x"), (True, ""))
+
+    run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md")
+
+    assert calls[0]["header_text"] == calls[1]["header_text"] == LATEX_HEADER
+    assert calls[0]["header"] == calls[1]["header"]
+    assert not calls[0]["header"].exists()
+
+
+def test_the_header_is_removed_when_both_renders_fail(
+    scripted_pandoc: ScriptedPandoc, tmp_path: Path
+) -> None:
+    calls = scripted_pandoc((False, "x"), (False, "y"))
+
+    run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md")
+
+    assert not calls[0]["header"].exists()
+
+
+def test_the_header_is_removed_when_a_render_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    headers: list[Path] = []
+
+    def explode(md_text: str, output_path: Path, from_fmt: str, header_path: str, mermaid_filter: str | None):
+        headers.append(Path(header_path))
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("md_pdf._pandoc_once", explode)
+    monkeypatch.setattr("md_pdf.which", lambda name: None)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md")
+
+    assert not headers[0].exists()
+
+
+def test_an_installed_mermaid_filter_is_passed_to_both_renders(
+    scripted_pandoc: ScriptedPandoc, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = scripted_pandoc((False, "x"), (True, ""))
+    monkeypatch.setattr("md_pdf.which", lambda name: "/bin/mermaid-filter" if name == "mermaid-filter" else None)
+
+    run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md")
+
+    assert [call["mermaid"] for call in calls] == ["/bin/mermaid-filter", "/bin/mermaid-filter"]
+
+
+def test_no_mermaid_filter_is_passed_when_none_is_installed(
+    scripted_pandoc: ScriptedPandoc, tmp_path: Path
+) -> None:
+    calls = scripted_pandoc((True, ""))
+
+    run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md")
+
+    assert calls[0]["mermaid"] is None
+
+
+# One pandoc run, with the tool replaced
+
+
+def fake_tool(
+    monkeypatch: pytest.MonkeyPatch,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+    create: Path | None = None,
+) -> dict[str, object]:
+    """Replace run_tool. `create` is a file the fake "pandoc" writes, like the PDF."""
+    seen: dict[str, object] = {}
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        seen["command"] = command
+        seen["env"] = kwargs.get("env")
+        seen["input"] = Path(command[1]).read_text(encoding="utf-8")
+        if create is not None:
+            create.write_bytes(b"%PDF")
+        return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+
+    monkeypatch.setattr("md_pdf.run_tool", run)
+    return seen
+
+
+def test_a_successful_run_asks_pandoc_for_a_pdf_through_xelatex(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    out = tmp_path / "out.pdf"
+    seen = fake_tool(monkeypatch, create=out)
+
+    result = _pandoc_once("# hi", out, PANDOC_FROM, str(tmp_path / "h.tex"), None)
+
+    assert result == (True, "")
+    command = seen["command"]
+    assert command[0] == "pandoc"
+    assert command[2:4] == ["-o", str(out)]
+    for flag in ("--pdf-engine=xelatex", "--standalone", f"--from={PANDOC_FROM}", "--to=pdf"):
+        assert flag in command
+    assert f"--include-in-header={tmp_path / 'h.tex'}" in command
+    assert "--filter" not in command
+
+
+def test_pandoc_reads_the_text_it_was_given(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen = fake_tool(monkeypatch, create=tmp_path / "out.pdf")
+
+    _pandoc_once("# hi\n\n$x$", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", None)
+
+    assert seen["input"] == "# hi\n\n$x$"
+
+
+def test_a_mermaid_filter_is_added_to_the_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen = fake_tool(monkeypatch, create=tmp_path / "out.pdf")
+
+    _pandoc_once("# hi", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", "/bin/mermaid-filter")
+
+    assert seen["command"][-2:] == ["--filter", "/bin/mermaid-filter"]
+
+
+def test_xelatex_is_told_to_refuse_absolute_and_parent_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """openin_any=p stops a \\input{/some/file} in the markdown pulling a local file in."""
+    seen = fake_tool(monkeypatch, create=tmp_path / "out.pdf")
+
+    _pandoc_once("# hi", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", None)
+
+    assert seen["env"]["openin_any"] == "p"
+
+
+def test_the_temp_markdown_file_is_removed_after_the_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen = fake_tool(monkeypatch, create=tmp_path / "out.pdf")
+
+    _pandoc_once("# hi", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", None)
+
+    assert not Path(seen["command"][1]).exists()
+
+
+def test_the_temp_markdown_file_is_removed_when_the_tool_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    temp_files: list[Path] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        temp_files.append(Path(command[1]))
+        raise ToolTimeout("pandoc took longer than 300 seconds")
+
+    monkeypatch.setattr("md_pdf.run_tool", run)
+
+    with pytest.raises(ToolTimeout):
+        _pandoc_once("# hi", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", None)
+
+    assert not temp_files[0].exists()
+
+
+def test_a_failed_run_returns_pandoc_stderr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    fake_tool(monkeypatch, returncode=1, stderr="  boom  \n")
+
+    assert _pandoc_once("# hi", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", None) == (False, "boom")
+
+
+def test_a_failed_run_also_returns_pandoc_stdout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    fake_tool(monkeypatch, returncode=1, stdout="extra\n", stderr="boom")
+
+    result = _pandoc_once("# hi", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", None)
+
+    assert result == (False, "boom\nstdout: extra")
+
+
+def test_a_failed_run_with_no_message_says_unknown_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake_tool(monkeypatch, returncode=1)
+
+    assert _pandoc_once("# hi", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", None) == (False, "unknown error")
+
+
+def test_a_clean_exit_that_wrote_no_pdf_is_a_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake_tool(monkeypatch, returncode=0)
+
+    assert _pandoc_once("# hi", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", None) == (False, "unknown error")
+
+
+def test_the_error_file_mermaid_filter_leaves_behind_is_removed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    out = tmp_path / "out.pdf"
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        out.write_bytes(b"%PDF")
+        (tmp_path / "mermaid-filter.err").write_text("oops", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("md_pdf.run_tool", run)
+
+    _pandoc_once("# hi", out, PANDOC_FROM, "h.tex", "/bin/mermaid-filter")
+
+    assert not (tmp_path / "mermaid-filter.err").exists()
