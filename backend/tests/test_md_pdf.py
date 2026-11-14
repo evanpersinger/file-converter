@@ -1581,6 +1581,17 @@ def test_a_kept_symbol_inside_a_math_span_is_drawn(work_dirs: WorkDirs, capsys: 
 
 
 @needs_latex
+def test_display_math_in_the_middle_of_a_line_is_drawn_as_math(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log, text = render(work_dirs, capsys, "Let $x$ be small and $$a ≤ b$$ hold, then $y ≥ 2$ and $z$ too.\n")
+
+    assert "safe mode" not in log
+    assert "$" not in text and MISSING_GLYPH not in text
+    assert "≤" in text and "≥" in text
+
+
+@needs_latex
 def test_scripts_next_to_a_math_span_are_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
     log, text = render(
         work_dirs,
@@ -1870,9 +1881,30 @@ def test_a_position_is_in_math_when_an_odd_number_of_delimiters_precede_it(
     ("$$x$$ and $a$$b$", "$$x$$ and $a b$"),
     ("$$x$$", "$$x$$"),
     ("$a$ $b$", "$a$ $b$"),
+    ("$x$ and $$a$$ and $y$", "$x$ and $$a$$ and $y$"),
+    ("$p$ and $$a + b$$ and c $x$ d", "$p$ and $$a + b$$ and c $x$ d"),
+    ("$x$ $$a$$ $y$", "$x$ $$a$$ $y$"),
+    ("$a$$b$ and $$x$$ and $c$$d$", "$a b$ and $$x$$ and $c d$"),
 ])
 def test_touching_spans_merge_but_display_math_and_spaced_spans_do_not(source: str, expected: str) -> None:
     assert _merge_touching_math(source) == expected
+
+
+@pytest.mark.parametrize("source", [
+    "$x$ and $$a$$ and $y$",
+    "$p$ and $$a + b$$ and c $x$ d",
+    "see $$a = b$$ here",
+    "$x$ and $$\\sum_{i=1}^n x_i$$ and $y$",
+    "$x$ then $$a$$ then $y$ then $$b$$ then $z$",
+])
+def test_display_math_in_the_middle_of_a_line_keeps_its_delimiters(source: str) -> None:
+    """The merge once took the text between two spans for a span, and stripped the $$ off
+    any display block sitting between them, so the equation printed as plain text."""
+    assert convert_symbols(source) == source
+
+
+def test_symbols_around_display_math_in_the_middle_of_a_line_are_still_converted() -> None:
+    assert convert_symbols("$x ≤ 1$ and $$a ≤ b$$ and c ≤ d") == "$x ≤ 1$ and $$a ≤ b$$ and c $≤$ d"
 
 
 @pytest.mark.parametrize(("source", "expected"), [
