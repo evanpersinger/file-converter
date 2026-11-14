@@ -308,6 +308,18 @@ def _convert_paren_math_to_dollars(text):
     return "".join(result)
 
 
+def _table_cells(row):
+    """Split a stripped table row into its raw cells.
+
+    The leading pipe is never a cell. The trailing one is optional in a pipe table, so the
+    empty text after it is dropped only when it is there: "| a | b" has two cells.
+    """
+    parts = row.split("|")[1:]
+    if parts and parts[-1] == "":
+        parts.pop()
+    return parts
+
+
 def normalize_tables(md):
     """Normalize pipe-table spacing and guard tables against LaTeX breakage.
 
@@ -361,9 +373,8 @@ def normalize_tables(md):
 
             if is_separator:
                 # Normalize separator row spacing
-                parts = stripped.split("|")
                 cells = []
-                for part in parts[1:-1]:  # skip first/last empty parts
+                for part in _table_cells(stripped):
                     sep_content = re.sub(r"[^\-\:]", "", part)  # keep only - and :
                     if not sep_content:
                         sep_content = "---"
@@ -372,9 +383,8 @@ def normalize_tables(md):
                 prev_line_was_table = True
             else:
                 # Regular table row: normalize spacing, preserve cell content
-                parts = stripped.split("|")
                 cells = []
-                for part in parts[1:-1]:  # skip first/last empty parts
+                for part in _table_cells(stripped):
                     cell_content = part.strip()
                     # Unescape dollar signs and convert \(...\) to $...$
                     cell_content = cell_content.replace("\\$", "$")
@@ -406,8 +416,7 @@ def normalize_tables(md):
                 if len(cells) <= 3 and i + 1 < len(lines):
                     next_stripped = lines[i + 1].strip()
                     if next_stripped.startswith("|") and "|" in next_stripped[1:]:
-                        next_parts = next_stripped.split("|")
-                        next_cells = [p.strip() for p in next_parts[1:-1]]
+                        next_cells = [p.strip() for p in _table_cells(next_stripped)]
                         if len(next_cells) > len(cells) + 1:
                             header_parts = [c for c in cells if c.strip()]
                             if header_parts:
