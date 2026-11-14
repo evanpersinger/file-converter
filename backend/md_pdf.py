@@ -99,7 +99,7 @@ BAR_VARIABLES = {
 
 # Character classes reused across the script regexes.
 _GREEK_CLASS = "α-ωΑ-Ωθεϵϕ"
-_SCRIPT_BASE = r"A-Za-z0-9ℝℕℤℚℂ𝔼ℙℓ𝒩" + _GREEK_CLASS + r"\)\]"
+_SCRIPT_BASE = r"A-Za-z0-9ℝℕℤℚℂ𝔼ℙℓ𝒩∑∏∫∮" + _GREEK_CLASS + r"\)\]"
 # A subscript run. There is no unicode subscript "." or ",", so one between subscript
 # characters stays inside the run (t₀.₉₇₅,₁₀ -> t_{0.975,10}); a trailing one does not.
 _SUB_CHARS = "".join(re.escape(c) for c in SUBSCRIPT_TO_LATEX)
@@ -458,13 +458,15 @@ def _convert_scripts(md):
     def sub_repl(m):
         base = SYMBOL_TO_LATEX.get(m.group(1), m.group(1))
         idx = "".join(SUBSCRIPT_TO_LATEX.get(c, c) for c in m.group(2))
-        return wrap(m, f"{base}_{{{idx}}}")
+        # a superscript run right after the subscript is the same letter's exponent (xᵢ², ∑ᵢ₌₁ⁿ)
+        exp = "".join(SUPERSCRIPT_TO_LATEX[c] for c in m.group(3) or "")
+        return wrap(m, f"{base}_{{{idx}}}" + (f"^{{{exp}}}" if exp else ""))
 
     # Touching spans ("$a$$b$") read as one $$ to _in_math, which flips every later answer
     md = _merge_touching_math(md)
     md = re.sub(rf"([{_SCRIPT_BASE}])((?:[{sup}])+)", sup_repl, md)
     md = _merge_touching_math(md)
-    md = re.sub(rf"([{_SCRIPT_BASE}])({_SUB_RUN})", sub_repl, md)
+    md = re.sub(rf"([{_SCRIPT_BASE}])({_SUB_RUN})([{sup}]+)?", sub_repl, md)
     return md
 
 

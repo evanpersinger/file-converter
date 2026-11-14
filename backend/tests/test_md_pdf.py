@@ -316,6 +316,43 @@ def test_several_script_conversions_on_one_line_each_get_their_own_math(source: 
     assert "$" not in outside and "_{" not in outside
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("xᵢ²", r"$x_{i}^{2}$"),
+        ("xᵢⱼ² and x₁³", r"$x_{ij}^{2}$ and $x_{1}^{3}$"),
+        ("θ₀² + θ₁²", r"$\theta_{0}^{2} + \theta_{1}^{2}$"),
+        ("ℝ₊ⁿ", r"$\mathbb{R}_{+}^{n}$"),
+        ("$xᵢ²$", "$x_{i}^{2}$"),
+        ("$$xᵢ²$$", "$$x_{i}^{2}$$"),
+    ],
+)
+def test_a_superscript_after_a_subscript_is_the_same_letters_exponent(source: str, expected: str) -> None:
+    """xᵢ² used to come out as $x_{i}$², leaving the ² as a raw unicode character."""
+    assert convert_symbols(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("∑ᵢ₌₁ⁿ xᵢ", r"$\sum_{i=1}^{n}$ $x_{i}$"),
+        ("∑ᵢ₌₁ⁿ xᵢ²", r"$\sum_{i=1}^{n}$ $x_{i}^{2}$"),
+        ("∏ᵢ₌₁ⁿ pᵢ", r"$\prod_{i=1}^{n}$ $p_{i}$"),
+        ("∫₀¹ f(x) dx", r"$\int_{0}^{1}$ f(x) dx"),
+        ("∮₀", r"$\oint_{0}$"),
+        ("$∑ᵢ₌₁ⁿ xᵢ$", r"$\sum_{i=1}^{n} x_{i}$"),
+    ],
+)
+def test_the_limits_of_a_sum_product_or_integral_become_its_scripts(source: str, expected: str) -> None:
+    """The big operators were not a base the script pass recognised, so ∑ᵢ₌₁ⁿ left its
+    limits as raw unicode and they drew blank."""
+    assert convert_symbols(source) == expected
+
+
+def test_a_big_operator_without_limits_is_unchanged() -> None:
+    assert convert_symbols("∑ x and a∑b") == r"$\sum$ x and a$\sum$b"
+
+
 def test_a_script_after_a_price_is_still_converted() -> None:
     """A text dollar is not a math delimiter, so it must not count as being inside math."""
     assert convert_symbols(r"costs \$5 and xᵢ") == r"costs \$5 and $x_{i}$"
@@ -1466,7 +1503,8 @@ def test_scripts_next_to_a_math_span_are_drawn(work_dirs: WorkDirs, capsys: pyte
     log, text = render(
         work_dirs,
         capsys,
-        "ŷᵢ = β̂₀ + β̂₁xᵢ and (xᵢ − x̄)² and ∑(yᵢ − ŷᵢ)² and (σ̂²)⁻¹ and (xᵢ)² and $xᵢ$\n",
+        "ŷᵢ = β̂₀ + β̂₁xᵢ and (xᵢ − x̄)² and ∑(yᵢ − ŷᵢ)² and (σ̂²)⁻¹ and (xᵢ)² and $xᵢ$ "
+        "and xᵢ² and ∑ᵢ₌₁ⁿ xᵢ² and ∏ᵢ₌₁ⁿ pᵢ and ∫₀¹ f(x) dx and ℝ₊ⁿ\n",
     )
 
     assert "safe mode" not in log
