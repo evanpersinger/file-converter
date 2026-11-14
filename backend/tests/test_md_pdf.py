@@ -615,6 +615,30 @@ def test_a_numeric_markdown_table_survives() -> None:
     assert wrap_ascii_diagrams(source) == source
 
 
+def test_a_diagram_with_prose_around_it_is_fenced_on_its_own() -> None:
+    """The block ends at the first line that is not part of the diagram, so the text
+    before and after stays outside the fence."""
+    result = wrap_ascii_diagrams("intro\n\nA --> B\nB --> C\n\nafter text")
+
+    assert result == "intro\n\n```\nA --> B\nB --> C\n```\n\nafter text"
+
+
+def test_a_blank_line_between_two_diagram_lines_keeps_them_in_one_fence() -> None:
+    """Graph drawings often have a gap between rows, but a blank line only bridges when
+    another diagram line follows it, so the blank before the prose stays outside."""
+    result = wrap_ascii_diagrams("A --> B\n\nB --> C\n\nafter")
+
+    assert result == "```\nA --> B\n\nB --> C\n```\n\nafter"
+
+
+def test_diagrams_separated_by_prose_are_fenced_separately() -> None:
+    source = "A --> B\nB --> C\n\nprose in between\n\nC --> D\nD --> E"
+
+    assert wrap_ascii_diagrams(source) == (
+        "```\nA --> B\nB --> C\n```\n\nprose in between\n\n```\nC --> D\nD --> E\n```"
+    )
+
+
 # Symbols outside the maps
 
 
@@ -788,6 +812,36 @@ def test_a_row_only_one_cell_shorter_is_not_a_caption() -> None:
     result = normalize_tables("| a |\n| b | c |\n|---|---|")
 
     assert "\\begin{center}" not in result
+
+
+def test_a_table_without_trailing_pipes_keeps_its_last_column() -> None:
+    """Pandoc reads "| a | b" as a two-column table. The cell split used to drop the last
+    piece of every row on the assumption that it was the empty text after a closing pipe,
+    so "| a | b" came out as "| a |" and the column vanished without a warning."""
+    result = normalize_tables("| a | b\n|---|---\n| 1 | 2")
+
+    assert result == BEFORE_TABLE + "| a | b |\n| --- | --- |\n| 1 | 2 |"
+
+
+def test_a_table_without_trailing_pipes_matches_the_same_table_with_them() -> None:
+    with_pipes = normalize_tables("| a | b | c |\n|---|---|---|\n| 1 | 2 | 3 |")
+    without = normalize_tables("| a | b | c\n|---|---|---\n| 1 | 2 | 3")
+
+    assert without == with_pipes
+
+
+def test_an_empty_last_cell_keeps_its_column() -> None:
+    result = normalize_tables("| a | b |\n|---|---|\n| 1 | |")
+
+    assert result.endswith("| 1 |  |")
+
+
+def test_a_caption_row_is_still_recognized_when_the_table_under_it_has_no_trailing_pipes() -> None:
+    """The check that the next row is at least two cells wider counted one cell too few."""
+    result = normalize_tables("| Title |\n| a | b | c\n|---|---|---\n| 1 | 2 | 3")
+
+    assert "\\begin{center}\\textbf{Title}\\end{center}" in result
+    assert result.endswith("| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |")
 
 
 def test_a_price_in_a_cell_keeps_its_escape_through_the_symbol_pass() -> None:
@@ -1558,6 +1612,17 @@ def test_a_space_after_an_opening_dollar_is_printed_raw(
     _, text = render(work_dirs, capsys, "Here $ x + y$ is math.\n")
 
     assert "$ x + y$" in text
+
+
+@needs_latex
+def test_a_table_without_trailing_pipes_renders_every_column(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log, text = render(work_dirs, capsys, "| Name | Score\n|---|---\n| Ann | 90\n| Bo | 85\n")
+
+    assert "safe mode" not in log
+    for cell in ("Name", "Score", "Ann", "90", "Bo", "85"):
+        assert cell in text
 
 
 @needs_latex
