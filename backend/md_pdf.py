@@ -439,21 +439,32 @@ def normalize_tables(md):
 
 # Preprocessing: unicode math -> LaTeX (code spans/blocks protected)
 def _convert_scripts(md):
-    """Convert unicode super/subscript runs to LaTeX, e.g. x² -> $x^{2}$, xᵢ -> $x_{i}$."""
+    """Convert unicode super/subscript runs to LaTeX, e.g. x² -> $x^{2}$, xᵢ -> $x_{i}$.
+
+    Inside an existing $..$ the script is converted without new delimiters. Whether a
+    match is inside math is decided by position, not by the neighboring character: a
+    letter right after a closing $ ($\\hat{y}$xᵢ) is plain text and needs its own.
+    """
     sup = _SUP_CHARS
+
+    def wrap(m, latex):
+        return latex if _in_math(m.string, m.start()) else f"${latex}$"
 
     def sup_repl(m):
         base = SYMBOL_TO_LATEX.get(m.group(1), m.group(1))
         exp = "".join(SUPERSCRIPT_TO_LATEX[c] for c in m.group(2))
-        return f"${base}^{{{exp}}}$"
+        return wrap(m, f"{base}^{{{exp}}}")
 
     def sub_repl(m):
         base = SYMBOL_TO_LATEX.get(m.group(1), m.group(1))
         idx = "".join(SUBSCRIPT_TO_LATEX.get(c, c) for c in m.group(2))
-        return f"${base}_{{{idx}}}$"
+        return wrap(m, f"{base}_{{{idx}}}")
 
-    md = re.sub(rf"(?<!\$)([{_SCRIPT_BASE}])((?:[{sup}])+)(?!\$)", sup_repl, md)
-    md = re.sub(rf"(?<!\$)([{_SCRIPT_BASE}])({_SUB_RUN})(?!\$)", sub_repl, md)
+    # Touching spans ("$a$$b$") read as one $$ to _in_math, which flips every later answer
+    md = _merge_touching_math(md)
+    md = re.sub(rf"([{_SCRIPT_BASE}])((?:[{sup}])+)", sup_repl, md)
+    md = _merge_touching_math(md)
+    md = re.sub(rf"([{_SCRIPT_BASE}])({_SUB_RUN})", sub_repl, md)
     return md
 
 

@@ -7,6 +7,7 @@ it. These are the inverse of pdf_md.py's, so the round-trip section checks the p
 up. The last section renders real PDFs and is skipped without pandoc, xelatex and macOS.
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -258,6 +259,66 @@ def test_a_hat_inside_a_math_span_adds_no_delimiters_of_its_own(source: str, exp
 def test_circumflex_letters_in_ordinary_words_are_not_turned_into_hats(source: str) -> None:
     """Only ŷ and Ŷ are read as a letter with a hat, since they never occur in a word."""
     assert convert_symbols(source) == source
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("β̂₁xᵢ", r"$\hat{\beta}_{1}x_{i}$"),
+        ("ŷᵢ = β̂₀ + β̂₁xᵢ", r"$\hat{y}_{i} = \hat{\beta}_{0} + \hat{\beta}_{1}x_{i}$"),
+        ("(xᵢ − x̄)²", r"($x_{i}$ − $\bar{x})^{2}$"),
+        ("∑(yᵢ − ŷᵢ)²", r"$\sum$($y_{i}$ − $\hat{y}_{i})^{2}$"),
+        ("(σ̂²)⁻¹", r"($\hat{\sigma}^{2})^{-1}$"),
+        ("(xᵢ)²", r"($x_{i})^{2}$"),
+    ],
+)
+def test_a_script_right_after_a_math_span_is_converted(source: str, expected: str) -> None:
+    """A letter or ")" touching the closing $ of an earlier span is plain text, so it still
+    needs converting. The script pass used to skip anything next to a $, which left the
+    unicode script behind and drew it as a blank."""
+    result = convert_symbols(source)
+
+    assert result == expected
+    assert not [c for c in result if c in md_pdf.SUBSCRIPT_TO_LATEX or c in md_pdf.SUPERSCRIPT_TO_LATEX]
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("$xᵢ$", "$x_{i}$"),
+        ("$x² + yᵢ$", "$x^{2} + y_{i}$"),
+        ("$(a+b)²$", "$(a+b)^{2}$"),
+        ("$$xᵢ$$", "$$x_{i}$$"),
+    ],
+)
+def test_a_script_inside_a_math_span_is_converted_without_new_delimiters(source: str, expected: str) -> None:
+    """Wrapping here would turn $xᵢ$ into the display delimiter $$x_{i}$$."""
+    assert convert_symbols(source) == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "(xᵢ − x̄)² and ∑(yᵢ − ŷᵢ)² and (xᵢ)².",
+        "x̄ȳ and zᵢ and (aᵢ)²",
+        "β̂₁xᵢ and (σ̂²)⁻¹ and yᵢ",
+    ],
+)
+def test_several_script_conversions_on_one_line_each_get_their_own_math(source: str) -> None:
+    """Converting ")²" next to an earlier span puts two $ side by side. Counting that as one
+    delimiter paired every later $ on the line wrong, so the spans after it came out as
+    literal text like y_{i}."""
+    result = convert_symbols(source)
+
+    assert "$$" not in result
+    # every inline span is a whole $..$ pair: with them removed no $ and no subscript is left
+    outside = re.sub(r"\$[^$]+\$", "", result)
+    assert "$" not in outside and "_{" not in outside
+
+
+def test_a_script_after_a_price_is_still_converted() -> None:
+    """A text dollar is not a math delimiter, so it must not count as being inside math."""
+    assert convert_symbols(r"costs \$5 and xᵢ") == r"costs \$5 and $x_{i}$"
 
 
 def test_a_bare_greek_command_in_prose_is_wrapped_in_math_mode() -> None:
@@ -1398,6 +1459,20 @@ def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.Captur
 
     assert "safe mode" not in log, "a mapped command does not exist, so the whole file fell back"
     assert MISSING_GLYPH not in text
+
+
+@needs_latex
+def test_scripts_next_to_a_math_span_are_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
+    log, text = render(
+        work_dirs,
+        capsys,
+        "ŷᵢ = β̂₀ + β̂₁xᵢ and (xᵢ − x̄)² and ∑(yᵢ − ŷᵢ)² and (σ̂²)⁻¹ and (xᵢ)² and $xᵢ$\n",
+    )
+
+    assert "safe mode" not in log
+    assert MISSING_GLYPH not in text and "\x00" not in text
+    # a span pandoc did not take as math prints its source, like y_{i}
+    assert "_{" not in text and "^{" not in text
 
 
 @needs_latex
