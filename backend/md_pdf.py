@@ -81,6 +81,10 @@ OPERATOR_TO_LATEX = {
     "⌈": r"\lceil", "⌉": r"\rceil", "⌊": r"\lfloor", "⌋": r"\rfloor",
     "⋅": r"\cdot", "∖": r"\setminus", "∣": r"\mid", "∤": r"\nmid",
     "≢": r"\nequiv", "≺": r"\prec", "≻": r"\succ", "⊢": r"\vdash", "⊨": r"\models",
+    "≦": r"\leqq", "≧": r"\geqq", "⩽": r"\leqslant", "⩾": r"\geqslant",
+    "≲": r"\lesssim", "≳": r"\gtrsim", "≜": r"\triangleq",
+    # no \coloneqq: it needs mathtools, and \mathop centers the colon on the equals sign
+    "≝": r"\overset{\mathrm{def}}{=}", "≔": r"\mathrel{\mathop:}=",
     "⟶": r"\longrightarrow", "⟹": r"\Longrightarrow",
     "𝔼": r"\mathbb{E}", "ℙ": r"\mathbb{P}", "ℓ": r"\ell", "𝒩": r"\mathcal{N}", "⋯": r"\cdots",
 }
