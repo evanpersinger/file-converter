@@ -260,6 +260,11 @@ CAPITAL_Y_WITH_BAR = chr(0x0232)  # precomposed
         (f"{Y_WITH_BAR} + 1", r"$\bar{y}$ + 1"),
         (f"x{BAR}₁", r"$\bar{x}_{1}$"),
         (f"x{BAR}ᵢ", r"$\bar{x}_{i}$"),
+        (f"x{TILDE}", r"$\tilde{x}$"),
+        (f"Z{TILDE}", r"$\tilde{Z}$"),
+        (f"x{TILDE}ᵢ", r"$\tilde{x}_{i}$"),
+        (f"y{TILDE}ᵢ²", r"$\tilde{y}_{i}^{2}$"),
+        (f"x{TILDE} = median", r"$\tilde{x}$ = median"),
     ],
 )
 def test_a_bar_or_tilde_on_a_letter_keeps_its_accent_and_scripts(source: str, expected: str) -> None:
@@ -284,9 +289,10 @@ def test_a_bar_or_tilde_inside_a_math_span_adds_no_delimiters_of_its_own(source:
     assert convert_symbols(source) == expected
 
 
-@pytest.mark.parametrize("source", [f"man{TILDE}ana", f"x{TILDE}", f"Sa{TILDE}o"])
-def test_a_tilde_on_a_latin_letter_is_left_alone(source: str) -> None:
-    """Only a Greek letter is read as carrying a tilde. A decomposed ñ or ã is ordinary text."""
+@pytest.mark.parametrize("source", [f"man{TILDE}ana", f"Sa{TILDE}o", f"a{TILDE}", f"n{TILDE}", f"o{TILDE}"])
+def test_a_tilde_on_a_latin_letter_other_than_x_y_z_is_left_alone(source: str) -> None:
+    """Only a Greek letter or x, y, z (a median) is read as carrying a tilde. A decomposed
+    ñ or ã is ordinary text."""
     assert convert_symbols(source) == source
 
 
@@ -1636,7 +1642,7 @@ def test_bars_and_tildes_on_greek_and_latin_letters_are_drawn(
         work_dirs,
         capsys,
         f"β{BAR} and θ{BAR} and β{TILDE} and α{TILDE} and σ{TILDE}² and β{BAR}₁ and {ALPHA_WITH_BAR} "
-        f"and x{BAR}₁ and {Y_WITH_BAR} and $x{BAR}$ and $β{TILDE} + x{BAR}$ and (β{BAR} − β̂)²\n",
+        f"and x{BAR}₁ and {Y_WITH_BAR} and x{TILDE}ᵢ and y{TILDE} and $x{BAR}$ and $β{TILDE} + x{BAR}$ and (β{BAR} − β̂)²\n",
     )
 
     assert "safe mode" not in log, "a bar inside math became $$..$$ and sent the file to safe mode"

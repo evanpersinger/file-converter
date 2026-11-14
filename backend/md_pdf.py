@@ -96,7 +96,7 @@ SYMBOL_TO_LATEX = {**GREEK_TO_LATEX, **OPERATOR_TO_LATEX}
 UNICODE_MATH_KEEP = ["≤", "≥", "±", "≈"]
 
 # Letters with an accent drawn as a separate combining mark. A tilde is read only on a
-# Greek letter: on a Latin one it is mostly ordinary text (a decomposed ñ, ã or õ).
+# Greek letter or x, y, z (a median): on another Latin one it is mostly ordinary text (a decomposed ñ, ã or õ).
 ACCENT_COMMANDS = {"\u0302": "hat", "\u0304": "bar", "\u0303": "tilde"}
 
 # Precomposed letters that are really a letter plus one of those marks. The other
@@ -758,7 +758,7 @@ def convert_symbols(md):
     # Touching spans read as one $$ to _in_math, which would flip every answer below
     md = _merge_touching_math(md)
     md = re.sub(
-        rf"([A-Za-z{_GREEK_CLASS}])([\u0302\u0304]|(?<=[{_GREEK_CLASS}])\u0303)"
+        rf"([A-Za-z{_GREEK_CLASS}])([\u0302\u0304]|(?<=[{_GREEK_CLASS}xyzXYZ])\u0303)"
         rf"((?:{_SUB_RUN})?)((?:[{_SUP_CHARS}]+)?)",
         accent_repl,
         md,
