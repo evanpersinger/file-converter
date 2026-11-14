@@ -1567,6 +1567,62 @@ def test_scripts_next_to_a_math_span_are_drawn(work_dirs: WorkDirs, capsys: pyte
     assert "_{" not in text and "^{" not in text
 
 
+# Formulas as people type them, each placed in every markdown context below
+CONTEXT_FORMULAS = [
+    "xᵢ²",
+    "β̂₁xᵢ",
+    "(xᵢ − x̄)²",
+    "∑ᵢ₌₁ⁿ xᵢ",
+    "ℝⁿ",
+    "α ≤ β",
+    "𝔼[X²]",
+    "√(x² + 1)",
+    "ŷᵢ = β̂₀ + β̂₁xᵢ",
+    "σ̂² = SSE / (n − p)",
+]
+CONTEXT_TEMPLATES = [
+    "# {f}",
+    "### Result: {f}",
+    "**{f}**",
+    "*{f}*",
+    "**Result: {f} holds**",
+    "- {f}",
+    "1. {f}",
+    "- outer\n    - {f}",
+    "> {f}",
+    "[{f}](http://example.com)",
+    "Text[^{n}]\n\n[^{n}]: {f}",
+    "Compute: {f}.",
+    "see ({f}) here",
+    "{f} and {f}",
+]
+
+
+@needs_latex
+def test_formulas_render_inside_every_markdown_context(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The unit tests check each pass on its own string. This one puts real formulas into
+    headings, emphasis, lists, quotes, links, footnotes and tables in a single file and
+    checks the PDF, since passes that are right alone can still pair a $ wrong together."""
+    pieces = [t.format(f=f, n=n) for t in CONTEXT_TEMPLATES for n, f in enumerate(CONTEXT_FORMULAS)]
+    rows = "\n".join(f"| {f} | {f} |" for f in CONTEXT_FORMULAS)
+    pieces.append(f"| Formula | Again |\n|---|---|\n{rows}")
+    pieces.append(f"| {CONTEXT_FORMULAS[0]} | {CONTEXT_FORMULAS[1]} |\n|---|---|\n| 1 | 2 |")
+
+    log, text = render(work_dirs, capsys, "\n\n".join(pieces) + "\n")
+
+    assert "safe mode" not in log
+    assert "Compute:" in text and "Formula" in text
+    # a blank, an unconverted $, or raw LaTeX in the text means a formula was not drawn
+    broken = [
+        line
+        for line in text.splitlines()
+        if MISSING_GLYPH in line or "\x00" in line or any(raw in line for raw in ("$", "_{", "^{", "\\"))
+    ]
+    assert not broken, broken
+
+
 @needs_latex
 def test_an_unknown_command_sends_the_file_to_safe_mode_with_its_math_as_text(
     work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
@@ -1718,6 +1774,11 @@ T = _TEXT_DOLLAR
     ("$5-$10", f"{T}5-{T}10"),
     ("$a\n\nb$", f"{T}a\n\nb{T}"),
     ("$$\n\n$$", f"{T}{T}\n\n{T}{T}"),
+    # a "$$" whose first dollar is escaped is not the closer: the span runs on to the next one
+    ("$$ a \\$$ b $$", "$$ a \\$$ b $$"),
+    ("$$ a \\$$ b \\$$ c $$", "$$ a \\$$ b \\$$ c $$"),
+    # and with no real closer after it, the opener is just text
+    ("$$ a \\$$", f"{T}{T} a {T}{T}"),
 ])
 def test_only_a_dollar_pandoc_reads_as_text_is_hidden(source: str, expected: str) -> None:
     """An opener needs a non-space after it, a closer a non-space before it and no digit
