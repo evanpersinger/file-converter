@@ -95,10 +95,16 @@ SYMBOL_TO_LATEX = {**GREEK_TO_LATEX, **OPERATOR_TO_LATEX}
 # These render better as unicode kept inside math mode than as a LaTeX command.
 UNICODE_MATH_KEEP = ["≤", "≥", "±", "≈"]
 
-# Precomposed barred variables (the combining-macron form is handled by regex).
-BAR_VARIABLES = {
-    "x̄": r"$\\bar{x}$", "ȳ": r"$\\bar{y}$", "z̄": r"$\\bar{z}$",
-    "X̄": r"$\\bar{X}$", "Ȳ": r"$\\bar{Y}$", "Z̄": r"$\\bar{Z}$",
+# Letters with an accent drawn as a separate combining mark. A tilde is read only on a
+# Greek letter: on a Latin one it is mostly ordinary text (a decomposed ñ, ã or õ).
+ACCENT_COMMANDS = {"\u0302": "hat", "\u0304": "bar", "\u0303": "tilde"}
+
+# Precomposed letters that are really a letter plus one of those marks. The other
+# circumflex letters (â ê î ô û) are left alone, they are ordinary French words.
+PRECOMPOSED_ACCENTS = {
+    "\u0177": "y\u0302", "\u0176": "Y\u0302",  # y and Y with a hat
+    "\u0233": "y\u0304", "\u0232": "Y\u0304",  # y and Y with a bar
+    "\u1fb1": "\u03b1\u0304",  # alpha with a bar
 }
 
 # Character classes reused across the script regexes.
@@ -730,28 +736,33 @@ def convert_symbols(md):
         md,
     )
 
-    # Barred variables: combining macron form, then precomposed characters
-    md = re.sub(r"([a-zA-Z])̄", r"$\\bar{\1}$", md)
-    for var, latex in BAR_VARIABLES.items():
-        md = re.sub(r"(?<!\$)" + re.escape(var) + r"(?!\$)", latex, md)
+    # Accented variables: base + combining mark + optional script run (β̂₁ -> $\hat{\beta}_{1}$,
+    # β̄ -> $\bar{\beta}$). Must run before _convert_scripts, which can't see past the mark
+    # to the subscript.
+    for char, decomposed in PRECOMPOSED_ACCENTS.items():
+        md = md.replace(char, decomposed)
 
-    # A precomposed ŷ or Ŷ is a y with a hat, so it takes scripts the way x̂ does. Other
-    # circumflex letters (â ê î ô û) are left alone, they are ordinary French words.
-    md = md.replace("ŷ", "ŷ").replace("Ŷ", "Ŷ")
-
-    # Hatted variables: base + combining hat + optional subscript run
-    # (β̂₁ -> $\hat{\beta}_{1}$). Must run before _convert_scripts, which can't see
-    # past the hat to the subscript.
-    def hat_repl(m):
+    def accent_repl(m):
         base = GREEK_TO_LATEX.get(m.group(1), m.group(1))
-        idx = "".join(SUBSCRIPT_TO_LATEX.get(c, c) for c in m.group(2))
-        exp = "".join(SUPERSCRIPT_TO_LATEX[c] for c in m.group(3))
-        hatted = rf"\hat{{{base}}}" + (f"_{{{idx}}}" if idx else "") + (f"^{{{exp}}}" if exp else "")
+        idx = "".join(SUBSCRIPT_TO_LATEX.get(c, c) for c in m.group(3))
+        exp = "".join(SUPERSCRIPT_TO_LATEX[c] for c in m.group(4))
+        accented = (
+            rf"\{ACCENT_COMMANDS[m.group(2)]}{{{base}}}"
+            + (f"_{{{idx}}}" if idx else "")
+            + (f"^{{{exp}}}" if exp else "")
+        )
         # Inside an existing $..$ the delimiters are already there
         wrap = "" if _in_math(m.string, m.start()) else "$"
-        return f"{wrap}{hatted}{wrap}"
+        return f"{wrap}{accented}{wrap}"
 
-    md = re.sub(rf"([A-Za-z{_GREEK_CLASS}])̂((?:{_SUB_RUN})?)((?:[{_SUP_CHARS}]+)?)", hat_repl, md)
+    # Touching spans read as one $$ to _in_math, which would flip every answer below
+    md = _merge_touching_math(md)
+    md = re.sub(
+        rf"([A-Za-z{_GREEK_CLASS}])([\u0302\u0304]|(?<=[{_GREEK_CLASS}])\u0303)"
+        rf"((?:{_SUB_RUN})?)((?:[{_SUP_CHARS}]+)?)",
+        accent_repl,
+        md,
+    )
 
     # Unicode super/subscripts -> LaTeX (θ₀ -> $\theta_{0}$, x² -> $x^{2}$)
     md = _convert_scripts(md)

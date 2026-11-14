@@ -232,6 +232,64 @@ def test_a_barred_variable_becomes_a_bar_command() -> None:
     assert convert_symbols("x̄") == r"$\bar{x}$"
 
 
+# The accents are separate combining marks, built here so the cases below stay readable
+BAR = chr(0x0304)
+TILDE = chr(0x0303)
+ALPHA_WITH_BAR = chr(0x1FB1)  # precomposed
+Y_WITH_BAR = chr(0x0233)  # precomposed
+CAPITAL_Y_WITH_BAR = chr(0x0232)  # precomposed
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (f"β{BAR}", r"$\bar{\beta}$"),
+        (f"θ{BAR}", r"$\bar{\theta}$"),
+        (f"β{TILDE}", r"$\tilde{\beta}$"),
+        (f"α{TILDE}", r"$\tilde{\alpha}$"),
+        (f"β{BAR}₁", r"$\bar{\beta}_{1}$"),
+        (f"β{TILDE}₁", r"$\tilde{\beta}_{1}$"),
+        (f"σ{TILDE}²", r"$\tilde{\sigma}^{2}$"),
+        (f"β{TILDE}₁²", r"$\tilde{\beta}_{1}^{2}$"),
+        (f"θ{BAR} and σ{TILDE}²", r"$\bar{\theta}$ and $\tilde{\sigma}^{2}$"),
+        (f"β{BAR} and β{TILDE}", r"$\bar{\beta}$ and $\tilde{\beta}$"),
+        (ALPHA_WITH_BAR, r"$\bar{\alpha}$"),
+        (f"{ALPHA_WITH_BAR}ᵢ", r"$\bar{\alpha}_{i}$"),
+        (Y_WITH_BAR, r"$\bar{y}$"),
+        (f"{CAPITAL_Y_WITH_BAR}₁", r"$\bar{Y}_{1}$"),
+        (f"{Y_WITH_BAR} + 1", r"$\bar{y}$ + 1"),
+        (f"x{BAR}₁", r"$\bar{x}_{1}$"),
+        (f"x{BAR}ᵢ", r"$\bar{x}_{i}$"),
+    ],
+)
+def test_a_bar_or_tilde_on_a_letter_keeps_its_accent_and_scripts(source: str, expected: str) -> None:
+    """The accent used to be left outside the math, loose after the letter ($\\beta$ and then
+    a bare mark), and a subscript after a bar was dropped out of it."""
+    assert convert_symbols(source) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (f"$x{BAR}$", r"$\bar{x}$"),
+        (f"$β{BAR}$", r"$\bar{\beta}$"),
+        (f"$β{TILDE} + x{BAR}$", r"$\tilde{\beta} + \bar{x}$"),
+        (f"$a + {Y_WITH_BAR}$", r"$a + \bar{y}$"),
+        (f"$$β{BAR}₁ + β{TILDE}$$", r"$$\bar{\beta}_{1} + \tilde{\beta}$$"),
+    ],
+)
+def test_a_bar_or_tilde_inside_a_math_span_adds_no_delimiters_of_its_own(source: str, expected: str) -> None:
+    """$x̄$ used to come out as the display delimiter $$\\bar{x}$$, which sends the whole
+    file to safe mode."""
+    assert convert_symbols(source) == expected
+
+
+@pytest.mark.parametrize("source", [f"man{TILDE}ana", f"x{TILDE}", f"Sa{TILDE}o"])
+def test_a_tilde_on_a_latin_letter_is_left_alone(source: str) -> None:
+    """Only a Greek letter is read as carrying a tilde. A decomposed ñ or ã is ordinary text."""
+    assert convert_symbols(source) == source
+
+
 @pytest.mark.parametrize(
     ("source", "expected"),
     [
@@ -1568,6 +1626,22 @@ def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.Captur
 
     assert "safe mode" not in log, "a mapped command does not exist, so the whole file fell back"
     assert MISSING_GLYPH not in text
+
+
+@needs_latex
+def test_bars_and_tildes_on_greek_and_latin_letters_are_drawn(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log, text = render(
+        work_dirs,
+        capsys,
+        f"β{BAR} and θ{BAR} and β{TILDE} and α{TILDE} and σ{TILDE}² and β{BAR}₁ and {ALPHA_WITH_BAR} "
+        f"and x{BAR}₁ and {Y_WITH_BAR} and $x{BAR}$ and $β{TILDE} + x{BAR}$ and (β{BAR} − β̂)²\n",
+    )
+
+    assert "safe mode" not in log, "a bar inside math became $$..$$ and sent the file to safe mode"
+    assert MISSING_GLYPH not in text
+    assert "$" not in text and "\\bar" not in text and "\\tilde" not in text
 
 
 @needs_latex
