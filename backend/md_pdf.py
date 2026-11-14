@@ -779,10 +779,14 @@ def convert_symbols(md):
     md = _merge_touching_math(md)
     md = _combine_adjacent_math(md)
 
-    # Symbols that render best as unicode kept in math mode
+    # Symbols that render best as unicode kept in math mode. Checked by position like the
+    # loop above: a $ next to the symbol (the old check) split "$a ≤ b$" into "$a$≤$b$",
+    # leaving the ≤ bare between two spans, where the font has no glyph for it.
     for sym in UNICODE_MATH_KEEP:
-        md = re.sub(r"(?<!\$)" + re.escape(sym) + r"(?!\$)",
-                    lambda m, s=sym: f"${s}$", md)
+        md = re.sub(re.escape(sym),
+                    lambda m, s=sym: m.group(0) if _in_math(m.string, m.start()) else f"${s}$",
+                    md)
+        md = _merge_touching_math(md)
 
     # Trim whitespace inside $...$ (tex_math_dollars wants no padding)
     md = re.sub(r"(?<!\$)\$([^$]+?)\$(?!\$)",

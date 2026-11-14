@@ -442,9 +442,14 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$", "$a ⋅ b$", "$Γ ⊢ A$", "$A ⟹ B$", "$𝔼[X]$", "$ℙ(A)$", "$ϵ + ϕ$", "$ℓ(θ)$", "$𝒩(0, 1)$", "$a + ⋯ + b$", "$a ≦ b$", "$a ⩾ b$", "$n ≲ m$", "$f ≔ g$", "$p ≝ q$", "$h ≜ k$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$", "$a ⋅ b$", "$Γ ⊢ A$", "$A ⟹ B$", "$𝔼[X]$", "$ℙ(A)$", "$ϵ + ϕ$", "$ℓ(θ)$", "$𝒩(0, 1)$", "$a + ⋯ + b$", "$a ≦ b$", "$a ⩾ b$", "$n ≲ m$", "$f ≔ g$", "$p ≝ q$", "$h ≜ k$", "$a ≤ b$", "$P(X ≥ t)$", "$x ≈ 1$", "$a ± b$", "$$a ≤ b$$", "$x ≤ 1$ and $y ≥ 2$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
+
+
+def test_a_kept_symbol_is_wrapped_only_where_it_is_outside_math() -> None:
+    """The ≤ in the span stays put, so the span is not split in two with a bare ≤ between."""
+    assert convert_symbols("$x ≤ 1$ and y ≥ 2") == "$x ≤ 1$ and y $≥$ 2"
 
 
 def test_touching_symbols_do_not_strip_spaces_on_later_lines() -> None:
@@ -1563,6 +1568,16 @@ def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.Captur
 
     assert "safe mode" not in log, "a mapped command does not exist, so the whole file fell back"
     assert MISSING_GLYPH not in text
+
+
+@needs_latex
+def test_a_kept_symbol_inside_a_math_span_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
+    """$a ≤ b$ used to be split into $a$≤$b$, and the bare ≤ between the spans drew blank."""
+    log, text = render(work_dirs, capsys, "$a ≤ b$ and $P(X ≥ t)$ and $x ≈ y$ and $p ± q$ and c ≤ d\n\n$$a ≤ b$$\n")
+
+    assert "safe mode" not in log
+    assert MISSING_GLYPH not in text
+    assert text.count("≤") == 3 and "≥" in text and "≈" in text
 
 
 @needs_latex
