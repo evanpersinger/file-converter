@@ -1,6 +1,6 @@
 """Tests for heic_md.py, which OCRs each HEIC to Markdown.
 
-OCR is faked. heic_md has its own copy of jpg_md's clean_text, which test_jpg_md.py covers.
+OCR is faked. The cleanup of the text is covered by test_image_md.py.
 """
 
 from collections.abc import Callable
@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import heic_md
+import image_md
 
 WorkDirs = tuple[Path, Path]
 WriteImage = Callable[..., Path]
@@ -23,7 +24,7 @@ def test_the_cleaned_text_is_written_to_a_md(
 ) -> None:
     input_dir, output_dir = work_dirs
     write_image(input_dir / filename, "HEIF")
-    monkeypatch.setattr(heic_md, "best_ocr_text", lambda image: "First sentence.\nsecond half\n")
+    monkeypatch.setattr(image_md, "best_ocr_text", lambda image: "First sentence.\nsecond half\n")
 
     summary = heic_md.convert_heic_to_markdown(input_dir, output_dir)
 

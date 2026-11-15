@@ -1,6 +1,6 @@
 """Tests for image_md.py, which OCRs each PNG, GIF, BMP, TIFF or WebP into Markdown.
 
-OCR is faked: the tidying is covered by test_jpg_md, which image_md shares it with.
+OCR is faked: what is under test is the tidying, not Tesseract. jpg_md and heic_md share it.
 """
 
 from collections.abc import Callable
@@ -12,6 +12,26 @@ import image_md
 
 WorkDirs = tuple[Path, Path]
 WriteImage = Callable[..., Path]
+
+
+def test_a_lowercase_line_joins_the_one_before() -> None:
+    assert image_md.clean_text("The quick brown\nfox jumps over") == "The quick brown fox jumps over"
+
+
+def test_a_capitalized_line_stays_separate() -> None:
+    assert image_md.clean_text("First sentence.\nSecond sentence.") == "First sentence.\nSecond sentence."
+
+
+def test_runs_of_blank_lines_shrink_to_one() -> None:
+    assert image_md.clean_text("Intro\n\n\n\nBody") == "Intro\n\nBody"
+
+
+def test_trailing_and_repeated_spaces_are_removed() -> None:
+    assert image_md.clean_text("two   words  \nNext") == "two words\nNext"
+
+
+def test_empty_text_gives_an_empty_string() -> None:
+    assert image_md.clean_text("") == ""
 
 
 @pytest.mark.parametrize(
