@@ -99,7 +99,7 @@ include = ["backend/*.py", "pyproject.toml", "README.md"]
 dev = [
     "pytest>=7.0.0",
     "black>=23.0.0",
-    "ruff>=0.1.0",
+    "ruff>=0.1.0,<0.16",  # 0.16 changed its default rules, and `ruff check backend` fails on them
 ]
 
 [tool.black]
