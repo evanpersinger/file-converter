@@ -318,10 +318,7 @@ def fix_common_ocr_errors(text, table_cells=False):
         return text
 
     # Remove empty circles / MCQ bubbles (© symbol)
-    text = re.sub(r'©\s*(\d+)', r'\1', text)   # "©2" -> "2"
-    text = re.sub(r'©\s*\)', ')', text)         # "©)" -> ")"
     text = re.sub(r'©\s*', '', text)
-    text = re.sub(r'©', '', text)
 
     # Single-letter misreadings with leading "I"/"l"
     for bad, good in (('Ic', 'c'), ('Ia', 'a'), ('Ib', 'b'), ('la', 'a'), ('lc', 'c'), ('lb', 'b')):
@@ -329,7 +326,6 @@ def fix_common_ocr_errors(text, table_cells=False):
 
     # Empty circle artifacts
     text = re.sub(r'\bOo\b', '', text)
-    text = re.sub(r'^Oo\s*$', '', text, flags=re.MULTILINE)
     text = re.sub(r'\bOs(\d+)\b', r'\1', text)  # "Os6" -> "6"
 
     # letter + "1" misread as letter + "i"/"l"/"t". Cell text only: a two-character
@@ -341,7 +337,6 @@ def fix_common_ocr_errors(text, table_cells=False):
         text = re.sub(r'\b([a-z])l\b', r'\g<1>1', text)  # "al" -> "a1"
         text = re.sub(r'\blon\b', 'c1', text)            # "lon" -> "c1"
         text = re.sub(r'\b1t\b', 'a1', text)             # "1t" -> "a1"
-        text = re.sub(r'\bat\b', 'a1', text)             # "at" -> "a1"
         text = re.sub(r'\b([a-z])t\b', r'\g<1>1', text)  # "bt" -> "b1"
 
     # Number misreadings (l0 -> 0, O1 -> 1, I0 -> 10, ...)
