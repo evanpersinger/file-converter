@@ -29,7 +29,7 @@ def test_the_text_is_stripped_and_written_to_a_txt(
 ) -> None:
     input_dir, output_dir = work_dirs
     write_image(input_dir / filename)
-    monkeypatch.setattr(jpg_txt, "ocr_text", lambda path, **kwargs: "  Hello world\n\n")
+    monkeypatch.setattr(jpg_txt, "ocr_text", lambda image, **kwargs: "  Hello world\n\n")
 
     summary = jpg_txt.convert_jpg_to_txt(input_dir, output_dir)
 
@@ -37,32 +37,13 @@ def test_the_text_is_stripped_and_written_to_a_txt(
     assert (output_dir / "scan.txt").read_text(encoding="utf-8") == "Hello world"
 
 
-def test_the_temp_png_is_gone_after_ocr(
-    work_dirs: WorkDirs, write_image: WriteImage, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    input_dir, output_dir = work_dirs
-    write_image(input_dir / "scan.jpg")
-    existed_during_ocr = []
-
-    def fake_ocr(path: str, **kwargs: object) -> str:
-        existed_during_ocr.append(Path(path).exists())
-        return "text"
-
-    monkeypatch.setattr(jpg_txt, "ocr_text", fake_ocr)
-
-    jpg_txt.convert_jpg_to_txt(input_dir, output_dir)
-
-    assert existed_during_ocr == [True]
-    assert [path.name for path in output_dir.iterdir()] == ["scan.txt"]
-
-
-def test_the_temp_png_is_gone_when_ocr_fails(
+def test_a_failed_ocr_is_reported_and_leaves_nothing_in_the_output(
     work_dirs: WorkDirs, write_image: WriteImage, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_dir, output_dir = work_dirs
     write_image(input_dir / "scan.jpg")
 
-    def failing_ocr(path: str, **kwargs: object) -> str:
+    def failing_ocr(image: object, **kwargs: object) -> str:
         raise RuntimeError("tesseract fell over")
 
     monkeypatch.setattr(jpg_txt, "ocr_text", failing_ocr)
