@@ -327,18 +327,6 @@ def fix_common_ocr_errors(text, table_cells=False):
     for bad, good in (('Ic', 'c'), ('Ia', 'a'), ('Ib', 'b'), ('la', 'a'), ('lc', 'c'), ('lb', 'b')):
         text = re.sub(rf'\b{bad}\b', good, text)
 
-    # Same fixes at start of line or surrounded by spaces
-    for bad, good in (('Ia', 'a'), ('Ic', 'c'), ('Ib', 'b'), ('la', 'a'), ('lc', 'c'), ('lb', 'b')):
-        text = re.sub(rf'^{bad}\s', f'{good} ', text)
-        text = re.sub(rf'\s{bad}\s', f' {good} ', text)
-
-    # Table header patterns
-    if table_cells:
-        text = re.sub(r'\bIa\s+b\s+Ic\b', 'a b c', text)
-        text = re.sub(r'\bla\s+b\s+lc\b', 'a b c', text)
-        text = re.sub(r'^Ia\s+b\s+Ic\s*$', 'a b c', text, flags=re.MULTILINE)
-        text = re.sub(r'^la\s+b\s+lc\s*$', 'a b c', text, flags=re.MULTILINE)
-
     # Empty circle artifacts
     text = re.sub(r'\bOo\b', '', text)
     text = re.sub(r'^Oo\s*$', '', text, flags=re.MULTILINE)
