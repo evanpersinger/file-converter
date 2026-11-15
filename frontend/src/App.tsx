@@ -861,7 +861,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
         {status.kind === 'converting' && (
           <div className="progress-block">
             <p className="progress-title">
-              <span className="progress-name" title={status.fileName}>Converting {status.fileName}</span>
+              <span className="progress-name" title={status.fileName}>Converting: {status.fileName}</span>
               {status.total > 1 && (
                 <span className="progress-count">| {status.position} of {status.total}</span>
               )}
