@@ -28,12 +28,7 @@ const ZOOM_STEP = 0.1
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 3
 
-type PptxStatus =
-  | { kind: 'loading' }
-  | { kind: 'ready' }
-  | { kind: 'error'; message: string }
-
-type HeicStatus =
+type LoadStatus =
   | { kind: 'loading' }
   | { kind: 'ready' }
   | { kind: 'error'; message: string }
@@ -73,8 +68,8 @@ export default function FileViewer({ file, onClose }: FileViewerProps) {
   // Highlighted HTML for a notebook's code cells, keyed by cell index. A cell missing
   // here (unsupported language, or not code) just renders as plain text.
   const [highlightedCells, setHighlightedCells] = useState<Record<number, string>>({})
-  const [pptxStatus, setPptxStatus] = useState<PptxStatus>({ kind: 'loading' })
-  const [heicStatus, setHeicStatus] = useState<HeicStatus>({ kind: 'loading' })
+  const [pptxStatus, setPptxStatus] = useState<LoadStatus>({ kind: 'loading' })
+  const [heicStatus, setHeicStatus] = useState<LoadStatus>({ kind: 'loading' })
   const pptxRef = useRef<HTMLDivElement>(null)
   const pptxViewerRef = useRef<PptxViewer | null>(null)
   // Null until the image loads and its natural size is known.
