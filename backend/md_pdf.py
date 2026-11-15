@@ -117,7 +117,8 @@ _SUP_CHARS = "".join(re.escape(c) for c in SUPERSCRIPT_TO_LATEX)
 _SUB_RUN = rf"[{_SUB_CHARS}]+(?:[.,][{_SUB_CHARS}]+)*"
 
 # Config: LaTeX preamble injected into every render
-LATEX_HEADER = """\\usepackage{amsmath}
+LATEX_HEADER = """\\usepackage[margin=1in]{geometry}
+\\usepackage{amsmath}
 \\usepackage{amssymb}
 \\usepackage{fontspec}
 % Default mono font lacks greek, subscripts and ≈, so code blocks print "?" for them

@@ -1870,6 +1870,24 @@ def test_the_example_in_the_md_best_practices_skill_renders_in_full(
     assert "Var" in text
 
 
+@needs_latex
+def test_text_fills_the_page_between_one_inch_margins(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With no page geometry set, LaTeX left 1.85in on each side and a 4.8in text block."""
+    render(work_dirs, capsys, "word " * 400 + "\n")
+
+    with fitz.open(work_dirs[1] / "doc.pdf") as document:
+        page = document[0]
+        width = page.rect.width
+        blocks = page.get_text("blocks")
+        left = min(block[0] for block in blocks)
+        right = max(block[2] for block in blocks)
+
+    assert left == pytest.approx(72, abs=2)
+    assert width - 72 - 40 < right <= width - 72 + 1
+
+
 # The $-handling helpers, directly
 
 T = _TEXT_DOLLAR
