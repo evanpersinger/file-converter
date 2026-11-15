@@ -1,10 +1,7 @@
 """OCR an image a few ways and keep the reading Tesseract is most sure of.
 
-jpg_md and heic_md used to run every image through a 3x3 median filter before OCR. That cleans
-up noisy photos, but it also wears away the thin strokes of small text, so `1,234.56` could come
-back as `1.734 46` with no warning. No single preprocessing wins on both clean small text and
-noisy images, so this reads a few variants and keeps the one with the highest mean word
-confidence from Tesseract.
+No single preprocessing wins on both clean small text and noisy images, so this reads a few
+variants and keeps the one with the highest mean word confidence.
 """
 
 from PIL import Image, ImageEnhance, ImageFilter
