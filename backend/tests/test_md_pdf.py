@@ -134,6 +134,8 @@ from pdf_md import normalize_math
         ("ε ~ 𝒩(0, σ²)", r"$\varepsilon$ ~ $\mathcal{N}$(0, $\sigma^{2}$)"),
         ("ℒ", r"$\mathcal{L}$"),
         ("ℒ(θ)", r"$\mathcal{L}$($\theta$)"),
+        ("ℱ", r"$\mathcal{F}$"),
+        ("ℱ(f)", r"$\mathcal{F}$(f)"),
         ("⋯", r"$\cdots$"),
         ("1, 2, ⋯, n", r"1, 2, $\cdots$, n"),
         ("a₁ + a₂ + ⋯ + aₙ", r"$a_{1} + a_{2} + \cdots + a_{n}$"),
@@ -192,6 +194,7 @@ def test_some_symbols_stay_unicode_but_move_into_math_mode(symbol: str) -> None:
         ("ℓ²", r"$\ell^{2}$"),
         ("𝒩ₚ(μ, Σ)", r"$\mathcal{N}_{p}$($\mu$, $\Sigma$)"),
         ("ℒₙ(θ)", r"$\mathcal{L}_{n}$($\theta$)"),
+        ("ℱₙ", r"$\mathcal{F}_{n}$"),
     ],
 )
 def test_unicode_scripts_become_latex_scripts(source: str, expected: str) -> None:
@@ -509,7 +512,7 @@ def test_a_converted_symbol_touching_a_span_does_not_skip_later_symbols() -> Non
     assert convert_symbols("Σeᵢ and ∑ x and ∫ x") == r"$\Sigma e_{i}$ and $\sum$ x and $\int$ x"
 
 
-@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$", "$a ⋅ b$", "$Γ ⊢ A$", "$A ⟹ B$", "$𝔼[X]$", "$ℙ(A)$", "$ϵ + ϕ$", "$ℓ(θ)$", "$𝒩(0, 1)$", "$ℒ(θ)$", "$a + ⋯ + b$", "$a ≦ b$", "$a ⩾ b$", "$n ≲ m$", "$f ≔ g$", "$p ≝ q$", "$h ≜ k$", "$a ≤ b$", "$P(X ≥ t)$", "$x ≈ 1$", "$a ± b$", "$$a ≤ b$$", "$x ≤ 1$ and $y ≥ 2$"])
+@pytest.mark.parametrize("source", ["$α + β$ here", "$$Σ x$$", "$x$ and $α$", "$x ∈ ℝ$", "$n ∈ ℕ$", "$⟨x, y⟩$", "$V ⊕ W$", "$G ≅ H$", "$f′(x) ≪ 1$", "$⌊x⌋$", "$a ⋅ b$", "$Γ ⊢ A$", "$A ⟹ B$", "$𝔼[X]$", "$ℙ(A)$", "$ϵ + ϕ$", "$ℓ(θ)$", "$𝒩(0, 1)$", "$ℒ(θ)$", "$ℱ(f)$", "$a + ⋯ + b$", "$a ≦ b$", "$a ⩾ b$", "$n ≲ m$", "$f ≔ g$", "$p ≝ q$", "$h ≜ k$", "$a ≤ b$", "$P(X ≥ t)$", "$x ≈ 1$", "$a ± b$", "$$a ≤ b$$", "$x ≤ 1$ and $y ≥ 2$"])
 def test_symbols_already_inside_math_are_left_alone(source: str) -> None:
     assert convert_symbols(source) == source
 
@@ -1631,7 +1634,7 @@ def test_the_transpose_and_therefore_signs_are_drawn(
 
 @needs_latex
 def test_every_mapped_symbol_is_drawn(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
-    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u v 𝔼[X] w 𝔼ₓ[f(x)] x Var(X) = 𝔼[X²] − 𝔼[X]² y ℙ(A | B) = ℙ(A ∩ B) / ℙ(B) z a ≦ b ≧ c ⩽ d ⩾ e ≲ f ≳ g ≔ h ≜ i ≝ j k yᵢ = βxᵢ + ϵᵢ and ϕ₁ and ϵ̂ᵢ and ℓ₂ norm and ℓ(θ) and ℒ(θ) and ℒₙ(θ) and ε ~ 𝒩(0, σ²) and 𝒩ₚ(μ, Σ) and a₁ + a₂ + ⋯ + aₙ and 1, 2, ⋯, n and σ̂² and β̂₁² and α̂ᵢ and eᵢ = yᵢ − ŷᵢ and $β̂₁ = 2$\n")
+    log, text = render(work_dirs, capsys, "a α b ∑ c ∫ d ∞ e → f ⇒ g ≤ h ≥ i ± j ≈ k × l ≠ m ∈ n ℝ o ℝⁿ p ℝ₊ q ℕ r ℤ s ℚ t ℂⁿ u ⟨x, y⟩ v ⊕ w ⊗ x ∘ y ⊤ z ≅ a ≃ b c ≪ d ≫ e f′ g″ h ⌊x⌋ i ⌈y⌉ j a ⋅ b k A ∖ B l p ∣ n m 3 ∤ 10 n ≢ o ≺ p ≻ q ⊢ r ⊨ s ⟶ t ⟹ u v 𝔼[X] w 𝔼ₓ[f(x)] x Var(X) = 𝔼[X²] − 𝔼[X]² y ℙ(A | B) = ℙ(A ∩ B) / ℙ(B) z a ≦ b ≧ c ⩽ d ⩾ e ≲ f ≳ g ≔ h ≜ i ≝ j k yᵢ = βxᵢ + ϵᵢ and ϕ₁ and ϵ̂ᵢ and ℓ₂ norm and ℓ(θ) and ℒ(θ) and ℒₙ(θ) and ℱ(f) and ℱₙ and ε ~ 𝒩(0, σ²) and 𝒩ₚ(μ, Σ) and a₁ + a₂ + ⋯ + aₙ and 1, 2, ⋯, n and σ̂² and β̂₁² and α̂ᵢ and eᵢ = yᵢ − ŷᵢ and $β̂₁ = 2$\n")
 
     assert "safe mode" not in log, "a mapped command does not exist, so the whole file fell back"
     assert MISSING_GLYPH not in text
