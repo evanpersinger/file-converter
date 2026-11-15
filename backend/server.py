@@ -53,6 +53,7 @@ import heic_pdf
 import heic_png
 import html_pdf
 import html_svg
+import image_md
 import ipynb_pdf
 import jpg_md
 import jpg_pdf
@@ -553,6 +554,9 @@ REGISTRY: list[Conversion] = [
                    structured=True, input_dir=i, output_dir=o)),
                requires=("tesseract",),
                note="Slower. Uses table detection, better for grids and columns"),
+    Conversion(IMAGE_ONLY_OCR, "img->md", "Markdown", ".md",
+               via_params(lambda s, i, o: image_md.convert_image_to_markdown(i, o)),
+               requires=("tesseract",)),
 
     # --- text / markup / code ------------------------------------------------
     Conversion((".md",), "md->pdf", "PDF", ".pdf",
