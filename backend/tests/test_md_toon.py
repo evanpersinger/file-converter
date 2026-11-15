@@ -209,6 +209,28 @@ def test_a_ragged_table_without_outer_pipes_is_read(work_dirs: WorkDirs) -> None
     assert data == [{"a": 1, "b": 2}, {"a": 4, "b": 5}]
 
 
+def test_a_ragged_table_inside_a_quote_is_read(work_dirs: WorkDirs) -> None:
+    markdown = "> | a | b |\n> | - | - |\n> | 1 | 2 | 3 |\n> | 4 |\n"
+
+    assert toon_format.loads(convert(work_dirs, markdown)) == [
+        {"a": 1, "b": 2}, {"a": 4, "b": None},
+    ]
+
+
+def test_a_ragged_table_inside_a_list_item_is_read(work_dirs: WorkDirs) -> None:
+    markdown = "- first\n\n  | a | b |\n  | - | - |\n  | 1 | 2 | 3 |\n  | 4 |\n"
+
+    assert toon_format.loads(convert(work_dirs, markdown)) == [
+        {"a": 1, "b": 2}, {"a": 4, "b": None},
+    ]
+
+
+def test_an_escaped_pipe_stays_in_its_cell_in_a_ragged_row(work_dirs: WorkDirs) -> None:
+    data = toon_format.loads(convert(work_dirs, "| a | b |\n| - | - |\n| x \\| y |\n| p | q |\n"))
+
+    assert data == [{"a": "x | y", "b": ""}, {"a": "p", "b": "q"}]
+
+
 # Tables inside quotes and lists (#67)
 
 
