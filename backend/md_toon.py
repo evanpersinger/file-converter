@@ -9,65 +9,14 @@ from pathlib import Path
 
 import mistune
 import toon_format
-from mistune.plugins.table import (
-    CELL_SPLIT, NP_TABLE_PATTERN, TABLE_CELL, TABLE_PATTERN, _process_thead, table_in_list,
-    table_in_quote,
-)
+from mistune.plugins.table import table_in_list, table_in_quote
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files, read_text
 from toon_tables import FoundTable, tables_to_data
 
-
-def _gfm_rows(lines: list[str], aligns: list) -> list[dict]:
-    """Table body lines as row tokens, each fitted to the header's width the way GitHub
-    does it: a short row gets empty cells, and cells past the header's width are dropped."""
-    rows = []
-    for line in lines:
-        cells = CELL_SPLIT.split(line)[:len(aligns)]
-        cells += [''] * (len(aligns) - len(cells))
-        rows.append({'type': 'table_row', 'children': [
-            {'type': 'table_cell', 'text': text.strip(), 'attrs': {'align': align, 'head': False}}
-            for text, align in zip(cells, aligns)
-        ]})
-    return rows
-
-
-def _parse_table(block, m, state):
-    """mistune's parse_table, except that rows whose cell count is off from the header's
-    are fitted to it instead of the whole table being turned down."""
-    thead, aligns = _process_thead(m.group('table_head'), m.group('table_align'))
-    if not thead:
-        return None
-    lines = []
-    for line in m.group('table_body').splitlines():
-        cell = TABLE_CELL.match(line)
-        if not cell:
-            return None
-        lines.append(cell.group(1))
-    body = {'type': 'table_body', 'children': _gfm_rows(lines, aligns)}
-    state.append_token({'type': 'table', 'children': [thead, body]})
-    return m.end()
-
-
-def _parse_nptable(block, m, state):
-    """Like _parse_table, for a table written without the outer pipes."""
-    thead, aligns = _process_thead(m.group('nptable_head'), m.group('nptable_align'))
-    if not thead:
-        return None
-    body = {'type': 'table_body', 'children': _gfm_rows(m.group('nptable_body').splitlines(), aligns)}
-    state.append_token({'type': 'table', 'children': [thead, body]})
-    return m.end()
-
-
-def _gfm_table(md: mistune.Markdown) -> None:
-    """mistune's table plugin with GitHub's handling of short and long rows."""
-    md.block.register('table', TABLE_PATTERN, _parse_table, before='paragraph')
-    md.block.register('nptable', NP_TABLE_PATTERN, _parse_nptable, before='paragraph')
-
-
 # table_in_quote and table_in_list also read a table inside a > quote or a list item
 _PARSER = mistune.create_markdown(
-    renderer=None, plugins=[_gfm_table, table_in_quote, table_in_list]
+    renderer=None, plugins=['table', table_in_quote, table_in_list]
 )
 
 # Block tokens whose children can hold a table
@@ -75,10 +24,70 @@ _CONTAINERS = ('block_quote', 'list', 'list_item')
 
 _LINE_BREAK = re.compile(r'<br\s*/?>', re.IGNORECASE)
 
-# The start of a table the parser turned down: a header line, then a line of dashes. Now
-# that rows are fitted to the header, that happens when the header and the line of dashes
-# have a different number of cells.
-_REJECTED_TABLE = re.compile(r'[^\n]*\|[^\n]*\n\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*(\n|$)')
+# A table's line of dashes, with or without the outer pipes: `| - | :-: |` or `- | -`
+_DASHES = r'\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*'
+
+# The start of a table the parser turned down: a header line, then a line of dashes. Rows
+# are fitted to the header before parsing, so that happens when the header and the line of
+# dashes have a different number of cells.
+_REJECTED_TABLE = re.compile(rf'[^\n]*\|[^\n]*\n\s*{_DASHES}(\n|$)')
+
+# The quote markers and indentation a line starts with, then the rest of the line
+_LINE_START = re.compile(r'([ \t]*(?:>[ \t]*)*)(.*)')
+
+
+def _split_cells(row: str) -> list[str]:
+    """The cells of a table row, split on the pipes that are not escaped with a backslash.
+    A pipe at either end of the row is its edge, not a separator."""
+    row = row.strip().removeprefix('|')
+    cells, start, backslashes = [], 0, 0
+    for index, char in enumerate(row):
+        if char == '|' and backslashes % 2 == 0:
+            cells.append(row[start:index])
+            start = index + 1
+        backslashes = backslashes + 1 if char == '\\' else 0
+    cells.append(row[start:])
+    if len(cells) > 1 and not cells[-1]:
+        cells.pop()
+    return cells
+
+
+def _table_row(prefix: str, cells: list[str]) -> str:
+    return prefix + '| ' + ' | '.join(cell.strip() for cell in cells) + ' |'
+
+
+def _pad_ragged_tables(text: str) -> str:
+    """The Markdown with each table whose rows are not as wide as its header fitted to it
+    the way GitHub does: a short row gets empty cells, and cells past the header's width are
+    dropped. The parser turns such a table down whole. A table inside a quote or a list item
+    keeps its quote markers and indentation, and a table that is already even is left alone."""
+    lines = text.split('\n')
+    index = 0
+    while index < len(lines) - 1:
+        prefix, header = _LINE_START.fullmatch(lines[index]).groups()
+        dash_prefix, dashes = _LINE_START.fullmatch(lines[index + 1]).groups()
+        header_cells = _split_cells(header)
+        if (prefix != dash_prefix or '|' not in header or not re.fullmatch(_DASHES, dashes)
+                or len(header_cells) != len(_split_cells(dashes))):
+            index += 1
+            continue
+
+        end = index + 2
+        while end < len(lines):
+            row_prefix, row = _LINE_START.fullmatch(lines[end]).groups()
+            if row_prefix != prefix or '|' not in row:
+                break
+            end += 1
+
+        width = len(header_cells)
+        rows = [_split_cells(_LINE_START.fullmatch(line).group(2)) for line in lines[index + 2:end]]
+        if any(len(cells) != width for cells in rows):
+            fitted = [(cells + [''] * width)[:width] for cells in rows]
+            lines[index:end] = [
+                _table_row(prefix, cells) for cells in (header_cells, _split_cells(dashes), *fitted)
+            ]
+        index = end
+    return '\n'.join(lines)
 
 
 def _inline_text(tokens: list[dict]) -> str:
@@ -145,7 +154,7 @@ def _find_tables(tokens: list[dict]) -> list[FoundTable]:
 def markdown_to_toon(md_file):
     """Read a Markdown file and return its tables as TOON text"""
     # read_text drops a byte order mark and takes a file that is not UTF-8
-    tokens = _PARSER(read_text(md_file, translate_newlines=True))
+    tokens = _PARSER(_pad_ragged_tables(read_text(md_file, translate_newlines=True)))
     return toon_format.dumps(tables_to_data(_find_tables(tokens))) + '\n'
 
 
