@@ -23,7 +23,7 @@ def test_the_cleaned_text_is_written_to_a_md(
 ) -> None:
     input_dir, output_dir = work_dirs
     write_image(input_dir / filename, "HEIF")
-    monkeypatch.setattr(heic_md, "ocr_text", lambda image, **kwargs: "First sentence.\nsecond half\n")
+    monkeypatch.setattr(heic_md, "best_ocr_text", lambda image: "First sentence.\nsecond half\n")
 
     summary = heic_md.convert_heic_to_markdown(input_dir, output_dir)
 
