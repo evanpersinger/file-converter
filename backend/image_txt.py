@@ -1,4 +1,4 @@
-"""OCR the screenshots in input/ into one text file in output/. English only.
+"""OCR the images in input/ into one text file in output/. English only.
 
 Default mode is plain text. Pass --structured for tables and other laid-out content.
 """
@@ -76,7 +76,7 @@ def join_continuation_lines(lines):
     return fixed_lines
 
 
-# Simple mode (plain-text screenshots)
+# Simple mode (plain-text images)
 def preprocess_image(image):
     """Produce several preprocessed variants of an image to improve OCR."""
     preprocessed_images = []
@@ -119,7 +119,7 @@ def clean_text(text):
 
 
 def convert_simple(image_path):
-    """Convert a plain-text screenshot to text using multiple preprocessing passes."""
+    """Convert a plain-text image to text using multiple preprocessing passes."""
     try:
         image = upright(Image.open(image_path))
         processed_images = preprocess_image(image)
@@ -683,12 +683,12 @@ def find_images(input_folder):
                   if Path(f).suffix.lower() in IMAGE_EXTENSIONS)
 
 
-def convert_screenshots_to_text(
+def convert_images_to_text(
     structured: bool = False,
     input_dir: str | Path = INPUT_DIR,
     output_dir: str | Path = OUTPUT_DIR,
 ) -> str:
-    """Convert every screenshot/image in the input folder to text using OCR.
+    """Convert every image in the input folder to text using OCR.
 
     All extracted text is combined into a single .txt file in the output folder.
 
@@ -763,14 +763,14 @@ def convert_screenshots_to_text(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert screenshots/images to text using OCR.")
+    parser = argparse.ArgumentParser(description="Convert images to text using OCR.")
     parser.add_argument(
         "--structured", "--tables", dest="structured", action="store_true",
         help="Use table/structure-aware extraction (default: plain text).",
     )
     args = parser.parse_args()
 
-    result = convert_screenshots_to_text(structured=args.structured)
+    result = convert_images_to_text(structured=args.structured)
     print(f"\n{result}")
 
     # Non-zero exit when nothing came out, so shell callers can tell

@@ -54,6 +54,7 @@ import heic_png
 import html_pdf
 import html_svg
 import image_md
+import image_txt
 import ipynb_pdf
 import jpg_md
 import jpg_pdf
@@ -79,7 +80,6 @@ import pptx_pdf
 import R_Rmd
 import Rmd_pdf
 import sql_pdf
-import ss_txt
 import svg_pdf
 import svg_png
 import toon_json
@@ -543,14 +543,14 @@ REGISTRY: list[Conversion] = [
                via_params(lambda s, i, o: svg_png.convert_svg_to_png(i, o)),
                requires=("chrome",)),
 
-    # ss_txt is the only OCR route for these formats (jpg/jpeg are served by jpg_txt,
-    # so registering ss_txt for them too would just be a duplicate "Text" option).
+    # image_txt is the only OCR route for these formats (jpg/jpeg are served by jpg_txt,
+    # so registering image_txt for them too would just be a duplicate "Text" option).
     Conversion(IMAGE_ONLY_OCR, "img->txt", "Text", ".txt",
-               via_params(lambda s, i, o: ss_txt.convert_screenshots_to_text(
+               via_params(lambda s, i, o: image_txt.convert_images_to_text(
                    input_dir=i, output_dir=o)),
                requires=("tesseract",)),
     Conversion(IMAGE_ONLY_OCR, "img->txt-tables", "Text (tables/layout)", ".txt",
-               via_params(lambda s, i, o: ss_txt.convert_screenshots_to_text(
+               via_params(lambda s, i, o: image_txt.convert_images_to_text(
                    structured=True, input_dir=i, output_dir=o)),
                requires=("tesseract",),
                note="Slower. Uses table detection, better for grids and columns"),

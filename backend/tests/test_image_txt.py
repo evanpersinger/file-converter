@@ -1,6 +1,6 @@
-"""Tests for the text-processing side of ss_txt.py.
+"""Tests for the text-processing side of image_txt.py.
 
-Tesseract itself is not under test, and the OCR passes need a real screenshot to be
+Tesseract itself is not under test, and the OCR passes need a real image to be
 meaningful. Everything that runs on the text once it comes back out is pure, though,
 and that is where the guessing happens: rejoining split lines and correcting the
 characters OCR habitually gets wrong.
@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageDraw, ImageFont
 
-import ss_txt
+import image_txt
 from external_tool import ToolTimeout
-from ss_txt import (
+from image_txt import (
     IMAGE_EXTENSIONS,
     are_texts_similar,
     clean_text,
@@ -194,7 +194,7 @@ def test_a_tesseract_timeout_fails_the_image_instead_of_trying_the_next_pass(
         calls.append(1)
         raise ToolTimeout("tesseract took longer than 300 seconds")
 
-    monkeypatch.setattr(ss_txt, "ocr_text", hung)
+    monkeypatch.setattr(image_txt, "ocr_text", hung)
     image_path = tmp_path / "shot.png"
     Image.new("RGB", (200, 100), "white").save(image_path)
 
