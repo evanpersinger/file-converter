@@ -9,17 +9,85 @@ from pathlib import Path
 
 import mistune
 import toon_format
+from mistune.plugins.table import table_in_list, table_in_quote
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files, read_text
 from toon_tables import FoundTable, tables_to_data
 
-_PARSER = mistune.create_markdown(renderer=None, plugins=['table'])
+# table_in_quote and table_in_list also read a table inside a > quote or a list item
+_PARSER = mistune.create_markdown(
+    renderer=None, plugins=['table', table_in_quote, table_in_list]
+)
+
+# Block tokens whose children can hold a table
+_CONTAINERS = ('block_quote', 'list', 'list_item')
 
 _LINE_BREAK = re.compile(r'<br\s*/?>', re.IGNORECASE)
 
-# The start of a table the parser turned down: a header line, then a line of dashes. The
-# parser only reads a table whose every row has as many cells as its header.
-_REJECTED_TABLE = re.compile(r'[^\n]*\|[^\n]*\n\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*(\n|$)')
+# A table's line of dashes, with or without the outer pipes: `| - | :-: |` or `- | -`
+_DASHES = r'\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*'
+
+# The start of a table the parser turned down: a header line, then a line of dashes. Rows
+# are fitted to the header before parsing, so that happens when the header and the line of
+# dashes have a different number of cells.
+_REJECTED_TABLE = re.compile(rf'[^\n]*\|[^\n]*\n\s*{_DASHES}(\n|$)')
+
+# The quote markers and indentation a line starts with, then the rest of the line
+_LINE_START = re.compile(r'([ \t]*(?:>[ \t]*)*)(.*)')
+
+
+def _split_cells(row: str) -> list[str]:
+    """The cells of a table row, split on the pipes that are not escaped with a backslash.
+    A pipe at either end of the row is its edge, not a separator."""
+    row = row.strip().removeprefix('|')
+    cells, start, backslashes = [], 0, 0
+    for index, char in enumerate(row):
+        if char == '|' and backslashes % 2 == 0:
+            cells.append(row[start:index])
+            start = index + 1
+        backslashes = backslashes + 1 if char == '\\' else 0
+    cells.append(row[start:])
+    if len(cells) > 1 and not cells[-1]:
+        cells.pop()
+    return cells
+
+
+def _table_row(prefix: str, cells: list[str]) -> str:
+    return prefix + '| ' + ' | '.join(cell.strip() for cell in cells) + ' |'
+
+
+def _pad_ragged_tables(text: str) -> str:
+    """The Markdown with each table whose rows are not as wide as its header fitted to it
+    the way GitHub does: a short row gets empty cells, and cells past the header's width are
+    dropped. The parser turns such a table down whole. A table inside a quote or a list item
+    keeps its quote markers and indentation, and a table that is already even is left alone."""
+    lines = text.split('\n')
+    index = 0
+    while index < len(lines) - 1:
+        prefix, header = _LINE_START.fullmatch(lines[index]).groups()
+        dash_prefix, dashes = _LINE_START.fullmatch(lines[index + 1]).groups()
+        header_cells = _split_cells(header)
+        if (prefix != dash_prefix or '|' not in header or not re.fullmatch(_DASHES, dashes)
+                or len(header_cells) != len(_split_cells(dashes))):
+            index += 1
+            continue
+
+        end = index + 2
+        while end < len(lines):
+            row_prefix, row = _LINE_START.fullmatch(lines[end]).groups()
+            if row_prefix != prefix or '|' not in row:
+                break
+            end += 1
+
+        width = len(header_cells)
+        rows = [_split_cells(_LINE_START.fullmatch(line).group(2)) for line in lines[index + 2:end]]
+        if any(len(cells) != width for cells in rows):
+            fitted = [(cells + [''] * width)[:width] for cells in rows]
+            lines[index:end] = [
+                _table_row(prefix, cells) for cells in (header_cells, _split_cells(dashes), *fitted)
+            ]
+        index = end
+    return '\n'.join(lines)
 
 
 def _inline_text(tokens: list[dict]) -> str:
@@ -50,26 +118,34 @@ def _rows(table: dict) -> list[list[str]]:
 
 
 def _find_tables(tokens: list[dict]) -> list[FoundTable]:
-    """The tables in a document, each with the nearest heading above it. Only top-level
-    ones: the parser does not find a table inside a quote or a list.
+    """The tables in a document, each with the nearest heading above it, including tables
+    inside a quote or a list item.
 
     Raises:
         ValueError: If something that looks like a table was not read as one, so it is
             reported rather than silently left out.
     """
-    found = []
+    found: list[FoundTable] = []
     title = None
-    for token in tokens:
-        kind = token['type']
-        if kind == 'heading':
-            title = _inline_text(token['children']).strip() or None
-        elif kind == 'table':
-            found.append(FoundTable(title, _rows(token)))
-        elif kind == 'paragraph' and _REJECTED_TABLE.match(_inline_text(token['children'])):
-            raise ValueError(
-                "found what looks like a table but could not read it "
-                "(every row needs the same number of cells as the header)"
-            )
+
+    def walk(tokens: list[dict]) -> None:
+        nonlocal title
+        for token in tokens:
+            kind = token['type']
+            if kind == 'heading':
+                title = _inline_text(token['children']).strip() or None
+            elif kind == 'table':
+                found.append(FoundTable(title, _rows(token)))
+            elif kind in _CONTAINERS:
+                walk(token['children'])
+            elif (kind in ('paragraph', 'block_text')
+                  and _REJECTED_TABLE.match(_inline_text(token['children']))):
+                raise ValueError(
+                    "found what looks like a table but could not read it "
+                    "(the header and the line of dashes under it need the same number of cells)"
+                )
+
+    walk(tokens)
     return found
 
 
@@ -78,7 +154,7 @@ def _find_tables(tokens: list[dict]) -> list[FoundTable]:
 def markdown_to_toon(md_file):
     """Read a Markdown file and return its tables as TOON text"""
     # read_text drops a byte order mark and takes a file that is not UTF-8
-    tokens = _PARSER(read_text(md_file, translate_newlines=True))
+    tokens = _PARSER(_pad_ragged_tables(read_text(md_file, translate_newlines=True)))
     return toon_format.dumps(tables_to_data(_find_tables(tokens))) + '\n'
 
 
