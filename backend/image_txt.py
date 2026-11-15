@@ -479,22 +479,19 @@ def extract_table_cells(image, table_cells):
 
 def extract_with_multiple_psm_modes(image):
     """Run OCR with several PSM modes and return the best unique result."""
-    psm_modes = [
-        (6, "Uniform block"),   # best for tables
-        (11, "Sparse text"),
-        (4, "Single column"),
-        (3, "Automatic"),       # fallback
-    ]
+    # Page segmentation modes: uniform block (best for tables), sparse text, single column,
+    # automatic (fallback)
+    psm_modes = (6, 11, 4, 3)
 
     results = []
     ocr_error = None
-    for psm, description in psm_modes:
+    for psm in psm_modes:
         try:
             config = f'--oem 3 --psm {psm}'
             text = ocr_text(image, config=config, lang='eng').strip()
             if text and len(text) > 10:
                 text = fix_common_ocr_errors(text)
-                results.append({'text': text, 'psm': psm, 'description': description, 'length': len(text)})
+                results.append({'text': text, 'length': len(text)})
         except ToolTimeout:
             raise
         except Exception as e:
