@@ -905,7 +905,16 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       </main>
 
       <aside className="log-panel">
-        <h2>Result</h2>
+        <div className="log-heading">
+          <h2>Result</h2>
+          <button
+            type="button"
+            onClick={() => setConversionRuns([])}
+            disabled={conversionRuns.length === 0}
+          >
+            Clear
+          </button>
+        </div>
 
         {conversionRuns.map((run) => (
           <section key={run.id} className="log-run">

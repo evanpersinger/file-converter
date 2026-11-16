@@ -235,13 +235,28 @@ h2 {
   padding-left: 1rem;
 }
 
-/* The mirror image for Result: left into its own divider, right to the page edge. */
-.log-panel h2 {
-  margin-bottom: 0.75rem;
-  margin-left: calc(-1 * var(--pad-left));
-  margin-right: calc(-1 * var(--page-edge));
-  padding-left: var(--pad-left);
-  padding-right: var(--page-edge);
+/* The mirror image for Result: left into its own divider, right to the page edge. Result
+   has a Clear button beside its title, so this row carries the line and the reach out that
+   the other columns' h2 carries, and the h2 inside drops its own. */
+.log-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 calc(-1 * var(--page-edge)) 0.75rem calc(-1 * var(--pad-left));
+  padding: 0 var(--page-edge) 0.5rem var(--pad-left);
+  border-bottom: 8px solid var(--text);
+}
+
+.log-heading h2 {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+}
+
+.log-heading button {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.85rem;
 }
 
 /* File picker. The real input is visually hidden and the label is both the click
@@ -1003,7 +1018,7 @@ button:disabled {
   }
 
   /* Its title line runs across the row, like the line above it. */
-  .layout[data-tab='llm'] .log-panel h2 {
+  .layout[data-tab='llm'] .log-heading {
     margin-inline: -2rem;
     padding-inline: 2rem;
   }
@@ -1030,7 +1045,7 @@ button:disabled {
     border-top: 8px solid var(--text);
   }
 
-  .layout[data-tab='convert'] .log-panel h2 {
+  .layout[data-tab='convert'] .log-heading {
     margin-inline: -2rem;
     padding-inline: 2rem;
   }
