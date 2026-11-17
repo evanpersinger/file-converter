@@ -130,16 +130,18 @@ function localGroup(models: LocalModel[] | null): ModelGroupData {
     message,
     models: (models ?? []).map((m) => ({
       name: m.name,
+      label: MODEL_LABELS[m.name],
       blocked: m.installed ? undefined : `Not downloaded. Run: ollama pull ${m.name}`,
     })),
   }
 }
 
-// What a cloud model's button says when the provider's name for it reads badly. The real
-// name is still what gets sent, and it shows on hover.
+// What a model's button says when its real name reads badly: a long provider id, or an Ollama
+// tag with no size in it. The real name is still what gets sent, and it shows on hover.
 const MODEL_LABELS: Record<string, string> = {
   'claude-haiku-4-5-20251001': 'haiku 4-5',
   'claude-sonnet-5': 'sonnet 5',
+  'glm-ocr:latest': 'glm-ocr:0.9b',
 }
 
 function cloudGroup(
