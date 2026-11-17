@@ -6,8 +6,9 @@
 
 ## Run it
 
-Built and tested on macOS only. Several converters depend on macOS paths and tools (Chrome,
-LibreOffice, the Menlo font, `brew` installs), so on Linux or Windows expect some of them to fail.
+Built and tested on macOS only. Chrome, LibreOffice and a monospace font are looked for on Linux
+and Windows too, but nothing there is tested, so expect some converters to fail. The `brew`
+commands below are for macOS.
 
 Needs [uv](https://docs.astral.sh/uv/), Node 22 and pnpm (`corepack enable` picks the version in
 `frontend/package.json`). Install the [system tools](#system-tools) first. `uv sync` and `pnpm install` only cover the
