@@ -29,7 +29,7 @@ def not_cancelled() -> bool:
 
 OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"]  # vision_parse only supports these two for OpenAI
 ANTHROPIC_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-5"]  # weakest first, same as the other menus
-OLLAMA_MODELS = ["qwen3.5:4b", "qwen3.5:2b", "gemma4:e4b"]  # vision-capable local models, must be pulled via `ollama pull <model>`
+OLLAMA_MODELS = ["qwen3.5:4b", "qwen3.5:2b", "gemma4:e4b", "glm-ocr:latest"]  # vision-capable local models, must be pulled via `ollama pull <model>`
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script completes conversion, overrides Ollama's 5 min default
 _MODEL_DISPLAY_NAMES = {"claude-haiku-4-5-20251001": "claude-haiku-4.5"}  # friendlier label for the CLI menu, actual model id is unchanged
@@ -278,12 +278,15 @@ def _convert_pdf_local(
 
 
 _MODEL_SIZE = re.compile(r":e?(\d+(?:\.\d+)?)b\b", re.IGNORECASE)
+UNTAGGED_MODEL_SIZES = {"glm-ocr:latest": 0.9}  # billions, for models whose tag has no size (`ollama show` has it)
 
 
 def model_size(name: str) -> float:
     """Parameter count in billions read off the tag (`qwen3.5:9b` is 9.0, and Gemma's
     "effective" `gemma4:e4b` is 4.0), used as a stand-in for how strong a model is.
-    Infinity when the tag doesn't say."""
+    A tag with no size looks in UNTAGGED_MODEL_SIZES, and is infinity if it isn't there."""
+    if name in UNTAGGED_MODEL_SIZES:
+        return UNTAGGED_MODEL_SIZES[name]
     match = _MODEL_SIZE.search(name)
     return float(match.group(1)) if match else float("inf")
 
