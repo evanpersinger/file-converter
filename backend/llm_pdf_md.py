@@ -32,6 +32,7 @@ ANTHROPIC_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-5"]  # weakest f
 OLLAMA_MODELS = ["qwen3.5:4b", "qwen3.5:2b", "gemma4:e4b", "glm-ocr:latest"]  # vision-capable local models, must be pulled via `ollama pull <model>`
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script completes conversion, overrides Ollama's 5 min default
+OLLAMA_NUM_CTX = 16384  # tokens of context reserved per request, Ollama's 32768 default holds far more than one page and costs RAM
 _MODEL_DISPLAY_NAMES = {"claude-haiku-4-5-20251001": "claude-haiku-4.5"}  # friendlier label for the CLI menu, actual model id is unchanged
 LOCAL_RENDER_DPI = 200  # readable for a vision model without ballooning image size/latency
 MAX_LOCAL_PAGE_PIXELS = 4_000_000  # Letter and A4 at 200 DPI fit (about 3.7M and 3.9M), so only oversize pages render lower
@@ -175,7 +176,7 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
             "stream": False,
             # Faithful transcription, not conversation. The model's default (1) leaves room
             # to paraphrase; 0 keeps it deterministic, same reasoning as the OpenAI/Claude paths.
-            "options": {"temperature": 0},
+            "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
             # Transcription needs no reasoning. On models that support it (qwen3.5, etc.)
             # this skips the hidden chain-of-thought that otherwise runs before every page.
             "think": False,
