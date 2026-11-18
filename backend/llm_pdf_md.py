@@ -29,7 +29,7 @@ def not_cancelled() -> bool:
 
 OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o"]  # vision_parse only supports these two for OpenAI
 ANTHROPIC_MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-5"]  # weakest first, same as the other menus
-OLLAMA_MODELS = ["qwen3.5:4b", "qwen3.5:2b", "gemma4:e4b", "glm-ocr:latest"]  # vision-capable local models, must be pulled via `ollama pull <model>`
+OLLAMA_MODELS = ["qwen3.5:4b", "qwen3.5:2b", "gemma4:e4b", "glm-ocr:latest", "glm-ocr:q8_0"]  # vision-capable local models, must be pulled via `ollama pull <model>`
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_KEEP_ALIVE = "15s"  # stop running the model 15 seconds after script completes conversion, overrides Ollama's 5 min default
 OLLAMA_NUM_CTX = 16384  # tokens of context reserved per request, Ollama's 32768 default holds far more than one page and costs RAM
@@ -279,7 +279,7 @@ def _convert_pdf_local(
 
 
 _MODEL_SIZE = re.compile(r":e?(\d+(?:\.\d+)?)b\b", re.IGNORECASE)
-UNTAGGED_MODEL_SIZES = {"glm-ocr:latest": 0.9}  # billions, for models whose tag has no size (`ollama show` has it)
+UNTAGGED_MODEL_SIZES = {"glm-ocr:latest": 0.9, "glm-ocr:q8_0": 0.9}  # billions, for models whose tag has no size (`ollama show` has it)
 
 
 def model_size(name: str) -> float:

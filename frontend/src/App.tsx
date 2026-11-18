@@ -142,6 +142,7 @@ const MODEL_LABELS: Record<string, string> = {
   'claude-haiku-4-5-20251001': 'haiku 4-5',
   'claude-sonnet-5': 'sonnet 5',
   'glm-ocr:latest': 'glm-ocr:0.9b',
+  'glm-ocr:q8_0': 'glm-ocr:0.9b q8',
 }
 
 function cloudGroup(
