@@ -184,10 +184,6 @@ main.compact .filepicker {
   font-size: 1.5rem;
 }
 
-main.compact .clear {
-  height: 4rem;
-}
-
 main.compact .transfer {
   margin-top: 1rem;
 }
@@ -328,24 +324,30 @@ h2 {
   outline-offset: 2px;
 }
 
-/* The file box takes the width the Clear button leaves. */
+/* The Clear button sits under the file box, sized to its text rather than the row. */
 .picker-row {
   display: flex;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .picker-row .filepicker {
-  flex: 1;
+  align-self: flex-start;
+  flex: none;
+  width: 25rem; /* the From and To boxes together, 12rem each plus the gap */
+  max-width: 100%;
   min-width: 0;
 }
 
-/* Pinned to the file box's height so the two line up. */
 .clear {
-  flex: none;
   box-sizing: border-box;
-  height: 5rem;
-  padding: 0 0.75rem;
-  font-size: 1.5rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.picker-row .clear-hint {
+  font-size: 0.6rem;
 }
 
 /* The small line inside both Clear buttons, saying a single click won't do it. */
