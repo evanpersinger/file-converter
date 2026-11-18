@@ -111,15 +111,12 @@
   white-space: nowrap;
 }
 
-/* Far-right column for the LLM scripts: what happened to each file. Mirrors the sidebars,
-   with the divider on its left instead. */
+/* Last column: what happened to each file. Mirrors the sidebars, with the divider on its
+   left instead. It is 12rem at least and takes whatever width is left after main, out to
+   the page edge, so a wide window doesn't leave an empty band on the right. */
 .log-panel {
-  flex: none;
-  /* On a very wide window main stops growing, so this keeps Result at the right edge, where
-     its title line meets the page edge, instead of floating after main. */
-  margin-left: auto;
+  flex: 1 0 12rem;
   box-sizing: border-box;
-  width: 12rem;
   /* Space between the column's divider and its text. */
   --pad-left: 1rem;
   padding: 0.5rem 0 2.5rem var(--pad-left);
@@ -169,9 +166,10 @@
 }
 
 main {
-  flex: 1;
+  /* Starts at 30rem and shares the leftover width with Result, up to the cap. */
+  flex: 1 1 30rem;
   min-width: 0;
-  max-width: 56rem;
+  max-width: 50rem;
   margin: 0.75rem 0 2.5rem;
   text-align: left;
 }
@@ -333,10 +331,8 @@ h2 {
 }
 
 .picker-row .filepicker {
-  align-self: flex-start;
+  align-self: stretch;
   flex: none;
-  width: 25rem; /* the From and To boxes together, 12rem each plus the gap */
-  max-width: 100%;
   min-width: 0;
 }
 
@@ -1070,6 +1066,8 @@ button:disabled {
   }
 
   .layout[data-tab='llm'] main {
+    /* Stacked, so the 30rem start would become a height. */
+    flex: 1 1 auto;
     max-width: none;
   }
 
@@ -1106,6 +1104,8 @@ button:disabled {
   }
 
   .layout[data-tab='convert'] main {
+    /* Stacked, so the 30rem start would become a height. */
+    flex: 1 1 auto;
     max-width: none;
   }
 
