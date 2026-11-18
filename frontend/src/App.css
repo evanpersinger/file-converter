@@ -61,7 +61,7 @@
 /* Wider than the format column: it holds model names, which are far longer than
    three-letter format buttons. */
 .model-panel {
-  width: 12rem;
+  width: 14rem;
 }
 
 .model-panel h2 {
@@ -421,7 +421,7 @@ h2 {
 }
 
 .slot {
-  flex: 1;
+  flex: 0 1 12rem;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -796,7 +796,7 @@ button:disabled {
 }
 
 .actions .tip {
-  flex: 1;
+  flex: 0 1 12rem;
   container-type: inline-size;
 }
 
@@ -997,7 +997,7 @@ button:disabled {
    become lines across the page. */
 
 /* LLM tab: Result drops under the rest. */
-@container (max-width: 74rem) {
+@container (max-width: 76rem) {
   .layout[data-tab='llm'] {
     flex-wrap: wrap;
     align-content: flex-start;
@@ -1052,7 +1052,7 @@ button:disabled {
 }
 
 /* LLM tab: everything stacks. */
-@container (max-width: 57rem) {
+@container (max-width: 59rem) {
   .layout[data-tab='llm'] {
     flex-direction: column;
     flex-wrap: nowrap;
