@@ -501,7 +501,7 @@ REGISTRY: list[Conversion] = [
                requires=("tesseract",), takes_model=True, large_upload=True,
                model_names=mp4_md.WHISPER_MODELS, group="llm",
                script="Video", provider="whisper",
-               caption="Used for what a video says and shows on screen",
+               caption="Used for converting video files to md text",
                note="Runs on your machine. Free, but slow, and a model downloads the first time it is used"),
 
     # --- office --------------------------------------------------------------
