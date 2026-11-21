@@ -175,6 +175,13 @@ main {
   text-align: left;
 }
 
+/* Convert Files tab: no wider than the LLM tab's column gets on the same window, so the file
+   box doesn't stretch across a wide one. Result takes the rest. The stacked layout at the
+   bottom of the file lifts this cap. */
+.layout[data-tab='convert'] main {
+  max-width: 35rem;
+}
+
 /* Convert Files tab only: tighter heights and gaps, so the Convert and Combine buttons
    sit closer to the top and need less scrolling. The LLM tab shares this markup and
    keeps the sizes set on the plain rules below. */
@@ -422,12 +429,19 @@ h2 {
 }
 
 .slot {
-  flex: 0 1 12rem;
+  /* Starts at 12rem and grows with the column, so From and To fill the row under the file
+     box instead of leaving a strip on its right. */
+  flex: 1 1 12rem;
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* Convert Files tab: From and To stay at their own size, side by side. */
+.layout[data-tab='convert'] .slot {
+  flex: 0 1 12rem;
 }
 
 .box {
@@ -797,7 +811,8 @@ button:disabled {
 }
 
 .actions .tip {
-  flex: 0 1 12rem;
+  /* Grows with the column, like the From and To boxes above. */
+  flex: 1 1 12rem;
   container-type: inline-size;
 }
 
