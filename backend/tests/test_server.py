@@ -1389,6 +1389,78 @@ def test_the_scratch_workspace_is_removed_after_a_request(
     assert list(jobs_root.iterdir()) == []
 
 
+def test_the_scratch_workspace_is_removed_after_a_zipped_result(
+    client: TestClient, jobs_root: Path
+) -> None:
+    """The zip is written into the job dir now, so it has to go with it (#52)."""
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer) as writer:
+        pd.DataFrame({"a": [1]}).to_excel(writer, sheet_name="First", index=False)
+        pd.DataFrame({"b": [2]}).to_excel(writer, sheet_name="Second", index=False)
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "xlsx->csv"},
+        files={"file": ("book.xlsx", buffer.getvalue())},
+    )
+
+    assert response.status_code == 200
+    assert list(jobs_root.iterdir()) == []
+
+
+def test_the_scratch_workspace_is_removed_after_a_combine(
+    client: TestClient, jobs_root: Path
+) -> None:
+    response = client.post(
+        "/api/combine",
+        files=[("files", ("a.txt", b"one\n")), ("files", ("b.txt", b"two\n"))],
+    )
+
+    assert response.status_code == 200
+    assert b"one" in response.content and b"two" in response.content
+    assert list(jobs_root.iterdir()) == []
+
+
+def test_a_result_is_sent_with_its_length(client: TestClient, jobs_root: Path) -> None:
+    """Streamed from disk, so the browser still learns the size up front."""
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->md"},
+        files={"file": ("data.csv", b"a,b\n1,2\n")},
+    )
+
+    assert response.status_code == 200
+    assert int(response.headers["content-length"]) == len(response.content)
+
+
+def test_the_result_file_is_cleaned_up_when_sending_it_fails(tmp_path: Path) -> None:
+    """A browser that goes away mid-download makes send() raise. The job dir must still
+    be deleted, not left until the next server start."""
+    import asyncio
+
+    result = tmp_path / "result.bin"
+    result.write_bytes(b"x" * 200_000)
+    cleaned = []
+
+    async def receive() -> dict:
+        return {"type": "http.disconnect"}
+
+    async def send(message: dict) -> None:
+        if message["type"] == "http.response.body":
+            raise OSError("client went away")
+
+    response = server._StreamedFile(result, lambda: cleaned.append(True))
+    scope = {"type": "http", "method": "GET", "headers": [], "path": "/"}
+
+    # Starlette before 1.0 lets the error through, later versions swallow it as a disconnect
+    try:
+        asyncio.run(response(scope, receive, send))
+    except OSError:
+        pass
+
+    assert cleaned == [True]
+
+
 def test_the_scratch_workspace_is_removed_after_a_failure(
     client: TestClient, jobs_root: Path
 ) -> None:
