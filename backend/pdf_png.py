@@ -1,4 +1,7 @@
-"""Render each page of the PDFs in input/ to a PNG in output/ (name.png, or name_pageN.png for multi-page)."""
+"""Render each page of the PDFs in input/ to a PNG in output/ (name.png, or name_pageN.png for multi-page).
+
+The render loop is shared: pdf_jpg.py runs it with a different format and DPI.
+"""
 
 import os
 from pathlib import Path
@@ -17,16 +20,18 @@ RENDER_DPI = 600
 MAX_PAGE_PIXELS = 80_000_000
 
 
-def _page_dpi(page: fitz.Page) -> int:
-    """RENDER_DPI, or lower for a page that would render to more than MAX_PAGE_PIXELS."""
+def _page_dpi(page: fitz.Page, dpi: int) -> int:
+    """`dpi`, or lower for a page that would render to more than MAX_PAGE_PIXELS."""
     area_in_square_inches = (page.rect.width / 72) * (page.rect.height / 72)
-    return min(RENDER_DPI, int((MAX_PAGE_PIXELS / area_in_square_inches) ** 0.5))
+    return min(dpi, int((MAX_PAGE_PIXELS / area_in_square_inches) ** 0.5))
 
 
-def convert_pdf_to_png(
-    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+def render_pdf_pages(
+    input_dir: str | Path, output_dir: str | Path, ext: str, dpi: int
 ) -> str:
-    """Render every page of each PDF in the input folder to a PNG in the output folder.
+    """Render every page of each PDF in the input folder to an `ext` image at up to `dpi`.
+
+    `ext` is a Pixmap.save format without the dot ("png" or "jpg").
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -38,9 +43,8 @@ def convert_pdf_to_png(
     pdf_files = find_files(input_dir, '.pdf')
 
     if not pdf_files:
-        png_present = find_files(input_dir, '.png')
-        if png_present:
-            return "That file is already in png format"
+        if find_files(input_dir, f'.{ext}'):
+            return f"That file is already in {ext} format"
         return "No PDF files found in input folder"
 
     converted = []
@@ -49,7 +53,7 @@ def convert_pdf_to_png(
     for pdf_file in pdf_files:
         try:
             filename = os.path.splitext(os.path.basename(pdf_file))[0]
-            print(f"Converting {os.path.basename(pdf_file)} to png")
+            print(f"Converting {os.path.basename(pdf_file)} to {ext}")
 
             with fitz.open(pdf_file) as document:
                 if document.page_count == 0:
@@ -63,14 +67,14 @@ def convert_pdf_to_png(
                     # Single-page PDFs keep the plain name, so the common case does
                     # not end up with a pointless "_page1" suffix.
                     suffix = "" if page_count == 1 else f"_page{index}"
-                    png_name = f"{filename}{suffix}.png"
-                    png_file = os.path.join(output_dir, png_name)
-                    if os.path.exists(png_file):
-                        overwritten.append(png_name)
+                    image_name = f"{filename}{suffix}.{ext}"
+                    image_file = os.path.join(output_dir, image_name)
+                    if os.path.exists(image_file):
+                        overwritten.append(image_name)
 
-                    page.get_pixmap(dpi=_page_dpi(page)).save(png_file)
-                    output_names.append(png_name)
-                    converted.append(png_name)
+                    page.get_pixmap(dpi=_page_dpi(page, dpi)).save(image_file)
+                    output_names.append(image_name)
+                    converted.append(image_name)
 
                     if page_count > 1:
                         print(f"\rConverting {os.path.basename(pdf_file)}: {index * 100 // page_count}%",
@@ -96,6 +100,17 @@ def convert_pdf_to_png(
     if errors:
         summary += f". {len(errors)} failed: {'; '.join(errors)}"
     return summary
+
+
+def convert_pdf_to_png(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
+    """Render every page of each PDF in the input folder to a PNG in the output folder.
+
+    Returns:
+        A summary of what was converted, suitable for showing to a caller.
+    """
+    return render_pdf_pages(input_dir, output_dir, "png", RENDER_DPI)
 
 
 if __name__ == "__main__":
