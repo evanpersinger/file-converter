@@ -69,6 +69,7 @@ import llm_pdf_md
 import md_pdf
 import md_toon
 import mp4_md
+import pdf_docx
 import pdf_jpg
 import pdf_md
 import pdf_png
@@ -436,6 +437,9 @@ REGISTRY: list[Conversion] = [
     Conversion((".pdf",), "pdf->txt", "TXT", ".txt",
                via_params(lambda s, i, o: pdf_txt.convert_pdf_to_txt(i, o)),
                requires=("tesseract",)),
+    Conversion((".pdf",), "pdf->docx", "DOCX", ".docx",
+               via_params(lambda s, i, o: pdf_docx.convert_pdf_to_docx(i, o)),
+               note="Keeps the layout. Scanned PDFs are not read with OCR"),
     Conversion((".pdf",), "pdf->png", "PNG", ".png",
                via_params(lambda s, i, o: pdf_png.convert_pdf_to_png(i, o)),
                note="One PNG per page. Multi-page PDFs come back as a zip"),
