@@ -73,6 +73,7 @@ import pdf_jpg
 import pdf_md
 import pdf_png
 import pdf_toon
+import pdf_txt
 import platform_tools
 import png_jpg
 import png_pdf
@@ -431,6 +432,9 @@ REGISTRY: list[Conversion] = [
     # --- PDF -----------------------------------------------------------------
     Conversion((".pdf",), "pdf->md", "Markdown", ".md",
                via_params(lambda s, i, o: pdf_md.convert_pdf_to_markdown(i, o)),
+               requires=("tesseract",)),
+    Conversion((".pdf",), "pdf->txt", "TXT", ".txt",
+               via_params(lambda s, i, o: pdf_txt.convert_pdf_to_txt(i, o)),
                requires=("tesseract",)),
     Conversion((".pdf",), "pdf->png", "PNG", ".png",
                via_params(lambda s, i, o: pdf_png.convert_pdf_to_png(i, o)),
