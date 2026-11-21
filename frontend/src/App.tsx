@@ -662,7 +662,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
         {llmRoute?.note && <p className="muted note">{llmRoute.note}</p>}
       </aside>
 
-      <aside className="sidebar" hidden={tab !== 'llm'}>
+      <aside className="sidebar script-panel" hidden={tab !== 'llm'}>
         <h2>Markdown (MD)</h2>
 
         <div className="llm-routes">

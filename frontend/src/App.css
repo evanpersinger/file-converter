@@ -225,6 +225,18 @@ h2 {
   padding-left: 1rem;
 }
 
+/* The LLM tab's script column (Markdown (MD)): the same narrow right padding as the Model
+   column, so its buttons sit close to the divider. The title line reaches the divider with
+   the padding it has left, instead of the 1.5rem the plain sidebar rule above uses. */
+.script-panel {
+  padding-right: 0.5rem;
+}
+
+.script-panel h2 {
+  margin-right: -0.5rem;
+  padding-right: 0.5rem;
+}
+
 /* The mirror image for Result: left into its own divider, right to the page edge. Result
    has a Clear button beside its title, so this row carries the line and the reach out that
    the other columns' h2 carries, and the h2 inside drops its own. */
