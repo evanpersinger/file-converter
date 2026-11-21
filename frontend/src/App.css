@@ -990,13 +990,14 @@ button:disabled {
    They sit at the end of the file so they beat the plain rules above.
 
    Each tab has its own limits, because the LLM tab has four columns and the Convert tab
-   three. Every limit is the width its columns need plus about 19.5rem for the middle
-   column, which is what its buttons take. First the Result column drops to a row of its
-   own under the rest, then everything stacks into one column and the vertical dividers
-   become lines across the page. */
+   three. First the Result column drops to a row of its own under the rest, once the middle
+   column would be squeezed under about 18.5rem (LLM tab) or 29rem (Convert tab). Then
+   everything stacks into one column and the vertical dividers become lines across the
+   page. That limit is the width its columns need plus about 19.5rem for the middle
+   column, which is what its buttons take. */
 
 /* LLM tab: Result drops under the rest. */
-@container (max-width: 75rem) {
+@container (max-width: 59rem) {
   .layout[data-tab='llm'] {
     flex-wrap: wrap;
     align-content: flex-start;
