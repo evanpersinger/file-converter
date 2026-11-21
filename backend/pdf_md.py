@@ -350,7 +350,7 @@ def apply_scripts(text, scripts):
 
 
 # PDF -> markdown
-def _ocr_page(page):
+def ocr_page(page):
     """Render a page to an image and OCR it."""
     pix = page.get_pixmap(dpi=OCR_DPI)
     mode = "RGBA" if pix.alpha else "RGB"
@@ -397,7 +397,7 @@ def pdf_to_markdown(pdf_path, image_dir=None):
     # Scanned/image pages -> OCR
     if ocr_pages:
         for i in tqdm(ocr_pages, desc=f"OCR {Path(pdf_path).name}", unit="page", leave=False):
-            raw = _ocr_page(doc[i])
+            raw = ocr_page(doc[i])
             md_by_page[i] = normalize_math(raw.strip(), ocr=True)
 
     doc.close()
