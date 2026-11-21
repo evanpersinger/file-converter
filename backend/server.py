@@ -69,6 +69,7 @@ import llm_pdf_md
 import md_pdf
 import md_toon
 import mp4_md
+import pdf_jpg
 import pdf_md
 import pdf_png
 import pdf_toon
@@ -434,6 +435,9 @@ REGISTRY: list[Conversion] = [
     Conversion((".pdf",), "pdf->png", "PNG", ".png",
                via_params(lambda s, i, o: pdf_png.convert_pdf_to_png(i, o)),
                note="One PNG per page. Multi-page PDFs come back as a zip"),
+    Conversion((".pdf",), "pdf->jpg", "JPG", ".jpg",
+               via_params(lambda s, i, o: pdf_jpg.convert_pdf_to_jpg(i, o)),
+               note="One JPG per page. Multi-page PDFs come back as a zip"),
     Conversion((".pdf",), "pdf->toon", "TOON", ".toon",
                via_params(lambda s, i, o: pdf_toon.convert_pdf_to_toon(i, o)),
                note="Converts ruled tables with two or more columns. Scanned PDFs and PDFs with no table fail"),
