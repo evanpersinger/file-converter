@@ -236,8 +236,9 @@ h2 {
 .log-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  /* Clear sits right after the title, not pushed to the far edge of the column. */
+  justify-content: flex-start;
+  gap: 1rem;
   margin: 0 calc(-1 * var(--page-edge)) 0.75rem calc(-1 * var(--pad-left));
   padding: 0 var(--page-edge) 0.5rem var(--pad-left);
   border-bottom: 8px solid var(--text);
