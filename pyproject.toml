@@ -52,6 +52,7 @@ dependencies = [
     # Document Processing
     "python-docx>=1.1.2",
     "python-pptx>=1.0.2",
+    "pdf2docx>=0.5.13",
     "mistune>=3.0,<4",  # md_toon.py parses Markdown tables with it, nbconvert pulls it in too
 
     # Image Processing
@@ -59,6 +60,7 @@ dependencies = [
     "pillow-heif>=0.22.0",
     "pytesseract>=0.3.13",
     "opencv-python>=4.12.0.88",
+    "opencv-python-headless==4.13.0.92",  # pdf2docx needs it. Both packages install cv2, so keep this on opencv-python's version in uv.lock
     "vtracer>=0.6.15",
 
     # Data Processing
