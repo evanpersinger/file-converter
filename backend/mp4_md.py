@@ -18,7 +18,7 @@ from llm_pdf_md import not_cancelled
 
 # The Whisper sizes on offer. Anything else is refused instead of handed to faster-whisper,
 # which would read an unknown name as a Hugging Face repo to download.
-WHISPER_MODELS = ("tiny", "base", "small", "medium", "large-v3")
+WHISPER_MODELS = ("base", "small", "medium", "large-v3")
 
 # Seconds between the frames read for on-screen text.
 FRAME_INTERVAL_SECONDS = 2

@@ -144,7 +144,7 @@ def test_names_on_screen_are_handed_to_whisper_as_hints(
         lambda image: words("Kirsten Moisey presents" if image.mean() > 128 else "Demyon Plekhov follows"),
     )
 
-    mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+    mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir)
 
     assert whispers[0].hotwords == "Kirsten Moisey Demyon Plekhov"
 
@@ -156,7 +156,7 @@ def test_whisper_gets_no_hints_when_nothing_is_on_screen(
     write_video(input_dir / "clip.mp4")
     whispers = use_fakes(monkeypatch, [Segment(start=1.0, end=2.0, text="Hello")], lambda image: words(""))
 
-    mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+    mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir)
 
     assert whispers[0].hotwords is None
 
@@ -222,10 +222,10 @@ def test_speech_and_screen_text_land_on_one_timeline(
     ]
     whispers = use_fakes(monkeypatch, segments, slide)
 
-    summary = mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+    summary = mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir)
 
     assert "clip.md" in summary
-    assert [whisper.model for whisper in whispers] == ["tiny"]
+    assert [whisper.model for whisper in whispers] == ["base"]
     assert (output_dir / "clip.md").read_text(encoding="utf-8") == (
         "**00:00** On screen: SLIDE ONE\n\n**00:01** Said: Hello there\n\n"
         "**00:04** On screen: SLIDE TWO\n\n**00:05** Said: Goodbye"
@@ -245,7 +245,7 @@ def test_a_frame_that_looks_like_the_last_one_is_not_read_again(
 
     use_fakes(monkeypatch, [], reading)
 
-    mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+    mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir)
 
     # Frames at 0s, 2s and 4s are sampled, the 2s one is the same white picture as the 0s one.
     assert readings == ["SLIDE ONE", "SLIDE TWO"]
@@ -263,7 +263,7 @@ def test_a_slightly_different_reading_of_the_same_screen_is_not_a_new_entry(
         ),
     )
 
-    mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+    mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir)
 
     assert (output_dir / "clip.md").read_text(encoding="utf-8") == "**00:00** On screen: Quarterly Planning Agenda"
 
@@ -279,7 +279,7 @@ def test_a_frame_tesseract_cannot_read_well_adds_nothing(
         lambda image: words("SLIDE ONE") if image.mean() > 128 else words("hey ce fac", confidence=20),
     )
 
-    mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+    mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir)
 
     assert (output_dir / "clip.md").read_text(encoding="utf-8") == "**00:00** On screen: SLIDE ONE"
 
@@ -297,7 +297,7 @@ def test_a_slide_does_not_repeat_after_an_unreadable_frame_in_the_middle_of_it(
         lambda image: words("SLIDE ONE") if image.mean() > 128 else words("hey ce fac", confidence=20),
     )
 
-    mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+    mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir)
 
     assert (output_dir / "clip.md").read_text(encoding="utf-8") == "**00:00** On screen: SLIDE ONE"
 
@@ -309,7 +309,7 @@ def test_a_video_with_nothing_to_read_or_hear_is_reported_as_failed(
     write_video(input_dir / "clip.mp4")
     use_fakes(monkeypatch, [], lambda image: words(""))
 
-    summary = mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir)
+    summary = mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir)
 
     assert summary == "No files converted. 1 failed: clip.mp4: no speech or on-screen text found"
     assert not (output_dir / "clip.md").exists()
@@ -322,7 +322,7 @@ def test_cancelling_drops_the_file_instead_of_writing_part_of_it(
     write_video(input_dir / "clip.mp4")
     use_fakes(monkeypatch, [Segment(start=1.0, end=2.0, text="Hello")], slide)
 
-    summary = mp4_md.convert_mp4_to_markdown("tiny", input_dir, output_dir, should_cancel=lambda: True)
+    summary = mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir, should_cancel=lambda: True)
 
     assert summary == "No files converted. 1 failed: clip.mp4: Cancelled"
     assert not (output_dir / "clip.md").exists()

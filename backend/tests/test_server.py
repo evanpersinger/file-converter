@@ -670,11 +670,11 @@ def test_a_video_conversion_uses_the_whisper_model_the_user_chose(
 
     client.post(
         "/api/convert",
-        data={"target": "mp4->md", "model": "tiny"},
+        data={"target": "mp4->md", "model": "base"},
         files={"file": ("clip.mp4", b"not really an mp4")},
     )
 
-    assert calls == ["tiny"]
+    assert calls == ["base"]
 
 
 def test_a_video_conversion_refuses_a_model_that_is_not_a_whisper_size(
@@ -914,7 +914,7 @@ def test_a_video_over_the_convert_limit_is_taken(
 
     response = client.post(
         "/api/convert",
-        data={"target": "mp4->md", "model": "tiny"},
+        data={"target": "mp4->md", "model": "base"},
         files={"file": ("clip.mp4", b"a" * (2 * 1024 * 1024))},
     )
 
@@ -930,7 +930,7 @@ def test_a_video_over_the_video_limit_is_rejected(
 
     response = client.post(
         "/api/convert",
-        data={"target": "mp4->md", "model": "tiny"},
+        data={"target": "mp4->md", "model": "base"},
         files={"file": ("clip.mp4", b"a" * (1024 * 1024 + 1))},
     )
 
