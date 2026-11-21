@@ -166,8 +166,9 @@
 }
 
 main {
-  /* Starts at 30rem and shares the leftover width with Result, up to the cap. */
-  flex: 1 1 30rem;
+  /* Starts at 30rem and takes three parts of the leftover width to Result's one, up to the
+     cap, so Result stays about as wide as its title row. */
+  flex: 3 1 30rem;
   min-width: 0;
   max-width: 50rem;
   margin: 0.75rem 0 2.5rem;
