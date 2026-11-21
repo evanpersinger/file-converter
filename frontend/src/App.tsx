@@ -841,23 +841,29 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
         </div>
 
         <div className="result-actions">
-          <button
-            type="button"
-            onDoubleClick={() => setResult(null)}
-            disabled={!result}
-          >
-            Clear
-            <span className="clear-hint">Click twice to clear</span>
-          </button>
+          <span className="tip">
+            <button
+              type="button"
+              onDoubleClick={() => setResult(null)}
+              disabled={!result}
+            >
+              Clear
+              <span className="clear-hint">Click twice to clear</span>
+            </button>
+          </span>
 
-          <button type="button" onClick={downloadAll} disabled={!result}>
-            Download All
-          </button>
+          <span className="tip">
+            <button type="button" onClick={downloadAll} disabled={!result}>
+              Download All
+            </button>
+          </span>
 
           {status.kind === 'converting' && (
-            <button type="button" onClick={cancelCurrentJob} disabled={cancelling}>
-              {cancelling ? 'Cancelling...' : 'Cancel'}
-            </button>
+            <span className="tip">
+              <button type="button" onClick={cancelCurrentJob} disabled={cancelling}>
+                {cancelling ? 'Cancelling...' : 'Cancel'}
+              </button>
+            </span>
           )}
         </div>
 

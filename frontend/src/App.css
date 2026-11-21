@@ -480,18 +480,34 @@ h2 {
 }
 
 /* Under Convert and Combine: Clear and Download All, both acting on the converted
-   files. Sized to their text rather than the full row, and stretched to the same
-   height, since Clear carries a second line. */
+   files. They share the row like Convert and Combine, and the same height, since Clear
+   carries a second line. */
 .result-actions {
   display: flex;
   gap: 1rem;
   margin-top: 0.5rem;
 }
 
+/* Each button sits in a .tip wrapper that is a container, so its text shrinks with the
+   button the way .action's does. Stretched to the tallest button, which the button fills. */
+.result-actions .tip {
+  flex: 1 1 12rem;
+  container-type: inline-size;
+}
+
+/* The text is 1rem, shrinking on a narrow button so "Download All" (about 6.5em wide) stays
+   on one line. The 2.5rem is the button's padding and border. */
 .result-actions button {
   box-sizing: border-box;
+  height: 100%;
   padding: 0.4rem 0.75rem;
-  font-size: 1rem;
+  font-size: min(1rem, calc((100cqw - 2.5rem) / 7));
+  white-space: nowrap;
+}
+
+/* The hint is a sentence, not a label, so it may still wrap. */
+.result-actions .clear-hint {
+  white-space: normal;
 }
 
 /* A fixed height, so making the text bigger doesn't make the button bigger. The text is
