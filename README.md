@@ -33,7 +33,7 @@ OpenAI, or Anthropic (the last two cost money and need `OPENAI_API_KEY` or
 
 ## What it converts
 
-- **PDF** to Markdown (OCR or LLM), PNG
+- **PDF** to Markdown (OCR or LLM), text (OCR), Word, PNG, JPG
 - **Word** to Markdown, PDF
 - **PowerPoint** to PDF, Markdown
 - **Markdown, HTML, TXT, SQL, Jupyter, R Markdown** to PDF
@@ -97,6 +97,8 @@ Tests that need a missing tool are skipped, not failed. CI installs `libmagic`, 
 - Markdown and PDF to TOON convert tables only, and a file with none fails. A PDF table needs ruling
   lines and two or more columns. TOON to PDF draws Latin text only, so Chinese or emoji fails instead
   of printing boxes.
+- PDF to Word keeps the layout but does no OCR, so scanned pages don't become text. Use PDF to
+  Markdown or text for those.
 - OCR is English-only on purpose. Other languages come back as garbled English, not an error.
 - Handwriting reads better from a scan than from a phone photo.
 
