@@ -298,9 +298,9 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     }
   }, [])
 
-  // PNGs added with a file whose conversion takes images (a Markdown file linking to them) are
-  // sent along with each converted file, wherever they sit in the list, so they are neither
-  // converted nor a different format.
+  // Images (PNG or JPG) added with a file whose conversion takes images (a Markdown file linking
+  // to them) are sent along with each converted file, wherever they sit in the list, so they
+  // are neither converted nor a different format.
   const takesImages = (file: File) => !!formats?.byExtension[extensionOf(file.name)]?.some((t) => t.takesImages)
   const attachments = files.some(takesImages) ? files.filter(isImage) : []
   const documents = files.filter((f) => !attachments.includes(f))
@@ -777,8 +777,8 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
         {attachments.length > 0 && (
           <p className="muted note">
             {selected?.takesImages
-              ? 'The PNG images are sent along with each file, and used where the file links to them.'
-              : 'The PNG images are not used by this conversion.'}
+              ? 'The images are sent along with each file, and used where the file links to them.'
+              : 'The images are not used by this conversion.'}
           </p>
         )}
 
@@ -843,7 +843,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
                 : files.length < 2
                   ? 'Add two or more files to combine'
                   : attachments.length > 0
-                    ? 'Remove the PNG images to combine'
+                    ? 'Remove the images to combine'
                     : mixedExtensions
                       ? 'Every file has to be the same format'
                       : undefined

@@ -186,5 +186,5 @@ export function extensionOf(filename: string): string {
   return dot === -1 ? '' : filename.slice(dot).toLowerCase()
 }
 
-/** Whether the file is a PNG, the only type the backend takes as an image sent along with another file. */
-export const isImage = (file: File) => extensionOf(file.name) === '.png'
+/** Whether the file is a PNG or JPG, the types the backend takes as an image sent along with another file. */
+export const isImage = (file: File) => ['.png', '.jpg', '.jpeg'].includes(extensionOf(file.name))

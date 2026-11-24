@@ -11,7 +11,7 @@ export interface Target {
   /** The LLM tab's Markdown format ("Typed PDF") and the provider running it ("local", "openai", "anthropic", "whisper"). Null outside the LLM tab. */
   script: string | null
   provider: string | null
-  /** True when PNGs added with the file are sent along with it (Markdown links to them). */
+  /** True when images (PNG or JPG) added with the file are sent along with it (Markdown links to them). */
   takesImages?: boolean
 }
 
