@@ -378,6 +378,17 @@ def test_page_drops_the_prompt_a_small_model_repeats_back(monkeypatch: pytest.Mo
     assert llm_pdf_md._convert_page_ollama("img", "qwen3.5:2b", prompt) == "# Real heading\n\nBody text."
 
 
+def test_page_drops_a_partial_prompt_echo_with_curly_apostrophes(monkeypatch: pytest.MonkeyPatch) -> None:
+    prompt = "Transcribe the page exactly. Copy it as it is, even if it doesn't make sense. Begin directly."
+    echo = "Copy it as it is, even if it doesn’t make sense. Begin directly."
+    reply = f"{echo}\n\nNov 20\nvery important topic"
+    monkeypatch.setattr(
+        llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": reply}})
+    )
+
+    assert llm_pdf_md._convert_page_ollama("img", "glm-ocr:latest", prompt) == "Nov 20\nvery important topic"
+
+
 def test_local_continues_after_one_pdf_fails_mid_batch(
     work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -39,6 +39,7 @@ MAX_LOCAL_PAGE_PIXELS = 4_000_000  # Letter and A4 at 200 DPI fit (about 3.7M an
 OLLAMA_PAGE_TIMEOUT_SECONDS = 60  # a page taking longer than this is treated as stuck, not just slow
 BATCH_PAUSE_BYTES = 100 * 1024 * 1024  # a batch totalling more than this gets a rest between files
 PAUSE_SECONDS = 30
+MIN_ECHO_CHARS = 20  # a reply's first paragraph shorter than this is never taken for an echo of the prompt
 
 _DOCUMENT_PROMPT = (
     "Convert this PDF to Markdown. Reproduce the text faithfully and completely, do not "
@@ -191,9 +192,24 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
 
 
 def _strip_echoed_prompt(text: str, prompt: str) -> str:
-    """Drop our prompt from the start of a reply that repeated it back, small models do."""
+    """Drop our prompt from the start of a reply that repeated it back, small models do.
+
+    The echo can be only the tail of the prompt and can swap straight apostrophes for curly
+    ones (glm-ocr does both), so a first paragraph that is a piece of the prompt is dropped too.
+    """
     stripped = text.lstrip()
-    return stripped.removeprefix(prompt).lstrip() if stripped.startswith(prompt) else text
+    if stripped.startswith(prompt):
+        return stripped.removeprefix(prompt).lstrip()
+    first_paragraph, _, rest = stripped.partition("\n\n")
+    flat = _flatten(first_paragraph)
+    if len(flat) >= MIN_ECHO_CHARS and flat in _flatten(prompt):
+        return rest.lstrip()
+    return text
+
+
+def _flatten(text: str) -> str:
+    """Collapse whitespace and curly apostrophes so two spellings of the same text compare equal."""
+    return " ".join(text.replace("’", "'").split())
 
 
 def _raise_for_ollama_error(response: requests.Response) -> None:
