@@ -774,9 +774,9 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
           </ol>
         )}
 
-        {attachments.length > 0 && (
+        {attachments.length > 0 && selected && (
           <p className="muted note">
-            {selected?.takesImages
+            {selected.takesImages
               ? 'The images are sent along with each file, and used where the file links to them.'
               : 'The images are not used by this conversion.'}
           </p>
