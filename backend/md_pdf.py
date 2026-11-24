@@ -154,6 +154,8 @@ LATEX_HEADER = """\\usepackage[margin=1in]{geometry}
 \\usepackage{float}
 % Configure table placement to avoid page breaks (H = here, don't float)
 \\floatplacement{table}{H}
+% Same for figures (images), or LaTeX floats one that doesn't fit past the text written after it
+\\floatplacement{figure}{H}
 % Set table column width handling - reduce spacing for better alignment
 \\setlength{\\tabcolsep}{4pt}
 \\renewcommand{\\arraystretch}{1.2}

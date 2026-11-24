@@ -1726,6 +1726,28 @@ def test_a_linked_png_is_drawn_in_the_pdf(work_dirs: WorkDirs, capsys: pytest.Ca
 
 
 @needs_latex
+def test_a_figure_stays_where_it_is_written_between_the_text_around_it(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A figure that doesn't fit at the bottom of a page used to float to the top of the next
+    one, past the text written after it."""
+    input_dir, output_dir = work_dirs
+    Image.new("RGB", (600, 700), "red").save(input_dir / "plot.png")
+    filler = "\n\n".join(f"Paragraph {i}. " + "Some filler text for the page. " * 4 for i in range(1, 17))
+    markdown = f"{filler}\n\nBEFOREIMAGE\n\n![Plot](plot.png)\n\nAFTERIMAGE\n"
+    (input_dir / "doc.md").write_text(markdown, encoding="utf-8")
+
+    converted = convert_md_to_pdf("doc.md", None, input_dir, output_dir)
+
+    assert converted, capsys.readouterr().out
+    with fitz.open(output_dir / "doc.pdf") as document:
+        page = next(p for p in document if p.search_for("AFTERIMAGE"))
+        images = [page.get_image_bbox(image) for image in page.get_images(full=True)]
+        assert len(images) == 1, "the image is not on the page of the text after it"
+        assert images[0].y1 <= page.search_for("AFTERIMAGE")[0].y0
+
+
+@needs_latex
 def test_well_formed_math_renders_in_full(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
     log, text = render(work_dirs, capsys, "The estimator $\\hat{\\beta}$ is $\\alpha \\le \\beta$.\n")
 
