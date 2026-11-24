@@ -156,6 +156,35 @@ def test_local_sends_a_jpg_with_the_handwriting_prompt_and_the_chosen_model(
     assert len(calls[0]["messages"][0]["images"]) == 1
 
 
+@pytest.mark.parametrize("model, taller", [("glm-ocr:latest", True), ("gemma4:12b", False)])
+def test_local_adds_a_banner_line_above_the_image_for_glm_ocr_only(
+    model: str, taller: bool, work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    Image.new("RGB", (480, 600), "white").save(input_dir / "note.jpg")
+    calls = _fake_ollama(monkeypatch)
+
+    llm_md.convert_handwriting_to_markdown_local(model, input_dir, output_dir)
+
+    sent = fitz.Pixmap(base64.b64decode(calls[0]["messages"][0]["images"][0]))
+    assert (sent.height > 600) is taller
+
+
+@pytest.mark.parametrize("reply", ["Page start\nNov 13\nSummary", "Nov 13\nSummary"])
+def test_local_drops_the_banner_line_only_when_glm_ocr_transcribed_it(
+    reply: str, work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    _make_jpg(input_dir / "note.jpg")
+    monkeypatch.setattr(
+        llm_md.requests, "post", lambda url, json, timeout: FakeResponse({"message": {"content": reply}})
+    )
+
+    llm_md.convert_handwriting_to_markdown_local("glm-ocr:latest", input_dir, output_dir)
+
+    assert (output_dir / "note.md").read_text(encoding="utf-8") == "Nov 13\nSummary"
+
+
 def test_local_sends_an_image_within_the_pixel_cap_for_an_oversize_pdf_page(
     work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:

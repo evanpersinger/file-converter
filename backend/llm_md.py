@@ -8,6 +8,7 @@ Meant for pages that are primarily handwritten. Typed text should go through pdf
 """
 
 import base64
+import io
 import os
 import re
 import sys
@@ -18,10 +19,12 @@ import anthropic
 import fitz  # PyMuPDF
 import requests
 from openai import OpenAI
+from PIL import Image, ImageDraw, ImageFont
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
 from llm_pdf_md import (
     BATCH_PAUSE_BYTES,
+    OCR_MODEL_PREFIX,
     OLLAMA_HOST,
     _convert_page_ollama,
     _prompt_for_local_model,
@@ -62,6 +65,33 @@ def _split_notes(text: str, page: int | None = None) -> str:
         # A page note starts on its own line, the progress line before it has no newline.
         print(f"\nModel note (page {page}): {notes}" if page else f"Model note: {notes}")
     return transcription.rstrip()
+
+
+_BANNER_TEXT = "Page start"
+
+
+def _add_banner(image_b64: str) -> str:
+    """Return the image with a line of text above it, as a base64 PNG.
+
+    glm-ocr leaves out the top line of a handwritten page, so it gets a throwaway line to skip
+    instead. The text scales with the image width, so it reads the same on a phone photo.
+    """
+    image = Image.open(io.BytesIO(base64.b64decode(image_b64))).convert("RGB")
+    font_size = max(image.width // 24, 12)  # 70 on a 200 DPI Letter page, 12 keeps a tiny image from getting size 0
+    banner = Image.new("RGB", (image.width, image.height + font_size * 2), "white")
+    banner.paste(image, (0, font_size * 2))
+    ImageDraw.Draw(banner).text(
+        (font_size, font_size // 2), _BANNER_TEXT, fill="black", font=ImageFont.load_default(size=font_size)
+    )
+    buffer = io.BytesIO()
+    banner.save(buffer, "PNG")
+    return base64.standard_b64encode(buffer.getvalue()).decode("ascii")
+
+
+def _drop_banner_line(text: str) -> str:
+    """Drop the first line of a reply that transcribed the banner. A reply that skipped it comes back as is."""
+    first_line, _, rest = text.lstrip().partition("\n")
+    return rest if first_line.strip().lower() == _BANNER_TEXT.lower() else text
 
 
 # OpenAI (one image per call)
@@ -347,7 +377,9 @@ def convert_handwriting_to_markdown_local(
         return f"Error: Ollama not reachable at {OLLAMA_HOST}. Run `ollama serve` (or open the Ollama app)."
 
     def convert_image(image_b64: str, _media_type: str) -> str:
-        return _convert_page_ollama(image_b64, model, _HANDWRITING_PROMPT)
+        if not model.startswith(OCR_MODEL_PREFIX):
+            return _convert_page_ollama(image_b64, model, _HANDWRITING_PROMPT)
+        return _drop_banner_line(_convert_page_ollama(_add_banner(image_b64), model, _HANDWRITING_PROMPT))
 
     return _convert_all(
         lambda path: _convert_file(path, convert_image, should_cancel),
