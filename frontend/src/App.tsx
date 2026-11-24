@@ -298,9 +298,16 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     }
   }, [])
 
-  // The first file drives the format buttons and the mismatch check. Combining
-  // requires everything to share one extension anyway, so it is representative.
-  const primary = files[0] ?? null
+  // PNGs added with a file whose conversion takes images (a Markdown file linking to them) are
+  // sent along with each converted file, wherever they sit in the list, so they are neither
+  // converted nor a different format.
+  const takesImages = (file: File) => !!formats?.byExtension[extensionOf(file.name)]?.some((t) => t.takesImages)
+  const attachments = files.some(takesImages) ? files.filter(isImage) : []
+  const documents = files.filter((f) => !attachments.includes(f))
+
+  // The first file that gets converted drives the format buttons and the mismatch check.
+  // Combining requires everything to share one extension anyway, so it is representative.
+  const primary = documents[0] ?? null
   const ext = primary ? extensionOf(primary.name) : ''
   const forFile = (ext && formats?.byExtension[ext]) || []
   const blockedForFile = (ext && formats?.unavailable[ext]) || []
@@ -309,11 +316,6 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   const blocked = blockedForFile.filter((u) => !u.group)
   const llmTargets = forFile.filter((t) => t.group === 'llm')
   const llmBlocked = blockedForFile.filter((u) => u.group === 'llm')
-
-  // PNGs added with a file whose conversion takes images (a Markdown file linking to them) are
-  // sent along with each converted file, so they are neither converted nor a different format.
-  const attachments = forFile.some((t) => t.takesImages) ? files.filter(isImage) : []
-  const documents = files.filter((f) => !attachments.includes(f))
 
   const distinctExts = [...new Set(documents.map((f) => canonical(extensionOf(f.name))))]
   const mixedExtensions = documents.length >= 2 && distinctExts.length > 1
@@ -347,7 +349,8 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   )
 
   // What Convert runs, and what is still missing when it can't.
-  const runTarget = tab === 'llm' ? (llmRoute?.id ?? null) : target
+  // A pick that doesn't belong to the first file (the list changed under it) is no pick at all.
+  const runTarget = tab === 'llm' ? (llmRoute?.id ?? null) : (selected?.id ?? null)
   const missingPick =
     tab !== 'llm' ? 'Pick a format to convert with'
       : script && model ? 'That model cannot run this format on this file'
