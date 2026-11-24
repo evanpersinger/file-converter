@@ -16,6 +16,7 @@ from pathlib import Path
 
 import fitz
 import pytest
+from PIL import Image
 
 import md_pdf
 from external_tool import ToolTimeout
@@ -38,6 +39,7 @@ from md_pdf import (
     convert_md_to_pdf,
     convert_symbols,
     ensure_list_spacing,
+    missing_pngs,
     normalize_math_delimiters,
     normalize_tables,
     run_pandoc,
@@ -1057,8 +1059,13 @@ def pandoc_calls(monkeypatch: pytest.MonkeyPatch) -> PandocCalls:
     pandoc lookup finds it, so none of these tests needs pandoc installed."""
     calls: PandocCalls = []
 
-    def fake_run_pandoc(rich_md: str, safe_md: str, output_path: Path, input_name: str) -> bool:
-        calls.append({"rich": rich_md, "safe": safe_md, "output": output_path, "name": input_name})
+    def fake_run_pandoc(
+        rich_md: str, safe_md: str, output_path: Path, input_name: str, resource_dir: Path | None = None
+    ) -> bool:
+        calls.append({
+            "rich": rich_md, "safe": safe_md, "output": output_path, "name": input_name,
+            "resource_dir": resource_dir,
+        })
         return True
 
     monkeypatch.setattr("md_pdf.run_pandoc", fake_run_pandoc)
@@ -1279,7 +1286,7 @@ def test_an_unexpected_error_is_reported_not_raised(
     input_dir, output_dir = work_dirs
     write_md(input_dir, "notes.md")
 
-    def explode(*args: object) -> bool:
+    def explode(*args: object, **kwargs: object) -> bool:
         raise RuntimeError("boom")
 
     monkeypatch.setattr("md_pdf.run_pandoc", explode)
@@ -1321,7 +1328,14 @@ def scripted_pandoc(monkeypatch: pytest.MonkeyPatch) -> ScriptedPandoc:
         calls: PandocCalls = []
         remaining = list(results)
 
-        def fake(md_text: str, output_path: Path, from_fmt: str, header_path: str, mermaid_filter: str | None):
+        def fake(
+            md_text: str,
+            output_path: Path,
+            from_fmt: str,
+            header_path: str,
+            mermaid_filter: str | None,
+            resource_dir: Path | None = None,
+        ):
             calls.append({
                 "text": md_text,
                 "output": output_path,
@@ -1329,6 +1343,7 @@ def scripted_pandoc(monkeypatch: pytest.MonkeyPatch) -> ScriptedPandoc:
                 "header": Path(header_path),
                 "header_text": Path(header_path).read_text(encoding="utf-8"),
                 "mermaid": mermaid_filter,
+                "resource_dir": resource_dir,
             })
             return remaining.pop(0)
 
@@ -1337,6 +1352,16 @@ def scripted_pandoc(monkeypatch: pytest.MonkeyPatch) -> ScriptedPandoc:
         return calls
 
     return install
+
+
+def test_both_renders_look_for_images_in_the_given_folder(
+    scripted_pandoc: ScriptedPandoc, tmp_path: Path
+) -> None:
+    calls = scripted_pandoc((False, "boom"), (True, ""))
+
+    run_pandoc("RICH", "SAFE", tmp_path / "out.pdf", "notes.md", resource_dir=tmp_path)
+
+    assert [call["resource_dir"] for call in calls] == [tmp_path, tmp_path]
 
 
 def test_a_good_full_render_is_the_only_render(
@@ -1414,7 +1439,14 @@ def test_the_header_is_removed_when_a_render_raises(
 ) -> None:
     headers: list[Path] = []
 
-    def explode(md_text: str, output_path: Path, from_fmt: str, header_path: str, mermaid_filter: str | None):
+    def explode(
+        md_text: str,
+        output_path: Path,
+        from_fmt: str,
+        header_path: str,
+        mermaid_filter: str | None,
+        resource_dir: Path | None = None,
+    ):
         headers.append(Path(header_path))
         raise RuntimeError("boom")
 
@@ -1593,9 +1625,74 @@ def test_the_error_file_mermaid_filter_leaves_behind_is_removed(
     assert not (tmp_path / "mermaid-filter.err").exists()
 
 
+# Image links
+
+
+def test_pandoc_is_told_where_to_look_for_images(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen = fake_tool(monkeypatch, create=tmp_path / "out.pdf")
+
+    _pandoc_once("# hi", tmp_path / "out.pdf", PANDOC_FROM, "h.tex", None, tmp_path)
+
+    assert f"--resource-path={tmp_path}" in seen["command"]
+
+
+def test_images_are_looked_up_in_the_markdowns_own_folder(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md")
+
+    convert_md_to_pdf("notes.md", None, input_dir, output_dir)
+
+    assert pandoc_calls[0]["resource_dir"] == input_dir
+
+
+def test_a_linked_png_the_folder_lacks_is_reported_once_by_its_decoded_name(tmp_path: Path) -> None:
+    (tmp_path / "here.png").write_bytes(b"x")
+    markdown = (
+        "![a](here.png)\n\n![b](gone.png)\n\n![c](gone.png)\n\n![d](my%20plot.png)\n\n"
+        "![e](Shouty.PNG)\n\n- ![f](in_list.png)\n"
+    )
+
+    assert missing_pngs(markdown, tmp_path) == ["gone.png", "my plot.png", "Shouty.PNG", "in_list.png"]
+
+
+@pytest.mark.parametrize("markdown", [
+    "```\n![x](a.png)\n```\n",  # an example in a code block
+    "`![x](a.png)`\n",  # an example in a code span
+    "![x](https://example.com/a.png)\n",
+    "![x](figs/a.png)\n",
+    "![x](a.jpg)\n",
+])
+def test_a_link_that_is_not_a_plain_png_name_is_not_required(markdown: str, tmp_path: Path) -> None:
+    assert missing_pngs(markdown, tmp_path) == []
+
+
+def test_a_missing_png_stops_the_conversion_before_pandoc(
+    work_dirs: WorkDirs, pandoc_calls: PandocCalls, capsys: pytest.CaptureFixture[str]
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md", "![Scatterplot](scatterplot.png)\n")
+
+    converted = convert_md_to_pdf("notes.md", None, input_dir, output_dir)
+
+    assert converted is False
+    assert "scatterplot.png" in capsys.readouterr().out
+    assert pandoc_calls == []
+
+
+def test_a_png_that_is_there_lets_the_conversion_run(work_dirs: WorkDirs, pandoc_calls: PandocCalls) -> None:
+    input_dir, output_dir = work_dirs
+    write_md(input_dir, "notes.md", "![Scatterplot](scatterplot.png)\n")
+    (input_dir / "scatterplot.png").write_bytes(b"x")
+
+    assert convert_md_to_pdf("notes.md", None, input_dir, output_dir) is True
+    assert len(pandoc_calls) == 1
+
+
 # Real PDFs, through real pandoc and xelatex
 
-needs_latex = pytest.mark.skipif(
+needs_latex =pytest.mark.skipif(
     sys.platform != "darwin" or not (shutil.which("pandoc") and shutil.which("xelatex")),
     reason="needs pandoc, xelatex and macOS (the header asks for the Menlo font)",
 )
@@ -1613,6 +1710,19 @@ def render(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str], markdown: st
     assert converted, log
     with fitz.open(output_dir / "doc.pdf") as document:
         return log, "\n".join(page.get_text() for page in document)
+
+
+@needs_latex
+def test_a_linked_png_is_drawn_in_the_pdf(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
+    input_dir, output_dir = work_dirs
+    Image.new("RGB", (200, 100), "red").save(input_dir / "plot.png")
+    (input_dir / "doc.md").write_text("Before\n\n![Plot](plot.png)\n\nAfter\n", encoding="utf-8")
+
+    converted = convert_md_to_pdf("doc.md", None, input_dir, output_dir)
+
+    assert converted, capsys.readouterr().out
+    with fitz.open(output_dir / "doc.pdf") as document:
+        assert sum(len(page.get_images()) for page in document) == 1
 
 
 @needs_latex

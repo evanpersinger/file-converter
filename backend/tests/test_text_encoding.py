@@ -91,7 +91,7 @@ def test_md_pdf_reads_a_windows_1252_file(
     _write_cp1252(input_dir / "notes.md", "# café\n")
     handed: list[str] = []
 
-    def fake_pandoc(rich_md: str, safe_md: str, output: Path, name: str) -> bool:
+    def fake_pandoc(rich_md: str, safe_md: str, output: Path, name: str, resource_dir: Path | None = None) -> bool:
         handed.append(safe_md)
         return True
 

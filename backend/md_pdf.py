@@ -10,6 +10,9 @@ import tempfile
 import traceback
 from pathlib import Path
 from shutil import which
+from urllib.parse import unquote
+
+import mistune
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, read_text
 from external_tool import ToolTimeout, run_tool
@@ -844,8 +847,12 @@ def _extract_bad_command(err):
     return f"\\{cmds[-1]}" if cmds else None
 
 
-def _pandoc_once(md_text, output_path, from_fmt, header_path, mermaid_filter):
-    """Run pandoc once on md_text. Returns (ok, error_message)."""
+def _pandoc_once(md_text, output_path, from_fmt, header_path, mermaid_filter, resource_dir=None):
+    """Run pandoc once on md_text. Returns (ok, error_message).
+
+    md_text is written to a temp file, so a relative image link like `plot.png` would be looked
+    up in the server's own working folder. resource_dir is where it is looked up instead.
+    """
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False,
                                      encoding="utf-8") as temp_md:
         temp_md.write(md_text)
@@ -860,6 +867,8 @@ def _pandoc_once(md_text, output_path, from_fmt, header_path, mermaid_filter):
         f"--from={from_fmt}",
         "--to=pdf",
     ]
+    if resource_dir:
+        cmd.append(f"--resource-path={resource_dir}")
     if mermaid_filter:
         cmd += ["--filter", mermaid_filter]
 
@@ -888,8 +897,11 @@ def _pandoc_once(md_text, output_path, from_fmt, header_path, mermaid_filter):
     return False, error_msg
 
 
-def run_pandoc(rich_md, safe_md, output_path, input_name):
-    """Render with full fidelity, falling back to a safe render if xelatex fails."""
+def run_pandoc(rich_md, safe_md, output_path, input_name, resource_dir=None):
+    """Render with full fidelity, falling back to a safe render if xelatex fails.
+
+    resource_dir is the folder image links are looked up in, see _pandoc_once.
+    """
     with tempfile.NamedTemporaryFile(mode="w", suffix=".tex", delete=False,
                                      encoding="utf-8") as header_file:
         header_file.write(LATEX_HEADER)
@@ -898,7 +910,7 @@ def run_pandoc(rich_md, safe_md, output_path, input_name):
     mermaid_filter = which("mermaid-filter")
 
     try:
-        ok, err = _pandoc_once(rich_md, output_path, PANDOC_FROM, header_path, mermaid_filter)
+        ok, err = _pandoc_once(rich_md, output_path, PANDOC_FROM, header_path, mermaid_filter, resource_dir)
         if ok:
             print(f"Converted {input_name} to {output_path.name}")
             return True
@@ -911,7 +923,7 @@ def run_pandoc(rich_md, safe_md, output_path, input_name):
         else:
             print("  full render failed; retrying in safe mode")
 
-        ok, err2 = _pandoc_once(safe_md, output_path, PANDOC_FROM_SAFE, header_path, mermaid_filter)
+        ok, err2 = _pandoc_once(safe_md, output_path, PANDOC_FROM_SAFE, header_path, mermaid_filter, resource_dir)
         if ok:
             print(f"  produced a PDF in safe mode (math shown as text): {input_name} to {output_path.name}")
             return True
@@ -927,6 +939,40 @@ def run_pandoc(rich_md, safe_md, output_path, input_name):
             os.unlink(header_path)
         except OSError:
             pass
+
+
+# Image links
+# Reads the Markdown the way a renderer does, so an image link inside a code block or a code
+# span, where it is only an example, isn't counted.
+_IMAGE_PARSER = mistune.create_markdown(renderer=None)
+
+# A link to a PNG by its plain file name: no folder, no web address (`https:`), no drive letter
+_PLAIN_PNG_NAME = re.compile(r"[^/\\:]+\.png", re.IGNORECASE)
+
+
+def _image_urls(tokens: list[dict]) -> list[str]:
+    """The link of every image in the parsed Markdown, in order."""
+    urls = []
+    for token in tokens:
+        if token["type"] == "image":
+            urls.append(token["attrs"]["url"])
+        urls += _image_urls(token.get("children", []))
+    return urls
+
+
+def missing_pngs(md_text: str, folder: Path) -> list[str]:
+    """The PNG files md_text links as images that are not in folder, each named once.
+
+    Only links by plain file name count. A link with a folder in it, a web address, or another
+    image type is left to pandoc, which prints the image's description in its place when it
+    can't find the file.
+    """
+    missing = []
+    for url in _image_urls(_IMAGE_PARSER(md_text)):
+        name = unquote(url)  # mistune leaves a space in a file name as %20
+        if _PLAIN_PNG_NAME.fullmatch(name) and not (folder / name).is_file() and name not in missing:
+            missing.append(name)
+    return missing
 
 
 # Orchestration
@@ -975,6 +1021,12 @@ def convert_md_to_pdf(
     try:
         md_content = read_text(full_input_path, translate_newlines=True)
 
+        # Without this pandoc only warns, and the PDF shows the image's description instead
+        if missing := missing_pngs(md_content, full_input_path.parent):
+            print(f"Error: {full_input_path.name} links PNG images that were not added: "
+                  f"{', '.join(missing)}. Add them along with the Markdown file.")
+            return False
+
         # Shared safe preprocessing (no injected LaTeX) -> reused by the fallback
         md_content = clean_control_chars(md_content)
         md_content = normalize_math_delimiters(md_content)
@@ -988,7 +1040,8 @@ def convert_md_to_pdf(
 
         existed_before = full_output_path.exists()
         print(f"Converting {full_input_path.name} to pdf")
-        ok = run_pandoc(rich_md, safe_md, full_output_path, full_input_path.name)
+        ok = run_pandoc(rich_md, safe_md, full_output_path, full_input_path.name,
+                        resource_dir=full_input_path.parent)
         if ok and existed_before:
             print(f"Overwrote existing file: {full_output_path.name}")
         return ok
