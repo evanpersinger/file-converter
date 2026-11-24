@@ -222,6 +222,79 @@ def test_a_source_extension_the_conversion_does_not_accept_is_rejected(
     assert ".csv" in body["hint"]
 
 
+@pytest.fixture
+def md_pdf_without_pandoc(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[str]]:
+    """Markdown to PDF with pandoc replaced: the converter records the files staged in its
+    input folder and writes a stub PDF, and the pandoc and LaTeX checks pass."""
+    monkeypatch.setitem(server.DEPS, "pandoc", lambda: True)
+    monkeypatch.setitem(server.DEPS, "latex", lambda: True)
+    seen: dict[str, list[str]] = {}
+
+    def fake_convert(md_path: str, output_path: str | None, input_dir: Path, output_dir: Path) -> bool:
+        seen["staged"] = sorted(p.name for p in Path(input_dir).iterdir())
+        (Path(output_dir) / "doc.pdf").write_bytes(b"%PDF-1.4\n")
+        return True
+
+    monkeypatch.setattr(server.md_pdf, "convert_md_to_pdf", fake_convert)
+    return seen
+
+
+def test_pngs_sent_with_a_markdown_file_are_staged_next_to_it(
+    client: TestClient, jobs_root: Path, md_pdf_without_pandoc: dict[str, list[str]]
+) -> None:
+    response = client.post(
+        "/api/convert",
+        data={"target": "md->pdf"},
+        files=[
+            ("file", ("doc.md", b"# hi")),
+            ("images", ("a.png", b"x")),
+            ("images", ("b.png", b"y")),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert md_pdf_without_pandoc["staged"] == ["a.png", "b.png", "doc.md"]
+
+
+@pytest.mark.parametrize("image, problem", [
+    (("a.jpg", b"x"), "Only PNG images"),
+    (("a.png", b""), "is empty"),
+    (("a.png", b"0123456789"), "add up to more than"),
+])
+def test_an_image_that_cannot_be_staged_is_rejected(
+    client: TestClient,
+    jobs_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    md_pdf_without_pandoc: dict[str, list[str]],
+    image: tuple[str, bytes],
+    problem: str,
+) -> None:
+    monkeypatch.setattr(server, "MAX_IMAGE_BYTES", 5)
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "md->pdf"},
+        files=[("file", ("doc.md", b"# hi")), ("images", image)],
+    )
+
+    assert response.status_code == 400
+    assert problem in response.json()["error"]
+    assert md_pdf_without_pandoc == {}
+
+
+def test_images_sent_to_a_conversion_that_takes_none_are_rejected(
+    client: TestClient, jobs_root: Path
+) -> None:
+    response = client.post(
+        "/api/convert",
+        data={"target": "csv->md"},
+        files=[("file", ("a.csv", b"a\n1\n")), ("images", ("a.png", b"x"))],
+    )
+
+    assert response.status_code == 400
+    assert "does not take images" in response.json()["error"]
+
+
 def test_a_local_conversion_without_a_model_is_rejected(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

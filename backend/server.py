@@ -104,6 +104,8 @@ JOBS_ROOT = (REPO / ".webui_jobs").resolve()
 # Video gets its own limit, since video files run much larger than the rest.
 MAX_CONVERT_BYTES = 500 * 1024 * 1024  # 500 MB
 MAX_COMBINE_BYTES = 500 * 1024 * 1024  # 500 MB
+# The most the PNGs sent along with one Markdown file take, across all of them.
+MAX_IMAGE_BYTES = 100 * 1024 * 1024  # 100 MB
 MAX_VIDEO_BYTES = 5 * 1024 * 1024 * 1024  # 5 GB
 UPLOAD_CHUNK_BYTES = 1024 * 1024
 # Room above the limits for the multipart framing and form fields around the files.
@@ -390,6 +392,9 @@ class Conversion:
     # MAX_CONVERT_BYTES. A flag rather than a number, so the limit is read when a request
     # comes in and not frozen into the registry.
     large_upload: bool = False
+    # True for a conversion whose input links to PNG images, which are uploaded with it and
+    # staged next to it so the links resolve.
+    takes_images: bool = False
 
 
 def _upload_limit(conv: Conversion) -> int:
@@ -591,7 +596,7 @@ REGISTRY: list[Conversion] = [
     Conversion((".md",), "md->pdf", "PDF", ".pdf",
                via_params(lambda s, i, o: md_pdf.convert_md_to_pdf(
                    str(s), None, input_dir=i, output_dir=o)),
-               requires=("pandoc", "latex")),
+               requires=("pandoc", "latex"), takes_images=True),
     Conversion((".md",), "md->toon", "TOON", ".toon",
                via_params(lambda s, i, o: md_toon.convert_markdown_to_toon(i, o)),
                note="Converts the tables only, each keyed by the heading above it. A file with no table fails"),
@@ -1014,6 +1019,27 @@ def _upload_size_problem(size: int, limit: int) -> JSONResponse | None:
     return None
 
 
+def _stage_images(images: list[UploadFile], folder: Path) -> JSONResponse | None:
+    """Copy the PNGs sent along with a Markdown file into `folder`, next to it.
+
+    Returns the error response for the first problem (not a PNG, empty, or the PNGs together
+    over MAX_IMAGE_BYTES), else None. A file keeps its own name, since that is what the
+    Markdown links to.
+    """
+    total = 0
+    for image in images:
+        name = Path(image.filename or "").name  # strips any directory components
+        if Path(name).suffix.lower() != ".png":
+            return _error(f"Only PNG images can be added, got '{name or 'a file with no name'}'.")
+        size = _stage_upload(image, folder / name, MAX_IMAGE_BYTES - total)
+        total += size
+        if total > MAX_IMAGE_BYTES:
+            return _error(f"The images add up to more than the {_size_label(MAX_IMAGE_BYTES)} limit.")
+        if not size:
+            return _error(f"'{name}' is empty.")
+    return None
+
+
 @app.post("/api/detect")
 def detect(file: UploadFile = File(...)):
     """Report whether an upload's contents match the extension on its name.
@@ -1044,10 +1070,13 @@ def convert(
     target: str = Form(...),
     model: str | None = Form(None),
     job_id: str | None = Form(None),
+    images: list[UploadFile] | None = File(None),
 ):
     conv = BY_TARGET_ID.get(target)
     if conv is None:
         return _error(f"Unknown conversion '{target}'.")
+    if images and not conv.takes_images:
+        return _error(f"'{conv.label}' does not take images.")
 
     raw_name = Path(file.filename or "").name  # strips any directory components
     if not raw_name:
@@ -1089,6 +1118,8 @@ def convert(
         staged = job_in / f"{stem.lstrip('.') or 'file'}{ext}"
         limit = _upload_limit(conv)
         if problem := _upload_size_problem(_stage_upload(file, staged, limit), limit):
+            return problem
+        if problem := _stage_images(images or [], job_in):
             return problem
 
         if job_id:
