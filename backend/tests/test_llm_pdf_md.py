@@ -386,7 +386,27 @@ def test_page_drops_a_partial_prompt_echo_with_curly_apostrophes(monkeypatch: py
         llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": reply}})
     )
 
-    assert llm_pdf_md._convert_page_ollama("img", "glm-ocr:latest", prompt) == "Nov 20\nvery important topic"
+    assert llm_pdf_md._convert_page_ollama("img", "qwen3.5:2b", prompt) == "Nov 20\nvery important topic"
+
+
+@pytest.mark.parametrize(
+    ("model", "expected_prompt"),
+    [("glm-ocr:latest", llm_pdf_md.OCR_PROMPT), ("qwen3.5:2b", "Transcribe this page.")],
+)
+def test_page_sends_an_ocr_model_the_short_prompt(
+    model: str, expected_prompt: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent = []
+
+    def fake_post(*args, json, **kwargs):
+        sent.append(json["messages"][0]["content"])
+        return FakeResponse({"message": {"content": "text"}})
+
+    monkeypatch.setattr(llm_pdf_md.requests, "post", fake_post)
+
+    llm_pdf_md._convert_page_ollama("img", model, "Transcribe this page.")
+
+    assert sent == [expected_prompt]
 
 
 def test_local_continues_after_one_pdf_fails_mid_batch(

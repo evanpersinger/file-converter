@@ -40,6 +40,8 @@ OLLAMA_PAGE_TIMEOUT_SECONDS = 60  # a page taking longer than this is treated as
 BATCH_PAUSE_BYTES = 100 * 1024 * 1024  # a batch totalling more than this gets a rest between files
 PAUSE_SECONDS = 30
 MIN_ECHO_CHARS = 20  # a reply's first paragraph shorter than this is never taken for an echo of the prompt
+OCR_MODEL_PREFIX = "glm-ocr"  # OCR models can't follow a long instruction, they echo it back
+OCR_PROMPT = "Text Recognition:"  # the short fixed prompt glm-ocr is built for
 
 _DOCUMENT_PROMPT = (
     "Convert this PDF to Markdown. Reproduce the text faithfully and completely, do not "
@@ -168,7 +170,12 @@ def local_page_dpi(page: fitz.Page) -> int:
 
 # Local (Ollama reads each page as an image, no API key or internet needed)
 def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT) -> str:
-    """Send one image to the local Ollama vision model and return its Markdown."""
+    """Send one image to the local Ollama vision model and return its Markdown.
+
+    An OCR model gets OCR_PROMPT instead of the prompt passed in.
+    """
+    if model.startswith(OCR_MODEL_PREFIX):
+        prompt = OCR_PROMPT
     response = requests.post(
         f"{OLLAMA_HOST}/api/chat",
         json={
