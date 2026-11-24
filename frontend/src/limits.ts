@@ -10,6 +10,8 @@ const MAX_CONVERT_BYTES = 500 * MB
 const MAX_VIDEO_BYTES = 5 * GB
 const MAX_BATCH_BYTES = 500 * MB
 const MAX_COMBINE_BYTES = 500 * MB
+// MAX_IMAGE_BYTES in server.py, the most the PNGs sent along with one file take together.
+const MAX_IMAGE_BYTES = 100 * MB
 
 // The types the server gives the bigger video limit.
 const VIDEO_EXTS = ['.mp4']
@@ -38,6 +40,14 @@ export function convertLimitMessage(files: File[]): string | null {
   // Videos are left out of the total, each one is held to its own limit above.
   if (totalSize(files.filter((file) => !isVideo(file))) > MAX_BATCH_BYTES) {
     return `These files add up to more than ${MAX_BATCH_BYTES / MB} MB. Convert them in smaller batches.`
+  }
+  return null
+}
+
+/** What to tell the user when the PNGs sent along with a file are over their limit, else null. */
+export function imageLimitMessage(images: File[]): string | null {
+  if (totalSize(images) > MAX_IMAGE_BYTES) {
+    return `The PNG images add up to more than the ${sizeLabel(MAX_IMAGE_BYTES)} limit for images added with a file.`
   }
   return null
 }

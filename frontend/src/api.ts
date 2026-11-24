@@ -65,10 +65,15 @@ export async function convert(
   model: string | null = null,
   jobId: string | null = null,
   signal?: AbortSignal,
+  images: File[] = [],
 ): Promise<Converted> {
   const body = new FormData()
   body.append('file', file)
   body.append('target', targetId)
+  // PNGs the file links to, staged next to it on the backend so the links resolve.
+  for (const image of images) {
+    body.append('images', image)
+  }
   if (model) {
     body.append('model', model)
   }
@@ -180,3 +185,6 @@ export function extensionOf(filename: string): string {
   const dot = filename.lastIndexOf('.')
   return dot === -1 ? '' : filename.slice(dot).toLowerCase()
 }
+
+/** Whether the file is a PNG, the only type the backend takes as an image sent along with another file. */
+export const isImage = (file: File) => extensionOf(file.name) === '.png'

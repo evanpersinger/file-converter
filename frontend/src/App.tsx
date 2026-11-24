@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   cancelConversion, combine, convert, detect, extensionOf, getCloudModels, getFormats, getLocalModels,
-  getSpeechModels,
+  getSpeechModels, isImage,
 } from './api'
 import type {
   CloudProvider, FormatMap, LocalModel, Mismatch, ModelGroupData, PickedModel,
 } from './types'
 import FileViewer from './FileViewer'
-import { combineLimitMessage, convertLimitMessage, overDetectLimit } from './limits'
+import { combineLimitMessage, convertLimitMessage, imageLimitMessage, overDetectLimit } from './limits'
 import ModelGroup from './ModelGroup'
 import ProgressBar from './ProgressBar'
 import { useProgress } from './useProgress'
@@ -310,9 +310,14 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   const llmTargets = forFile.filter((t) => t.group === 'llm')
   const llmBlocked = blockedForFile.filter((u) => u.group === 'llm')
 
-  const distinctExts = [...new Set(files.map((f) => canonical(extensionOf(f.name))))]
-  const mixedExtensions = files.length >= 2 && distinctExts.length > 1
-  const canCombine = files.length >= 2 && !mixedExtensions
+  // PNGs added with a file whose conversion takes images (a Markdown file linking to them) are
+  // sent along with each converted file, so they are neither converted nor a different format.
+  const attachments = forFile.some((t) => t.takesImages) ? files.filter(isImage) : []
+  const documents = files.filter((f) => !attachments.includes(f))
+
+  const distinctExts = [...new Set(documents.map((f) => canonical(extensionOf(f.name))))]
+  const mixedExtensions = documents.length >= 2 && distinctExts.length > 1
+  const canCombine = files.length >= 2 && !mixedExtensions && attachments.length === 0
   const busy = status.kind === 'converting' || status.kind === 'combining'
 
   // Which conversion owns a format button. Registry order decides: pdf->md is
@@ -462,7 +467,8 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   // downloadable next to the error naming the ones that didn't. Each file is listed the
   // moment it is done, without waiting for the rest.
   async function convertAll(targetId: string) {
-    const limitMessage = convertLimitMessage(files)
+    const images = [...targets, ...llmTargets].find((t) => t.id === targetId)?.takesImages ? attachments : []
+    const limitMessage = convertLimitMessage(files) ?? imageLimitMessage(images)
     if (limitMessage) {
       setStatus({ kind: 'error', message: limitMessage })
       return
@@ -493,7 +499,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       })
     }
 
-    for (const [index, file] of files.entries()) {
+    for (const [index, file] of documents.entries()) {
       if (cancelledBatch.current) {
         addLog(file.name, null, ['Not converted: the batch was cancelled.'])
         continue
@@ -501,11 +507,11 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       const id = crypto.randomUUID()
       const controller = new AbortController()
       currentAbort.current = controller
-      setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: files.length })
+      setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: documents.length })
       setJobId(id)
       setCancelling(false)
       try {
-        const { blob, filename, log } = await convert(file, targetId, modelName, id, controller.signal)
+        const { blob, filename, log } = await convert(file, targetId, modelName, id, controller.signal, images)
         const download = { url: URL.createObjectURL(blob), filename, blob }
         runUrls.add(download.url)
         setResult((current) => ({
@@ -765,6 +771,14 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
           </ol>
         )}
 
+        {attachments.length > 0 && (
+          <p className="muted note">
+            {selected?.takesImages
+              ? 'The PNG images are sent along with each file, and used where the file links to them.'
+              : 'The PNG images are not used by this conversion.'}
+          </p>
+        )}
+
         {mismatch && (
           <p className="warning">
             This file is named <code>{mismatch.named}</code> but its contents are
@@ -825,9 +839,11 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
                 ? 'Add files to combine'
                 : files.length < 2
                   ? 'Add two or more files to combine'
-                  : mixedExtensions
-                    ? 'Every file has to be the same format'
-                    : undefined
+                  : attachments.length > 0
+                    ? 'Remove the PNG images to combine'
+                    : mixedExtensions
+                      ? 'Every file has to be the same format'
+                      : undefined
             }
           >
             <button
