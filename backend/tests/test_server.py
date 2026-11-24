@@ -239,7 +239,7 @@ def md_pdf_without_pandoc(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[str
     return seen
 
 
-def test_pngs_sent_with_a_markdown_file_are_staged_next_to_it(
+def test_images_sent_with_a_markdown_file_are_staged_next_to_it(
     client: TestClient, jobs_root: Path, md_pdf_without_pandoc: dict[str, list[str]]
 ) -> None:
     response = client.post(
@@ -248,16 +248,17 @@ def test_pngs_sent_with_a_markdown_file_are_staged_next_to_it(
         files=[
             ("file", ("doc.md", b"# hi")),
             ("images", ("a.png", b"x")),
-            ("images", ("b.png", b"y")),
+            ("images", ("photo.jpg", b"y")),
+            ("images", ("scan.JPEG", b"z")),
         ],
     )
 
     assert response.status_code == 200
-    assert md_pdf_without_pandoc["staged"] == ["a.png", "b.png", "doc.md"]
+    assert md_pdf_without_pandoc["staged"] == ["a.png", "doc.md", "photo.jpg", "scan.JPEG"]
 
 
 @pytest.mark.parametrize("image, problem", [
-    (("a.jpg", b"x"), "Only PNG images"),
+    (("a.gif", b"x"), "Only PNG and JPG images"),
     (("a.png", b""), "is empty"),
     (("a.png", b"0123456789"), "add up to more than"),
 ])

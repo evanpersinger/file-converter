@@ -39,7 +39,7 @@ from md_pdf import (
     convert_md_to_pdf,
     convert_symbols,
     ensure_list_spacing,
-    missing_pngs,
+    missing_images,
     normalize_math_delimiters,
     normalize_tables,
     run_pandoc,
@@ -1647,14 +1647,16 @@ def test_images_are_looked_up_in_the_markdowns_own_folder(
     assert pandoc_calls[0]["resource_dir"] == input_dir
 
 
-def test_a_linked_png_the_folder_lacks_is_reported_once_by_its_decoded_name(tmp_path: Path) -> None:
+def test_a_linked_image_the_folder_lacks_is_reported_once_by_its_decoded_name(tmp_path: Path) -> None:
     (tmp_path / "here.png").write_bytes(b"x")
     markdown = (
         "![a](here.png)\n\n![b](gone.png)\n\n![c](gone.png)\n\n![d](my%20plot.png)\n\n"
-        "![e](Shouty.PNG)\n\n- ![f](in_list.png)\n"
+        "![e](Shouty.PNG)\n\n- ![f](in_list.png)\n\n![g](photo.jpg)\n\n![h](scan.JPEG)\n"
     )
 
-    assert missing_pngs(markdown, tmp_path) == ["gone.png", "my plot.png", "Shouty.PNG", "in_list.png"]
+    assert missing_images(markdown, tmp_path) == [
+        "gone.png", "my plot.png", "Shouty.PNG", "in_list.png", "photo.jpg", "scan.JPEG",
+    ]
 
 
 @pytest.mark.parametrize("markdown", [
@@ -1662,13 +1664,13 @@ def test_a_linked_png_the_folder_lacks_is_reported_once_by_its_decoded_name(tmp_
     "`![x](a.png)`\n",  # an example in a code span
     "![x](https://example.com/a.png)\n",
     "![x](figs/a.png)\n",
-    "![x](a.jpg)\n",
+    "![x](a.gif)\n",  # a type LaTeX can't draw straight from a file
 ])
-def test_a_link_that_is_not_a_plain_png_name_is_not_required(markdown: str, tmp_path: Path) -> None:
-    assert missing_pngs(markdown, tmp_path) == []
+def test_a_link_that_is_not_a_plain_png_or_jpg_name_is_not_required(markdown: str, tmp_path: Path) -> None:
+    assert missing_images(markdown, tmp_path) == []
 
 
-def test_a_missing_png_stops_the_conversion_before_pandoc(
+def test_a_missing_image_stops_the_conversion_before_pandoc(
     work_dirs: WorkDirs, pandoc_calls: PandocCalls, capsys: pytest.CaptureFixture[str]
 ) -> None:
     input_dir, output_dir = work_dirs
@@ -1681,7 +1683,7 @@ def test_a_missing_png_stops_the_conversion_before_pandoc(
     assert pandoc_calls == []
 
 
-def test_a_png_that_is_there_lets_the_conversion_run(work_dirs: WorkDirs, pandoc_calls: PandocCalls) -> None:
+def test_an_image_that_is_there_lets_the_conversion_run(work_dirs: WorkDirs, pandoc_calls: PandocCalls) -> None:
     input_dir, output_dir = work_dirs
     write_md(input_dir, "notes.md", "![Scatterplot](scatterplot.png)\n")
     (input_dir / "scatterplot.png").write_bytes(b"x")
@@ -1692,7 +1694,7 @@ def test_a_png_that_is_there_lets_the_conversion_run(work_dirs: WorkDirs, pandoc
 
 # Real PDFs, through real pandoc and xelatex
 
-needs_latex =pytest.mark.skipif(
+needs_latex = pytest.mark.skipif(
     sys.platform != "darwin" or not (shutil.which("pandoc") and shutil.which("xelatex")),
     reason="needs pandoc, xelatex and macOS (the header asks for the Menlo font)",
 )
@@ -1713,10 +1715,13 @@ def render(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str], markdown: st
 
 
 @needs_latex
-def test_a_linked_png_is_drawn_in_the_pdf(work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize("name", ["plot.png", "photo.jpg", "scan.jpeg", "SHOUTY.JPG"])
+def test_a_linked_image_is_drawn_in_the_pdf(
+    name: str, work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
     input_dir, output_dir = work_dirs
-    Image.new("RGB", (200, 100), "red").save(input_dir / "plot.png")
-    (input_dir / "doc.md").write_text("Before\n\n![Plot](plot.png)\n\nAfter\n", encoding="utf-8")
+    Image.new("RGB", (200, 100), "red").save(input_dir / name)
+    (input_dir / "doc.md").write_text(f"Before\n\n![Plot]({name})\n\nAfter\n", encoding="utf-8")
 
     converted = convert_md_to_pdf("doc.md", None, input_dir, output_dir)
 

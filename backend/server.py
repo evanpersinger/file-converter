@@ -104,8 +104,10 @@ JOBS_ROOT = (REPO / ".webui_jobs").resolve()
 # Video gets its own limit, since video files run much larger than the rest.
 MAX_CONVERT_BYTES = 500 * 1024 * 1024  # 500 MB
 MAX_COMBINE_BYTES = 500 * 1024 * 1024  # 500 MB
-# The most the PNGs sent along with one Markdown file take, across all of them.
+# The most the images sent along with one Markdown file take, across all of them, and the
+# types LaTeX can draw straight from a file.
 MAX_IMAGE_BYTES = 100 * 1024 * 1024  # 100 MB
+IMAGE_EXTS = (".png", ".jpg", ".jpeg")
 MAX_VIDEO_BYTES = 5 * 1024 * 1024 * 1024  # 5 GB
 UPLOAD_CHUNK_BYTES = 1024 * 1024
 # Room above the limits for the multipart framing and form fields around the files.
@@ -392,8 +394,8 @@ class Conversion:
     # MAX_CONVERT_BYTES. A flag rather than a number, so the limit is read when a request
     # comes in and not frozen into the registry.
     large_upload: bool = False
-    # True for a conversion whose input links to PNG images, which are uploaded with it and
-    # staged next to it so the links resolve.
+    # True for a conversion whose input links to images (IMAGE_EXTS), which are uploaded with
+    # it and staged next to it so the links resolve.
     takes_images: bool = False
 
 
@@ -1022,17 +1024,17 @@ def _upload_size_problem(size: int, limit: int) -> JSONResponse | None:
 
 
 def _stage_images(images: list[UploadFile], folder: Path) -> JSONResponse | None:
-    """Copy the PNGs sent along with a Markdown file into `folder`, next to it.
+    """Copy the images sent along with a Markdown file into `folder`, next to it.
 
-    Returns the error response for the first problem (not a PNG, empty, or the PNGs together
-    over MAX_IMAGE_BYTES), else None. A file keeps its own name, since that is what the
-    Markdown links to.
+    Returns the error response for the first problem (not a PNG or JPG, empty, or the images
+    together over MAX_IMAGE_BYTES), else None. A file keeps its own name, since that is what
+    the Markdown links to.
     """
     total = 0
     for image in images:
         name = Path(image.filename or "").name  # strips any directory components
-        if Path(name).suffix.lower() != ".png":
-            return _error(f"Only PNG images can be added, got '{name or 'a file with no name'}'.")
+        if Path(name).suffix.lower() not in IMAGE_EXTS:
+            return _error(f"Only PNG and JPG images can be added, got '{name or 'a file with no name'}'.")
         size = _stage_upload(image, folder / name, MAX_IMAGE_BYTES - total)
         total += size
         if total > MAX_IMAGE_BYTES:

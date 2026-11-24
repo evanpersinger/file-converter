@@ -948,8 +948,9 @@ def run_pandoc(rich_md, safe_md, output_path, input_name, resource_dir=None):
 # span, where it is only an example, isn't counted.
 _IMAGE_PARSER = mistune.create_markdown(renderer=None)
 
-# A link to a PNG by its plain file name: no folder, no web address (`https:`), no drive letter
-_PLAIN_PNG_NAME = re.compile(r"[^/\\:]+\.png", re.IGNORECASE)
+# A link to a PNG or JPG by its plain file name: no folder, no web address (`https:`), no drive
+# letter. Other types LaTeX can't draw straight from a file, so none is asked for.
+_PLAIN_IMAGE_NAME = re.compile(r"[^/\\:]+\.(?:png|jpe?g)", re.IGNORECASE)
 
 
 def _image_urls(tokens: list[dict]) -> list[str]:
@@ -962,8 +963,8 @@ def _image_urls(tokens: list[dict]) -> list[str]:
     return urls
 
 
-def missing_pngs(md_text: str, folder: Path) -> list[str]:
-    """The PNG files md_text links as images that are not in folder, each named once.
+def missing_images(md_text: str, folder: Path) -> list[str]:
+    """The PNG and JPG files md_text links as images that are not in folder, each named once.
 
     Only links by plain file name count. A link with a folder in it, a web address, or another
     image type is left to pandoc, which prints the image's description in its place when it
@@ -972,7 +973,7 @@ def missing_pngs(md_text: str, folder: Path) -> list[str]:
     missing = []
     for url in _image_urls(_IMAGE_PARSER(md_text)):
         name = unquote(url)  # mistune leaves a space in a file name as %20
-        if _PLAIN_PNG_NAME.fullmatch(name) and not (folder / name).is_file() and name not in missing:
+        if _PLAIN_IMAGE_NAME.fullmatch(name) and not (folder / name).is_file() and name not in missing:
             missing.append(name)
     return missing
 
@@ -1024,8 +1025,8 @@ def convert_md_to_pdf(
         md_content = read_text(full_input_path, translate_newlines=True)
 
         # Without this pandoc only warns, and the PDF shows the image's description instead
-        if missing := missing_pngs(md_content, full_input_path.parent):
-            print(f"Error: {full_input_path.name} links PNG images that were not added: "
+        if missing := missing_images(md_content, full_input_path.parent):
+            print(f"Error: {full_input_path.name} links images that were not added: "
                   f"{', '.join(missing)}. Add them along with the Markdown file.")
             return False
 
