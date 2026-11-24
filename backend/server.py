@@ -689,6 +689,8 @@ def formats() -> dict:
             }
             if conv.caption:
                 entry["caption"] = conv.caption
+            if conv.takes_images:
+                entry["takesImages"] = True
             if missing:
                 reason, hint = DEP_LABELS[missing[0]]
                 unavailable.setdefault(ext, []).append({**entry, "reason": reason, "hint": hint})

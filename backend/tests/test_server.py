@@ -282,6 +282,19 @@ def test_an_image_that_cannot_be_staged_is_rejected(
     assert md_pdf_without_pandoc == {}
 
 
+def test_formats_say_which_conversions_take_images(client: TestClient) -> None:
+    body = client.get("/api/formats").json()
+    entries = {
+        entry["id"]: entry
+        for formats in (body["byExtension"], body["unavailable"])
+        for targets in formats.values()
+        for entry in targets
+    }
+
+    assert entries["md->pdf"]["takesImages"] is True
+    assert "takesImages" not in entries["md->toon"]
+
+
 def test_images_sent_to_a_conversion_that_takes_none_are_rejected(
     client: TestClient, jobs_root: Path
 ) -> None:
