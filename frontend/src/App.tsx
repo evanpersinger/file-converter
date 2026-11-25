@@ -785,38 +785,8 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
               <p className="muted note">
                 Images the file links to, placed in the {imageRoute.label} where it links to them.
               </p>
-              {images.length > 0 && (
-                <ol className="filelist">
-                  {images.map((f, i) => (
-                    <li key={`${f.name}-${i}`}>
-                      <span title={f.name}>{f.name}</span>
-                      <button
-                        type="button"
-                        className="remove"
-                        onClick={() => setImages(images.filter((_, n) => n !== i))}
-                        aria-label={`Remove ${f.name}`}
-                      >
-                        &times;
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-              )}
             </div>
           )}
-
-          {/* Disabled while converting: the loop keeps working through the files it
-              started with, so clearing them mid-batch wouldn't stop their download
-              links from still showing up once each one finishes. */}
-          <button
-            type="button"
-            className="clear"
-            onDoubleClick={clearFiles}
-            disabled={files.length === 0 || busy}
-          >
-            Clear
-            <span className="clear-hint">Click twice to clear</span>
-          </button>
         </div>
 
         {files.length > 0 && (
@@ -839,6 +809,43 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
             ))}
           </ol>
         )}
+
+        {/* The images that go with the file above, under a line so it is clear which are which. */}
+        {images.length > 0 && (
+          <>
+            <div className="list-divider">Images</div>
+            <ol className="filelist images-list">
+              {images.map((f, i) => (
+                <li key={`${f.name}-${i}`}>
+                  <span title={f.name}>{f.name}</span>
+                  <button
+                    type="button"
+                    className="remove"
+                    onClick={() => setImages(images.filter((_, n) => n !== i))}
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    &times;
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+
+        {/* Disabled while converting: the loop keeps working through the files it
+            started with, so clearing them mid-batch wouldn't stop their download
+            links from still showing up once each one finishes. */}
+        <div className="picker-row clear-row">
+          <button
+            type="button"
+            className="clear"
+            onDoubleClick={clearFiles}
+            disabled={files.length === 0 || busy}
+          >
+            Clear
+            <span className="clear-hint">Click twice to clear</span>
+          </button>
+        </div>
 
         {mismatch && (
           <p className="warning">

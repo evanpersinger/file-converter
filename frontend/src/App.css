@@ -362,8 +362,33 @@ h2 {
   opacity: 0.8;
 }
 
-/* The box for images a file links to: the same picker as the file box, but smaller, between
-   the file box and the Clear button. */
+/* The Clear button sits at the end, under the file list and the images. */
+.clear-row {
+  margin-top: 0.75rem;
+}
+
+/* A line between the files being converted and the images that go with them. */
+.list-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.list-divider::after {
+  content: "";
+  flex: 1;
+  border-top: var(--line-thin) solid var(--border);
+}
+
+.filelist.images-list {
+  margin-top: 0.4rem;
+}
+
+/* The box for images a file links to: the same picker as the file box, but smaller, under
+   the file box. */
 .images-box {
   display: flex;
   flex-direction: column;
@@ -376,8 +401,7 @@ h2 {
   font-size: 1.1rem;
 }
 
-.images-box .note,
-.images-box .filelist {
+.images-box .note {
   margin: 0;
 }
 
