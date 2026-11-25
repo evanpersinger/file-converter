@@ -767,27 +767,6 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
           </button>
         </div>
 
-        {files.length > 0 && (
-          <ol className={files.length > 1 ? 'filelist numbered' : 'filelist'}>
-            {files.map((f, i) => (
-              <li key={`${f.name}-${i}`}>
-                <span title={f.name}>{f.name}</span>
-                <button type="button" className="view" onClick={() => setViewing(f)}>
-                  View
-                </button>
-                <button
-                  type="button"
-                  className="remove"
-                  onClick={() => removeAt(i)}
-                  aria-label={`Remove ${f.name}`}
-                >
-                  &times;
-                </button>
-              </li>
-            ))}
-          </ol>
-        )}
-
         {imageRoute && (
           <div className="images-box">
             <label
@@ -838,6 +817,27 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
               </ol>
             )}
           </div>
+        )}
+
+        {files.length > 0 && (
+          <ol className={files.length > 1 ? 'filelist numbered' : 'filelist'}>
+            {files.map((f, i) => (
+              <li key={`${f.name}-${i}`}>
+                <span title={f.name}>{f.name}</span>
+                <button type="button" className="view" onClick={() => setViewing(f)}>
+                  View
+                </button>
+                <button
+                  type="button"
+                  className="remove"
+                  onClick={() => removeAt(i)}
+                  aria-label={`Remove ${f.name}`}
+                >
+                  &times;
+                </button>
+              </li>
+            ))}
+          </ol>
         )}
 
         {mismatch && (
