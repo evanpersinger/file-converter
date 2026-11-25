@@ -1670,17 +1670,17 @@ def test_a_link_that_is_not_a_plain_png_or_jpg_name_is_not_required(markdown: st
     assert missing_images(markdown, tmp_path) == []
 
 
-def test_a_missing_image_stops_the_conversion_before_pandoc(
+def test_a_missing_image_is_warned_about_and_the_conversion_still_runs(
     work_dirs: WorkDirs, pandoc_calls: PandocCalls, capsys: pytest.CaptureFixture[str]
 ) -> None:
     input_dir, output_dir = work_dirs
-    write_md(input_dir, "notes.md", "![Scatterplot](scatterplot.png)\n")
+    write_md(input_dir, "notes.md", "![A](a.png)\n\n![B](b.jpg)\n")
 
     converted = convert_md_to_pdf("notes.md", None, input_dir, output_dir)
 
-    assert converted is False
-    assert "scatterplot.png" in capsys.readouterr().out
-    assert pandoc_calls == []
+    assert converted is True
+    assert "they were not added: a.png, b.jpg" in capsys.readouterr().out
+    assert len(pandoc_calls) == 1
 
 
 def test_an_image_that_is_there_lets_the_conversion_run(work_dirs: WorkDirs, pandoc_calls: PandocCalls) -> None:
@@ -1728,6 +1728,16 @@ def test_a_linked_image_is_drawn_in_the_pdf(
     assert converted, capsys.readouterr().out
     with fitz.open(output_dir / "doc.pdf") as document:
         assert sum(len(page.get_images()) for page in document) == 1
+
+
+@needs_latex
+def test_a_missing_image_still_makes_a_pdf_that_shows_its_description(
+    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log, text = render(work_dirs, capsys, "![Scatterplot of Coronary against Cigarette](missing.png)\n")
+
+    assert "they were not added: missing.png" in log
+    assert "Scatterplot of Coronary against Cigarette" in " ".join(text.split())
 
 
 @needs_latex

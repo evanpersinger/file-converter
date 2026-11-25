@@ -296,6 +296,32 @@ def test_formats_say_which_conversions_take_images(client: TestClient) -> None:
     assert "takesImages" not in entries["md->toon"]
 
 
+def test_images_the_markdown_links_but_nobody_added_are_listed_in_the_result_log(
+    client: TestClient, jobs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real md_pdf warning goes through to the log, only pandoc is replaced."""
+    monkeypatch.setitem(server.DEPS, "pandoc", lambda: True)
+    monkeypatch.setitem(server.DEPS, "latex", lambda: True)
+    monkeypatch.setattr(server.md_pdf, "which", lambda name: f"/usr/bin/{name}")
+
+    def fake_run_pandoc(rich_md, safe_md, output_path, input_name, resource_dir=None) -> bool:
+        output_path.write_bytes(b"%PDF-1.4\n")
+        return True
+
+    monkeypatch.setattr(server.md_pdf, "run_pandoc", fake_run_pandoc)
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "md->pdf"},
+        files={"file": ("doc.md", b"![A](a.png)\n\n![B](b.jpg)\n")},
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.headers["X-Conversion-Log"]) == [
+        "Images the file links to were not added, so the PDF shows their description instead: a.png, b.jpg"
+    ]
+
+
 def test_images_sent_to_a_conversion_that_takes_none_are_rejected(
     client: TestClient, jobs_root: Path
 ) -> None:

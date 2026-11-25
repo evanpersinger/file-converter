@@ -1024,11 +1024,12 @@ def convert_md_to_pdf(
     try:
         md_content = read_text(full_input_path, translate_newlines=True)
 
-        # Without this pandoc only warns, and the PDF shows the image's description instead
+        # Pandoc only warns about an image it can't find, and the PDF shows the image's
+        # description in its place. The PDF is still made, this says which images are missing.
+        # server.py reads this line for the Result panel, keep the two in step.
         if missing := missing_images(md_content, full_input_path.parent):
-            print(f"Error: {full_input_path.name} links images that were not added: "
-                  f"{', '.join(missing)}. Add them along with the Markdown file.")
-            return False
+            print("Warning: the PDF shows a description instead of these images, they were "
+                  f"not added: {', '.join(missing)}")
 
         # Shared safe preprocessing (no injected LaTeX) -> reused by the fallback
         md_content = clean_control_chars(md_content)

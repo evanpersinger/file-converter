@@ -899,6 +899,10 @@ _SKIPPED_PAGE = re.compile(r"Skipping page (\d+)/(\d+), failed to convert: (.*)"
 _CANCELLED_AT = re.compile(r"Cancelled after page (\d+)/(\d+)")
 _PAGES_SUCCEEDED = re.compile(r"Converted .+ \((\d+)/(\d+) pages succeeded\)")
 _MODEL_NOTE = re.compile(r"Model note(?: \(page (\d+)\))?: (.*)")
+# Printed by md_pdf when the Markdown links images that were not added.
+_MISSING_IMAGES = re.compile(
+    r"Warning: the PDF shows a description instead of these images, they were not added: (.*)"
+)
 
 # Longest a single reason can be in the log, so a huge exception message can't blow past
 # the size limit on a response header.
@@ -908,8 +912,9 @@ _LOG_LINE_MAX = 200
 def _plain_log(output: str) -> list[str]:
     """The lines of a converter's printed output that tell the user what happened to their
     file, reworded as plain sentences: which pages failed and why, how many pages made it,
-    where a cancel stopped, and any note the model left about its transcription. The
-    progress lines are left out, the progress bar already shows those."""
+    where a cancel stopped, any note the model left about its transcription, and which linked
+    images were not added. The progress lines are left out, the progress bar already shows
+    those."""
     lines = []
     for raw in re.split(r"[\r\n]+", output):
         # Checked first and anchored to the line start, so a note that happens to quote one
@@ -924,6 +929,9 @@ def _plain_log(output: str) -> list[str]:
             lines.append(f"Cancelled after page {match[1]} of {match[2]}.")
         elif match := _PAGES_SUCCEEDED.search(raw):
             lines.append(f"{match[1]} of {match[2]} pages converted.")
+        elif match := _MISSING_IMAGES.match(raw):
+            names = match[1][:_LOG_LINE_MAX]
+            lines.append(f"Images the file links to were not added, so the PDF shows their description instead: {names}")
     return lines
 
 
