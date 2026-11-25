@@ -222,10 +222,14 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   const [formats, setFormats] = useState<FormatMap | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
+  // Images for a file that links to them, sent along with it. They belong to the first file,
+  // so they go when it does.
+  const [images, setImages] = useState<File[]>([])
   const [target, setTarget] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [result, setResult] = useState<Result | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [draggingImages, setDraggingImages] = useState(false)
   const [mismatch, setMismatch] = useState<Mismatch | null>(null)
   // The dropped file currently shown in the preview overlay, null when it's closed.
   const [viewing, setViewing] = useState<File | null>(null)
@@ -298,16 +302,9 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     }
   }, [])
 
-  // Images (PNG or JPG) added with a file whose conversion takes images (a Markdown file linking
-  // to them) are sent along with each converted file, wherever they sit in the list, so they
-  // are neither converted nor a different format.
-  const takesImages = (file: File) => !!formats?.byExtension[extensionOf(file.name)]?.some((t) => t.takesImages)
-  const attachments = files.some(takesImages) ? files.filter(isImage) : []
-  const documents = files.filter((f) => !attachments.includes(f))
-
-  // The first file that gets converted drives the format buttons and the mismatch check.
-  // Combining requires everything to share one extension anyway, so it is representative.
-  const primary = documents[0] ?? null
+  // The first file drives the format buttons and the mismatch check. Combining
+  // requires everything to share one extension anyway, so it is representative.
+  const primary = files[0] ?? null
   const ext = primary ? extensionOf(primary.name) : ''
   const forFile = (ext && formats?.byExtension[ext]) || []
   const blockedForFile = (ext && formats?.unavailable[ext]) || []
@@ -316,10 +313,13 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   const blocked = blockedForFile.filter((u) => !u.group)
   const llmTargets = forFile.filter((t) => t.group === 'llm')
   const llmBlocked = blockedForFile.filter((u) => u.group === 'llm')
+  // The Images box shows while the first file has a route that takes images (a Markdown file
+  // that links to pictures).
+  const imageRoute = forFile.find((t) => t.takesImages) ?? null
 
-  const distinctExts = [...new Set(documents.map((f) => canonical(extensionOf(f.name))))]
-  const mixedExtensions = documents.length >= 2 && distinctExts.length > 1
-  const canCombine = files.length >= 2 && !mixedExtensions && attachments.length === 0
+  const distinctExts = [...new Set(files.map((f) => canonical(extensionOf(f.name))))]
+  const mixedExtensions = files.length >= 2 && distinctExts.length > 1
+  const canCombine = files.length >= 2 && !mixedExtensions
   const busy = status.kind === 'converting' || status.kind === 'combining'
 
   // Which conversion owns a format button. Registry order decides: pdf->md is
@@ -440,11 +440,25 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     }
   }
 
-  // The format picks belong to the first file, so they go when it does. The model stays,
-  // it doesn't depend on the file.
+  // The format picks and the images belong to the first file, so they go when it does. The
+  // model stays, it doesn't depend on the file.
   function clearFormatPicks() {
     setTarget(null)
     setScript(null)
+    setImages([])
+  }
+
+  // Only PNG and JPG can be drawn into the PDF, so anything else is turned away by name.
+  function addImages(incoming: FileList | null) {
+    const added = Array.from(incoming ?? [])
+    const wrong = added.filter((f) => !isImage(f))
+    if (wrong.length > 0) {
+      setStatus({
+        kind: 'error',
+        message: `Only PNG and JPG images can be added: ${wrong.map((f) => f.name).join(', ')}`,
+      })
+    }
+    setImages([...images, ...added.filter(isImage)])
   }
 
   // A Markdown format that is the only one the file can use is picked for the user, there is
@@ -470,8 +484,8 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   // downloadable next to the error naming the ones that didn't. Each file is listed the
   // moment it is done, without waiting for the rest.
   async function convertAll(targetId: string) {
-    const images = [...targets, ...llmTargets].find((t) => t.id === targetId)?.takesImages ? attachments : []
-    const limitMessage = convertLimitMessage(files) ?? imageLimitMessage(images)
+    const imagesToSend = [...targets, ...llmTargets].find((t) => t.id === targetId)?.takesImages ? images : []
+    const limitMessage = convertLimitMessage(files) ?? imageLimitMessage(imagesToSend)
     if (limitMessage) {
       setStatus({ kind: 'error', message: limitMessage })
       return
@@ -502,7 +516,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       })
     }
 
-    for (const [index, file] of documents.entries()) {
+    for (const [index, file] of files.entries()) {
       if (cancelledBatch.current) {
         addLog(file.name, null, ['Not converted: the batch was cancelled.'])
         continue
@@ -510,11 +524,11 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
       const id = crypto.randomUUID()
       const controller = new AbortController()
       currentAbort.current = controller
-      setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: documents.length })
+      setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: files.length })
       setJobId(id)
       setCancelling(false)
       try {
-        const { blob, filename, log } = await convert(file, targetId, modelName, id, controller.signal, images)
+        const { blob, filename, log } = await convert(file, targetId, modelName, id, controller.signal, imagesToSend)
         const download = { url: URL.createObjectURL(blob), filename, blob }
         runUrls.add(download.url)
         setResult((current) => ({
@@ -774,12 +788,56 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
           </ol>
         )}
 
-        {attachments.length > 0 && selected && (
-          <p className="muted note">
-            {selected.takesImages
-              ? 'The images are sent along with each file, and used where the file links to them.'
-              : 'The images are not used by this conversion.'}
-          </p>
+        {imageRoute && (
+          <div className="images-box">
+            <label
+              className={draggingImages ? 'filepicker dragging' : 'filepicker'}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDraggingImages(true)
+              }}
+              // Same as the file box: dragleave also fires on the label's own children.
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDraggingImages(false)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDraggingImages(false)
+                addImages(e.dataTransfer.files)
+              }}
+            >
+              <input
+                type="file"
+                multiple
+                accept=".png,.jpg,.jpeg"
+                onChange={(e) => {
+                  addImages(e.target.files)
+                  e.target.value = ''
+                }}
+              />
+              <span>Add images (PNG or JPG)</span>
+            </label>
+            <p className="muted note">
+              Images the file links to, placed in the {imageRoute.label} where it links to them.
+            </p>
+            {images.length > 0 && (
+              <ol className="filelist">
+                {images.map((f, i) => (
+                  <li key={`${f.name}-${i}`}>
+                    <span title={f.name}>{f.name}</span>
+                    <button
+                      type="button"
+                      className="remove"
+                      onClick={() => setImages(images.filter((_, n) => n !== i))}
+                      aria-label={`Remove ${f.name}`}
+                    >
+                      &times;
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         )}
 
         {mismatch && (
@@ -795,6 +853,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
           <p className="warning">
             Converting and combining both need every file to be the same format,
             and these are {distinctExts.join(', ')}. Remove the odd ones out
+            {imageRoute && files.some(isImage) && '. Images that go with the first file belong in the Images box'}
           </p>
         )}
 
@@ -842,11 +901,9 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
                 ? 'Add files to combine'
                 : files.length < 2
                   ? 'Add two or more files to combine'
-                  : attachments.length > 0
-                    ? 'Remove the images to combine'
-                    : mixedExtensions
-                      ? 'Every file has to be the same format'
-                      : undefined
+                  : mixedExtensions
+                    ? 'Every file has to be the same format'
+                    : undefined
             }
           >
             <button

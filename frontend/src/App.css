@@ -362,6 +362,25 @@ h2 {
   opacity: 0.8;
 }
 
+/* The box for images a file links to: the same picker as the file box, but smaller, under
+   the file list. */
+.images-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.images-box .filepicker {
+  height: 3.25rem;
+  font-size: 1.1rem;
+}
+
+.images-box .note,
+.images-box .filelist {
+  margin: 0;
+}
+
 .option {
   display: flex;
   align-items: flex-start;
