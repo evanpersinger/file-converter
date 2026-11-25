@@ -362,13 +362,13 @@ h2 {
   opacity: 0.8;
 }
 
-/* The box for images a file links to: the same picker as the file box, but smaller, under
-   the file list. */
+/* The box for images a file links to: the same picker as the file box, but smaller, between
+   the file box and the Clear button. */
 .images-box {
   display: flex;
   flex-direction: column;
+  align-self: stretch;
   gap: 0.4rem;
-  margin-top: 1rem;
 }
 
 .images-box .filepicker {

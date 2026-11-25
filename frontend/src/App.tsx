@@ -753,6 +753,58 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
             <span title={files.length === 1 ? files[0].name : undefined}>{pickerLabel}</span>
           </label>
 
+          {imageRoute && (
+            <div className="images-box">
+              <label
+                className={draggingImages ? 'filepicker dragging' : 'filepicker'}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDraggingImages(true)
+                }}
+                // Same as the file box: dragleave also fires on the label's own children.
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setDraggingImages(false)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDraggingImages(false)
+                  addImages(e.dataTransfer.files)
+                }}
+              >
+                <input
+                  type="file"
+                  multiple
+                  accept=".png,.jpg,.jpeg"
+                  onChange={(e) => {
+                    addImages(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
+                <span>Add images (PNG or JPG)</span>
+              </label>
+              <p className="muted note">
+                Images the file links to, placed in the {imageRoute.label} where it links to them.
+              </p>
+              {images.length > 0 && (
+                <ol className="filelist">
+                  {images.map((f, i) => (
+                    <li key={`${f.name}-${i}`}>
+                      <span title={f.name}>{f.name}</span>
+                      <button
+                        type="button"
+                        className="remove"
+                        onClick={() => setImages(images.filter((_, n) => n !== i))}
+                        aria-label={`Remove ${f.name}`}
+                      >
+                        &times;
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+
           {/* Disabled while converting: the loop keeps working through the files it
               started with, so clearing them mid-batch wouldn't stop their download
               links from still showing up once each one finishes. */}
@@ -766,58 +818,6 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
             <span className="clear-hint">Click twice to clear</span>
           </button>
         </div>
-
-        {imageRoute && (
-          <div className="images-box">
-            <label
-              className={draggingImages ? 'filepicker dragging' : 'filepicker'}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDraggingImages(true)
-              }}
-              // Same as the file box: dragleave also fires on the label's own children.
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDraggingImages(false)
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                setDraggingImages(false)
-                addImages(e.dataTransfer.files)
-              }}
-            >
-              <input
-                type="file"
-                multiple
-                accept=".png,.jpg,.jpeg"
-                onChange={(e) => {
-                  addImages(e.target.files)
-                  e.target.value = ''
-                }}
-              />
-              <span>Add images (PNG or JPG)</span>
-            </label>
-            <p className="muted note">
-              Images the file links to, placed in the {imageRoute.label} where it links to them.
-            </p>
-            {images.length > 0 && (
-              <ol className="filelist">
-                {images.map((f, i) => (
-                  <li key={`${f.name}-${i}`}>
-                    <span title={f.name}>{f.name}</span>
-                    <button
-                      type="button"
-                      className="remove"
-                      onClick={() => setImages(images.filter((_, n) => n !== i))}
-                      aria-label={`Remove ${f.name}`}
-                    >
-                      &times;
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-        )}
 
         {files.length > 0 && (
           <ol className={files.length > 1 ? 'filelist numbered' : 'filelist'}>
