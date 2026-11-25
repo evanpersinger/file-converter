@@ -367,20 +367,13 @@ h2 {
   margin-top: 0.75rem;
 }
 
-/* A line between the files being converted and the images that go with them. */
-.list-divider {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+/* Says which file the images under it are for. A long filename wraps instead of widening
+   the column. */
+.images-label {
+  margin: 0.75rem 0 0;
   font-size: 0.75rem;
   opacity: 0.8;
-}
-
-.list-divider::after {
-  content: "";
-  flex: 1;
-  border-top: var(--line-thin) solid var(--border);
+  overflow-wrap: anywhere;
 }
 
 .filelist.images-list {

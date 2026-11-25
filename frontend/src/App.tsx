@@ -810,10 +810,12 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
           </ol>
         )}
 
-        {/* The images that go with the file above, under a line so it is clear which are which. */}
+        {/* The images that go with the file above, under a label saying which file they are for. */}
         {images.length > 0 && (
           <>
-            <div className="list-divider">Images</div>
+            <p className="images-label">
+              Images to be added to {files.length === 1 ? files[0].name : 'each file above'}
+            </p>
             <ol className="filelist images-list">
               {images.map((f, i) => (
                 <li key={`${f.name}-${i}`}>
