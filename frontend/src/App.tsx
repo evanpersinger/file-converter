@@ -783,7 +783,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
                 <span>Add images (PNG or JPG)</span>
               </label>
               <p className="muted note">
-                Images the file links to, placed in the {imageRoute.label} where it links to them.
+                Add the images this file links to. Each one goes into the {imageRoute.label} where it is linked.
               </p>
             </div>
           )}
