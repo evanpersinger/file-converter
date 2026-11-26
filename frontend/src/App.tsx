@@ -259,13 +259,6 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
   // Set by Cancel, checked before each file in convertAll's loop so a multi-file batch
   // stops picking up new files.
   const cancelledBatch = useRef(false)
-  // The AbortController for whichever file convertAll is currently awaiting, so Cancel
-  // can drop the connection instead of waiting for a file with no way to stop mid-file.
-  const currentAbort = useRef<AbortController | null>(null)
-  // Whether the running batch is the local-model route, set once per batch. That route
-  // stops itself after the current page and returns a partial file, so Cancel must not
-  // abort its request too, that would throw the partial result away.
-  const localModelRun = useRef(false)
 
   useEffect(() => {
     getFormats().then(setFormats).catch((e: Error) => setLoadError(e.message))
@@ -494,7 +487,6 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     const runUrls = new Set<string>()
     const failures: string[] = []
     cancelledBatch.current = false
-    localModelRun.current = llmRoute?.provider === 'local'
     const modelName = llmRoute ? (model?.name ?? null) : null
     const runId = crypto.randomUUID()
 
@@ -522,13 +514,11 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
         continue
       }
       const id = crypto.randomUUID()
-      const controller = new AbortController()
-      currentAbort.current = controller
       setStatus({ kind: 'converting', fileName: file.name, position: index + 1, total: files.length })
       setJobId(id)
       setCancelling(false)
       try {
-        const { blob, filename, log } = await convert(file, targetId, modelName, id, controller.signal, imagesToSend)
+        const { blob, filename, log } = await convert(file, targetId, modelName, id, imagesToSend)
         const download = { url: URL.createObjectURL(blob), filename, blob }
         runUrls.add(download.url)
         setResult((current) => ({
@@ -538,12 +528,13 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
         const formatName = formats?.allFormats.find((f) => f.ext === outExt)?.name ?? outExt.slice(1).toUpperCase()
         addLog(file.name, formatName || filename, log)
       } catch (e) {
+        const { message } = e as Error
         // A cancelled file is listed in the Result panel, but isn't a failure to report.
-        if (e instanceof DOMException && e.name === 'AbortError') {
+        if (cancelledBatch.current && /cancelled/i.test(message)) {
           addLog(file.name, null, ['Conversion cancelled.'])
         } else {
-          failures.push(`${file.name}: ${(e as Error).message}`)
-          addLog(file.name, null, [(e as Error).message])
+          failures.push(`${file.name}: ${message}`)
+          addLog(file.name, null, [message])
         }
       }
     }
@@ -591,15 +582,11 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
     }
   }
 
-  // Stops the batch from picking up the next file. For the local-model route the
-  // current file's request is left running, it resolves once the backend stops after
-  // its current page and hands back the partial file. Everything else has no way to
-  // stop mid-file server-side, so the request is aborted instead of waited on.
+  // Stops the batch from picking up the next file. The current file's request is left
+  // running, so whatever the backend makes of it still lands in Result: a route that
+  // checks for cancel stops early, the rest finish the file.
   async function cancelCurrentJob() {
     cancelledBatch.current = true
-    if (!localModelRun.current) {
-      currentAbort.current?.abort()
-    }
     if (!jobId) return
     setCancelling(true)
     try {
@@ -946,7 +933,7 @@ function Converter({ tab, active }: { tab: Tab; active: boolean }) {
           {status.kind === 'converting' && (
             <span className="tip">
               <button type="button" onClick={cancelCurrentJob} disabled={cancelling}>
-                {cancelling ? 'Cancelling...' : 'Cancel'}
+                {cancelling ? 'Finishing current file...' : 'Cancel'}
               </button>
             </span>
           )}

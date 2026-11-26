@@ -64,7 +64,6 @@ export async function convert(
   targetId: string,
   model: string | null = null,
   jobId: string | null = null,
-  signal?: AbortSignal,
   images: File[] = [],
 ): Promise<Converted> {
   const body = new FormData()
@@ -82,7 +81,7 @@ export async function convert(
     body.append('job_id', jobId)
   }
 
-  const response = await fetch('/api/convert', { method: 'POST', body, signal })
+  const response = await fetch('/api/convert', { method: 'POST', body })
 
   if (!response.ok) {
     throw new Error(await errorMessage(response, 'Conversion failed'))
