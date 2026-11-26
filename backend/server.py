@@ -501,8 +501,9 @@ REGISTRY: list[Conversion] = [
                model_names=CLOUD_MODELS["anthropic"], group="llm",
                script="Handwriting", provider="anthropic",
                note="Sends the file to Anthropic's Claude. Slower, and it bills your key"),
-    # Video: Whisper for what is said, Tesseract for the screen. Local only, so one provider.
-    Conversion((".mp4",), "mp4->md", "Markdown (video, Whisper, free)", ".md",
+    # Video and audio: Whisper for what is said, Tesseract for a video's screen. Local only,
+    # so one provider.
+    Conversion((".mp4", *mp4_md.AUDIO_EXTS), "mp4->md", "Markdown (video, Whisper, free)", ".md",
                via_model_params(lambda s, model, i, o, cancel: (
                    mp4_md.convert_mp4_to_markdown(model, i, o, cancel))),
                requires=("tesseract",), takes_model=True, large_upload=True,

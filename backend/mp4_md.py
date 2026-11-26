@@ -1,5 +1,5 @@
-"""Convert MP4 videos to Markdown: what was said (Whisper) and the text shown on screen
-(Tesseract), on one timeline.
+"""Convert videos and audio files to Markdown: what was said (Whisper) and, for video, the
+text shown on screen (Tesseract), on one timeline.
 """
 
 import difflib
@@ -20,6 +20,9 @@ from llm_pdf_md import not_cancelled
 # which would read an unknown name as a Hugging Face repo to download.
 WHISPER_MODELS = ("base", "small", "medium", "large-v3")
 
+# Files with no picture, so there is no screen to read.
+AUDIO_EXTS = (".mp3", ".wav", ".m4a")
+
 # Seconds between the frames read for on-screen text.
 FRAME_INTERVAL_SECONDS = 2
 # Mean pixel difference (0-255) under which a frame is the same picture as the last one
@@ -39,7 +42,7 @@ MIN_SURE_SHARE = 0.5
 MIN_WORD_CONFIDENCE = 50
 # Frames are compared at this size, which is enough to tell pictures apart.
 COMPARE_SIZE = (64, 36)
-# Screen reading is the first half of the progress, transcribing the second.
+# Screen reading is the first half of a video's progress, transcribing the second.
 SCREEN_SHARE = 50
 # The most words handed to Whisper as spelling hints. They share its prompt (about 224 tokens)
 # with the text it has just written.
@@ -141,10 +144,15 @@ def _hint_words(shown: list[tuple[float, str]]) -> str:
 
 
 def _speech(
-    path: Path, whisper: WhisperModel, should_cancel: Callable[[], bool], hints: str = ""
+    path: Path,
+    whisper: WhisperModel,
+    should_cancel: Callable[[], bool],
+    hints: str = "",
+    start_percent: int = SCREEN_SHARE,
 ) -> list[tuple[float, str]]:
     """What was said, as (seconds, text) for each stretch of speech Whisper found. `hints` are
-    words it should spell the way they are written there, or "" for none."""
+    words it should spell the way they are written there, or "" for none. Progress is reported
+    from `start_percent` up to 100."""
     segments, info = whisper.transcribe(str(path), vad_filter=True, hotwords=hints or None)
     said = []
     for segment in segments:
@@ -153,7 +161,7 @@ def _speech(
         if segment.text.strip():
             said.append((segment.start, segment.text.strip()))
         if info.duration:
-            _report(SCREEN_SHARE + int((100 - SCREEN_SHARE) * segment.end / info.duration))
+            _report(start_percent + int((100 - start_percent) * segment.end / info.duration))
     return said
 
 
@@ -181,14 +189,14 @@ def convert_mp4_to_markdown(
     output_dir: str | Path = OUTPUT_DIR,
     should_cancel: Callable[[], bool] = not_cancelled,
 ) -> str:
-    """Convert all MP4 files in the input folder to Markdown files in the output folder.
+    """Convert all MP4 and audio files in the input folder to Markdown files in the output folder.
 
     Free and local: Whisper runs on the CPU, Tesseract reads the screen. The Whisper model is
     downloaded from Hugging Face the first time a size is used.
 
     Args:
         model: Whisper size, one of WHISPER_MODELS.
-        input_dir: Folder holding the MP4s.
+        input_dir: Folder holding the MP4s and audio files.
         output_dir: Folder the Markdown is written to.
         should_cancel: Checked before each frame and each speech segment, true stops the
             file and discards what it had so far.
@@ -202,14 +210,19 @@ def convert_mp4_to_markdown(
     def write(source: Path, dest: Path) -> None:
         # Loaded first, so a model that can't load fails before minutes of screen reading.
         whisper = WhisperModel(model, device="cpu", compute_type="int8")
-        shown = _screen_text(source, should_cancel)
-        said = _speech(source, whisper, should_cancel, _hint_words(shown))
+        is_audio = source.suffix.lower() in AUDIO_EXTS
+        shown = [] if is_audio else _screen_text(source, should_cancel)
+        start_percent = 0 if is_audio else SCREEN_SHARE
+        said = _speech(source, whisper, should_cancel, _hint_words(shown), start_percent)
         print("\rConverting video (100%)")
         if not shown and not said:
-            raise ValueError("no speech or on-screen text found")
+            raise ValueError("no speech found" if is_audio else "no speech or on-screen text found")
         dest.write_text(_timeline(said, shown), encoding="utf-8")
 
-    return convert_files(input_dir, output_dir, (".mp4",), (".md",), write, target_label="markdown")
+    return convert_files(
+        input_dir, output_dir, (".mp4", *AUDIO_EXTS), (".md",), write,
+        source_label="video or audio", target_label="markdown",
+    )
 
 
 if __name__ == "__main__":

@@ -232,6 +232,19 @@ def test_speech_and_screen_text_land_on_one_timeline(
     )
 
 
+@pytest.mark.parametrize("name", ["memo.mp3", "memo.wav", "memo.M4A"])
+def test_audio_is_transcribed_without_reading_a_screen(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / name).write_bytes(b"audio, only the fake Whisper opens it")
+    use_fakes(monkeypatch, [Segment(start=1.0, end=2.0, text="Hello")], slide)
+
+    mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir)
+
+    assert (output_dir / "memo.md").read_text(encoding="utf-8") == "**00:01** Said: Hello"
+
+
 def test_a_frame_that_looks_like_the_last_one_is_not_read_again(
     work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:

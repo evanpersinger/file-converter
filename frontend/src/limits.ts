@@ -13,11 +13,11 @@ const MAX_COMBINE_BYTES = 500 * MB
 // MAX_IMAGE_BYTES in server.py, the most the images sent along with one file take together.
 const MAX_IMAGE_BYTES = 100 * MB
 
-// The types the server gives the bigger video limit.
-const VIDEO_EXTS = ['.mp4']
+// The types the server gives the bigger video limit: videos and audio.
+const MEDIA_EXTS = ['.mp4', '.mp3', '.wav', '.m4a']
 
-const isVideo = (file: File) => VIDEO_EXTS.includes(extensionOf(file.name))
-const convertLimit = (file: File) => (isVideo(file) ? MAX_VIDEO_BYTES : MAX_CONVERT_BYTES)
+const isMedia = (file: File) => MEDIA_EXTS.includes(extensionOf(file.name))
+const convertLimit = (file: File) => (isMedia(file) ? MAX_VIDEO_BYTES : MAX_CONVERT_BYTES)
 
 // A limit as it reads in a message: whole gigabytes as GB, anything else as MB.
 const sizeLabel = (bytes: number) =>
@@ -37,8 +37,8 @@ export function convertLimitMessage(files: File[]): string | null {
     // Converting needs one format for every file, so they all share the first one's limit.
     return `${names} ${verb} over the ${sizeLabel(convertLimit(tooBig[0]))} limit for converting a file. Remove ${tooBig.length === 1 ? 'it' : 'them'} to continue.`
   }
-  // Videos are left out of the total, each one is held to its own limit above.
-  if (totalSize(files.filter((file) => !isVideo(file))) > MAX_BATCH_BYTES) {
+  // Videos and audio are left out of the total, each one is held to its own limit above.
+  if (totalSize(files.filter((file) => !isMedia(file))) > MAX_BATCH_BYTES) {
     return `These files add up to more than ${MAX_BATCH_BYTES / MB} MB. Convert them in smaller batches.`
   }
   return null

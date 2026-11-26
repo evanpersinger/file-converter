@@ -41,8 +41,8 @@ OpenAI, or Anthropic (the last two cost money and need `OPENAI_API_KEY` or
 - **JSON and TOON** to each other, TOON to Markdown or PDF, and the tables in Markdown or PDF to TOON
 - **JPG, PNG, GIF, WebP, HEIC** to PDF, PNG, JPG, WebP, SVG, Markdown or text (which ones depends on the source)
 - **SVG** to PDF, PNG
-- **MP4** to Markdown: speech (Whisper, downloaded on first use) and on-screen text (OCR), under
-  the Video option on the LLM tab
+- **MP4, MP3, WAV, M4A** to Markdown: speech (Whisper, downloaded on first use), plus on-screen
+  text (OCR) for MP4, under the Video option on the LLM tab
 - Combine several files of one type into one
 
 Every script is in `backend/<from>_<to>.py`. Each runs on its own: create `backend/input/` (it is
@@ -87,7 +87,7 @@ Tests that need a missing tool are skipped, not failed. CI installs `libmagic`, 
   so open the UI at `http://localhost:3004` (or `127.0.0.1`), not a LAN address.
 - Converting a file again overwrites the old output, and the script prints a message when it does.
 - Combine only works on files that share one extension, and keeps the order you added them.
-- A file to convert is capped at 500 MB, and a video at 5 GB. Combine takes up to 500 MB across all its files.
+- A file to convert is capped at 500 MB, and a video or audio file at 5 GB. Combine takes up to 500 MB across all its files.
 - The web UI runs up to 4 conversions at once. A fifth (another tab, say) waits for a free
   slot, and the progress bar says "Waiting for another conversion...".
 - Long PDFs on the LLM tab: the Claude path caps at about 100 pages (32 MB), and the
