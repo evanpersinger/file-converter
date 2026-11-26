@@ -14,6 +14,7 @@ import fitz  # PyMuPDF
 import pymupdf4llm
 import pytesseract
 from PIL import Image
+from pymupdf4llm.helpers import utils as pymupdf4llm_utils
 from tqdm import tqdm
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
@@ -36,6 +37,10 @@ SCRIPT_MIN_SHIFT = 0.15            # ...if its baseline is also moved by this sh
 _tesseract_path = shutil.which("tesseract")
 if _tesseract_path:
     pytesseract.pytesseract.tesseract_cmd = _tesseract_path
+
+# pymupdf4llm rewrites a lone ">" or "*" followed by a space as a "- " bullet, even
+# mid-sentence, so "p = 0.28 > 0.05" came out as "p = 0.28 - 0.05".
+pymupdf4llm_utils.BULLETS = tuple(b for b in pymupdf4llm_utils.BULLETS if b not in (">", "*"))
 
 # Math normalization
 SUPERSCRIPT_MAP = {

@@ -415,6 +415,23 @@ def test_apply_scripts_rewrites_a_repeat_no_more_often_than_the_pdf_has_it() -> 
     assert apply_scripts("x2 and x2", [("x", "2", "sup")]) == "x² and x2"
 
 
+@pytest.mark.parametrize("sign", [">", "*"])
+def test_a_sign_in_its_own_font_is_not_turned_into_a_dash(tmp_path: Path, sign: str) -> None:
+    """In a typeset equation the sign is its own span, which pymupdf4llm reads as a bullet."""
+    pdf_path = tmp_path / "sign.pdf"
+    before = "the value x "
+    sign_x = 72 + fitz.get_text_length(before, fontsize=11)
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), before, fontsize=11)
+    page.insert_text((sign_x, 100), sign, fontname="tiro", fontsize=11)
+    page.insert_text((sign_x + 10, 100), " y holds here", fontsize=11)
+    doc.save(pdf_path)
+    doc.close()
+
+    assert f"x {sign} y" in pdf_to_markdown(str(pdf_path))
+
+
 def test_a_raised_digit_after_a_paren_becomes_a_superscript(tmp_path: Path) -> None:
     """The geometry pass reaches what the ' [2]' rule cannot: here the base is a ')'."""
     pdf_path = tmp_path / "paren_square.pdf"
