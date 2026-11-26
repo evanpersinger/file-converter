@@ -42,7 +42,7 @@ OpenAI, or Anthropic (the last two cost money and need `OPENAI_API_KEY` or
 - **JPG, PNG, GIF, WebP, HEIC** to PDF, PNG, JPG, WebP, SVG, Markdown or text (which ones depends on the source)
 - **SVG** to PDF, PNG
 - **MP4, MP3, WAV, M4A** to Markdown: speech (Whisper, downloaded on first use), plus on-screen
-  text (OCR) for MP4, under the Video option on the LLM tab
+  text (OCR) for MP4, under the Video / Audio option on the LLM tab
 - Combine several files of one type into one
 
 Every script is in `backend/<from>_<to>.py`. Each runs on its own: create `backend/input/` (it is

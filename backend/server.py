@@ -503,13 +503,13 @@ REGISTRY: list[Conversion] = [
                note="Sends the file to Anthropic's Claude. Slower, and it bills your key"),
     # Video and audio: Whisper for what is said, Tesseract for a video's screen. Local only,
     # so one provider.
-    Conversion((".mp4", *mp4_md.AUDIO_EXTS), "mp4->md", "Markdown (video, Whisper, free)", ".md",
+    Conversion((".mp4", *mp4_md.AUDIO_EXTS), "mp4->md", "Markdown (video or audio, Whisper, free)", ".md",
                via_model_params(lambda s, model, i, o, cancel: (
                    mp4_md.convert_mp4_to_markdown(model, i, o, cancel))),
                requires=("tesseract",), takes_model=True, large_upload=True,
                model_names=mp4_md.WHISPER_MODELS, group="llm",
-               script="Video", provider="whisper",
-               caption="Used for converting video files to md text",
+               script="Video / Audio", provider="whisper",
+               caption="Used for converting video and audio files to md text",
                note="Runs on your machine. Free, but slow, and a model downloads the first time it is used"),
 
     # --- office --------------------------------------------------------------
