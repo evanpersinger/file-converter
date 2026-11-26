@@ -7,7 +7,7 @@ name = "file-converter"
 version = "1.0.0"
 description = "Simple scripts to convert files between different formats"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11.5"
 license = {text = "MIT"}
 authors = [
     {name = "Evan"}
