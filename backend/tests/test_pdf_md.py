@@ -120,9 +120,14 @@ def test_operator_bound_converts_even_glued_to_the_next_term() -> None:
     assert normalize_math(r"\sum_{i=1}^nw_i") == "∑ᵢ₌₁ⁿwᵢ"
 
 
-def test_snake_case_identifier_is_left_alone() -> None:
-    """Multi-letter subscripts need braces precisely so ordinary identifiers survive."""
-    assert normalize_math("snake_case") == "snake_case"
+@pytest.mark.parametrize("name", ["snake_case", "model_1", "group_a", "report_2024_1.pdf"])
+def test_snake_case_identifier_is_left_alone(name: str) -> None:
+    """A subscript without braces needs a lone base, so ordinary identifiers survive."""
+    assert normalize_math(name) == name
+
+
+def test_subscript_after_a_coefficient_is_still_mapped() -> None:
+    assert normalize_math("2x_1") == "2x₁"
 
 
 def test_inline_code_is_not_touched() -> None:

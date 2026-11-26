@@ -145,9 +145,11 @@ def _apply_math(text, ocr):
         lambda m: _to_superscript(m.group(1)),
         text,
     )
-    # explicit subscript: x_1, x_i, x_{ij}  (multi-letter only via braces, so snake_case is safe)
+    # explicit subscript: x_1, x_i, x_{ij}. Without braces, the underscore can't follow two
+    # letters or end a longer number, so model_1 and report_2024_1 are left alone.
     text = re.sub(
-        r"([" + _SCRIPT_BASE_CHARS + r"])_(\{[^}]+\}|-?\d+|[A-Za-z](?![A-Za-z]))",
+        r"([" + _SCRIPT_BASE_CHARS + r"])_(\{[^}]+\}"
+        r"|(?<![A-Za-z_]{2}_)(?<![A-Za-z0-9_][0-9]_)(?:-?\d+|[A-Za-z](?![A-Za-z])))",
         lambda m: m.group(1) + _to_subscript(m.group(2).strip("{}")),
         text,
     )
