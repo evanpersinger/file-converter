@@ -116,6 +116,9 @@
    the page edge, so a wide window doesn't leave an empty band on the right. */
 .log-panel {
   flex: 1 0 12rem;
+  /* Without this the panel's minimum is its widest line, so a long filename (kept on one
+     line by .log-file) squeezes main instead of getting its ellipsis. */
+  min-width: 0;
   box-sizing: border-box;
   /* Space between the column's divider and its text. */
   --pad-left: 1rem;
