@@ -76,7 +76,6 @@ dependencies = [
     # Utilities
     "python-magic>=0.4.27",
     "requests>=2.32.3",
-    "tqdm>=4.67.1",
 
     # Speech to text (mp4_md.py)
     "faster-whisper>=1.2.1",
