@@ -592,8 +592,8 @@ def test_latex_delimiters_are_normalized_to_dollars(source: str, expected: str) 
     assert normalize_math_delimiters(source) == expected
 
 
-@pytest.mark.parametrize(("dash", "source"), [("—", "a — b"), ("–", "a – b")])
-def test_em_and_en_dashes_are_flattened(dash: str, source: str) -> None:
+@pytest.mark.parametrize("source", ["a — b", "a – b"])
+def test_em_and_en_dashes_are_flattened(source: str) -> None:
     assert normalize_math_delimiters(source) == "a - b"
 
 
