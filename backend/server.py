@@ -254,8 +254,8 @@ def capture_output(buffer: io.StringIO) -> Iterator[None]:
                 sys.stdout, sys.stderr = _original_streams
 
 
-# The two ways a converter is handed the job's folders. Each returns an
-# `invoke(job_dir, job_in, job_out, staged)`. `call` receives the absolute path of the
+# The ways a converter is handed the job's folders. Each returns an
+# `invoke(job_dir, job_in, job_out, staged, ...)`. `call` receives the absolute path of the
 # staged upload.
 
 def via_model_params(call: Callable):
@@ -278,10 +278,22 @@ def via_model_params(call: Callable):
 
 def via_params(call: Callable):
     """Converter accepts input_dir / output_dir arguments. This is how every converter
-    except the LLM ones is called.
+    is called that takes no model and can't be cancelled.
     """
     def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
         return call(staged, job_in, job_out)
+    return invoke
+
+
+def via_cancel_params(call: Callable):
+    """`via_params` for a converter that also takes the job's cancel check. Its Conversion
+    needs `takes_cancel=True`.
+    """
+    def invoke(
+        job_dir: Path, job_in: Path, job_out: Path, staged: Path,
+        should_cancel: Callable[[], bool],
+    ):
+        return call(staged, job_in, job_out, should_cancel)
     return invoke
 
 
@@ -397,6 +409,9 @@ class Conversion:
     # True for a conversion whose input links to images (IMAGE_EXTS), which are uploaded with
     # it and staged next to it so the links resolve.
     takes_images: bool = False
+    # True for a conversion with no model whose `invoke` still takes the cancel check, so it
+    # can stop early. The ones that take a model always get it.
+    takes_cancel: bool = False
 
 
 def _upload_limit(conv: Conversion) -> int:
@@ -439,8 +454,8 @@ REGISTRY: list[Conversion] = [
 
     # --- PDF -----------------------------------------------------------------
     Conversion((".pdf",), "pdf->md", "Markdown", ".md",
-               via_params(lambda s, i, o: pdf_md.convert_pdf_to_markdown(i, o)),
-               requires=("tesseract",)),
+               via_cancel_params(lambda s, i, o, cancel: pdf_md.convert_pdf_to_markdown(i, o, cancel)),
+               requires=("tesseract",), takes_cancel=True),
     Conversion((".pdf",), "pdf->txt", "TXT", ".txt",
                via_params(lambda s, i, o: pdf_txt.convert_pdf_to_txt(i, o)),
                requires=("tesseract",)),
@@ -987,8 +1002,8 @@ def progress(job_id: str) -> dict:
 
     The percent is None when the job isn't running (not started yet, still waiting for
     a free slot, or finished) or its converter prints no percentage, which is every
-    converter except the local-model and video ones. `queued` is True while the job waits for a
-    free slot behind other conversions.
+    converter except the local-model and video ones and PDF to Markdown on scanned pages.
+    `queued` is True while the job waits for a free slot behind other conversions.
     """
     output = _JOB_OUTPUT.get(job_id)
     return {
@@ -1000,8 +1015,9 @@ def progress(job_id: str) -> dict:
 @app.post("/api/convert/{job_id}/cancel")
 def cancel_convert(job_id: str):
     """Signal a conversion to stop. A job still waiting for a slot never starts. A running
-    one stops only if its converter checks the flag (the LLM and video converters do,
-    before each page or file); the others ignore it and run to completion."""
+    one stops only if its converter checks the flag (the LLM, video and PDF to Markdown
+    converters do, between pages, frames or files); the others ignore it and run to
+    completion."""
     event = _JOB_CANCEL.get(job_id)
     if event is None:
         return _error("No conversion is running for that job.", status=404)
@@ -1147,7 +1163,9 @@ def convert(
                 return _error("Conversion cancelled.", status=409)
             try:
                 with capture_output(captured):
-                    extra = (model, cancel_event.is_set) if conv.takes_model else ()
+                    extra = (model,) if conv.takes_model else ()
+                    if conv.takes_model or conv.takes_cancel:
+                        extra += (cancel_event.is_set,)
                     result = conv.invoke(job_dir, job_in, job_out, staged, *extra)
             except Exception as exc:
                 traceback.print_exc()

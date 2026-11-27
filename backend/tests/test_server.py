@@ -647,6 +647,37 @@ def test_a_cancelled_video_says_so_in_the_log() -> None:
     assert server._plain_log(output) == [server.mp4_md.CANCELLED_NOTE]
 
 
+def test_cancelling_pdf_to_markdown_returns_the_pages_already_read(
+    client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(server.DEPS, "tesseract", lambda: True)
+
+    def read_page(page: fitz.Page) -> str:
+        server._JOB_CANCEL["pdf-job"].set()  # Cancel arrives while page 1 is being read
+        return "first page"
+
+    monkeypatch.setattr(server.pdf_md, "ocr_page", read_page)
+    pdf_path = tmp_path / "scan.pdf"
+    doc = fitz.open()
+    for _ in range(3):
+        doc.new_page()
+    doc.save(pdf_path)
+    doc.close()
+
+    response = client.post(
+        "/api/convert",
+        data={"target": "pdf->md", "job_id": "pdf-job"},
+        files={"file": ("scan.pdf", pdf_path.read_bytes())},
+    )
+
+    assert response.status_code == 200
+    assert response.text == "<!-- page 1 -->\n\nfirst page\n"
+    assert json.loads(response.headers["X-Conversion-Log"]) == [
+        "Cancelled after page 1 of 3.",
+        "1 of 3 pages converted.",
+    ]
+
+
 _HANDWRITING_CAPTION = "Used for pictures of handwriting"
 
 

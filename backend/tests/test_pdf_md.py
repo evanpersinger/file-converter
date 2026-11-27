@@ -14,6 +14,7 @@ import pytest
 
 from pdf_md import (
     apply_scripts,
+    convert_pdf_to_markdown,
     find_scripts,
     normalize_math,
     pdf_to_markdown,
@@ -332,6 +333,19 @@ def test_each_page_starts_with_a_page_marker(tmp_path: Path) -> None:
     assert markdown.index("<!-- page 1 -->") < markdown.index("first page")
     assert markdown.index("first page") < markdown.index("<!-- page 2 -->")
     assert markdown.index("<!-- page 2 -->") < markdown.index("second page")
+
+
+def test_cancelling_before_any_page_is_read_writes_no_file(work_dirs: tuple[Path, Path]) -> None:
+    input_dir, output_dir = work_dirs
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(input_dir / "scan.pdf")
+    doc.close()
+
+    summary = convert_pdf_to_markdown(input_dir, output_dir, should_cancel=lambda: True)
+
+    assert summary == "No files converted. 1 failed: scan.pdf: Cancelled"
+    assert not (output_dir / "scan.md").exists()
 
 
 def test_running_header_is_kept_once_in_the_converted_output(tmp_path: Path) -> None:

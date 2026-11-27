@@ -8,6 +8,7 @@ import re
 import shutil
 import unicodedata
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -15,7 +16,6 @@ import pymupdf4llm
 import pytesseract
 from PIL import Image
 from pymupdf4llm.helpers import utils as pymupdf4llm_utils
-from tqdm import tqdm
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 from external_tool import ocr_text
@@ -367,8 +367,12 @@ def ocr_page(page):
     return ocr_text(img, config=TESSERACT_CONFIG, lang=TESSERACT_LANG)
 
 
-def pdf_to_markdown(pdf_path, image_dir=None):
-    """Convert a single PDF to a markdown string. image_dir is where extracted images go."""
+def pdf_to_markdown(pdf_path, image_dir=None, should_cancel: Callable[[], bool] = lambda: False):
+    """Convert a single PDF to a markdown string. image_dir is where extracted images go.
+
+    should_cancel is checked before each page that needs OCR. True stops there, and the
+    string holds the pages finished by then. Raises RuntimeError if that is none of them.
+    """
     doc = fitz.open(pdf_path)
     if doc.is_encrypted:
         # try an empty password; skip if it's really locked
@@ -401,13 +405,26 @@ def pdf_to_markdown(pdf_path, image_dir=None):
                 text = apply_scripts(text, find_scripts(doc[page_no]))
             md_by_page[page_no] = normalize_math(text, ocr=False)
 
-    # Scanned/image pages -> OCR
-    if ocr_pages:
-        for i in tqdm(ocr_pages, desc=f"OCR {Path(pdf_path).name}", unit="page", leave=False):
-            raw = ocr_page(doc[i])
-            md_by_page[i] = normalize_math(raw.strip(), ocr=True)
+    # Scanned/image pages -> OCR, one at a time so a cancel keeps the pages already read
+    unread = []
+    for done, i in enumerate(ocr_pages):
+        if should_cancel():
+            unread = ocr_pages[done:]
+            break
+        print(f"\rConverting page {i + 1}/{n_pages} ({done * 100 // len(ocr_pages)}%)", end="", flush=True)
+        raw = ocr_page(doc[i])
+        md_by_page[i] = normalize_math(raw.strip(), ocr=True)
 
     doc.close()
+
+    if unread:
+        # server.py reads these two lines into the result log
+        print(f"\rCancelled after page {unread[0]}/{n_pages}")
+        if not any(md_by_page.values()):
+            raise RuntimeError("Cancelled")
+        print(f"Converted {Path(pdf_path).name} ({n_pages - len(unread)}/{n_pages} pages succeeded)")
+    elif ocr_pages:
+        print(f"\rConverting page {n_pages}/{n_pages} (100%)")
 
     kind = "searchable" if not ocr_pages else ("scanned" if not text_pages else "mixed")
     print(f"{n_pages} page(s): {len(text_pages)} searchable, {len(ocr_pages)} OCR ({kind})")
@@ -417,23 +434,27 @@ def pdf_to_markdown(pdf_path, image_dir=None):
 
 
 # Runner
-def _write_markdown(source: Path, dest: Path) -> None:
-    dest.write_text(pdf_to_markdown(str(source), dest.parent / "images"), encoding="utf-8")
-
-
 def convert_pdf_to_markdown(
-    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+    input_dir: str | Path = INPUT_DIR,
+    output_dir: str | Path = OUTPUT_DIR,
+    should_cancel: Callable[[], bool] = lambda: False,
 ) -> str:
     """Convert every PDF in the input folder to Markdown in the output folder.
 
     Searchable pages become real Markdown; scanned pages fall back to OCR, handled
     page by page so mixed PDFs work. This runs locally and is free, unlike the
-    LLM-powered versions in llm_pdf_md.py.
+    LLM-powered versions in llm_pdf_md.py. should_cancel stops a file between scanned
+    pages, see pdf_to_markdown.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
     """
-    return convert_files(input_dir, output_dir, (".pdf",), (".md",), _write_markdown)
+
+    def write(source: Path, dest: Path) -> None:
+        markdown = pdf_to_markdown(str(source), dest.parent / "images", should_cancel)
+        dest.write_text(markdown, encoding="utf-8")
+
+    return convert_files(input_dir, output_dir, (".pdf",), (".md",), write)
 
 
 def main():
