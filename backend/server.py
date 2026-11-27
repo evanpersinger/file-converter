@@ -255,7 +255,7 @@ def capture_output(buffer: io.StringIO) -> Iterator[None]:
 
 
 # The ways a converter is handed the job's folders. Each returns an
-# `invoke(job_dir, job_in, job_out, staged, ...)`. `call` receives the absolute path of the
+# `invoke(job_in, job_out, staged, ...)`. `call` receives the absolute path of the
 # staged upload.
 
 def via_model_params(call: Callable):
@@ -269,7 +269,7 @@ def via_model_params(call: Callable):
     `--loop asyncio` for it to work.
     """
     def invoke(
-        job_dir: Path, job_in: Path, job_out: Path, staged: Path, model: str,
+        job_in: Path, job_out: Path, staged: Path, model: str,
         should_cancel: Callable[[], bool] = lambda: False,
     ):
         return call(staged, model, job_in, job_out, should_cancel)
@@ -280,7 +280,7 @@ def via_params(call: Callable):
     """Converter accepts input_dir / output_dir arguments. This is how every converter
     is called that takes no model and can't be cancelled.
     """
-    def invoke(job_dir: Path, job_in: Path, job_out: Path, staged: Path):
+    def invoke(job_in: Path, job_out: Path, staged: Path):
         return call(staged, job_in, job_out)
     return invoke
 
@@ -290,7 +290,7 @@ def via_cancel_params(call: Callable):
     needs `takes_cancel=True`.
     """
     def invoke(
-        job_dir: Path, job_in: Path, job_out: Path, staged: Path,
+        job_in: Path, job_out: Path, staged: Path,
         should_cancel: Callable[[], bool],
     ):
         return call(staged, job_in, job_out, should_cancel)
@@ -1164,7 +1164,7 @@ def convert(
                     extra = (model,) if conv.takes_model else ()
                     if conv.takes_model or conv.takes_cancel:
                         extra += (cancel_event.is_set,)
-                    result = conv.invoke(job_dir, job_in, job_out, staged, *extra)
+                    result = conv.invoke(job_in, job_out, staged, *extra)
             except Exception as exc:
                 traceback.print_exc()
                 return _error(
