@@ -48,12 +48,9 @@ def convert_r_to_rmd(r_path: str, output_path: str | None = None,
     output_dir.mkdir(exist_ok=True)
     
     # Check if already Rmd format
-    try:
-        if Path(r_path).suffix.lower() == ".rmd":
-            print("That file is already in Rmd format")
-            return False
-    except Exception:
-        pass
+    if Path(r_path).suffix.lower() == ".rmd":
+        print("That file is already in Rmd format")
+        return False
     
     # Build full input path
     full_input_path = Path(r_path) if os.path.isabs(str(r_path)) else input_dir / r_path

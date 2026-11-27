@@ -39,12 +39,9 @@ def convert_html_to_pdf(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Early guard: if the provided path already points to a PDF, bail out
-    try:
-        if Path(html_path).suffix.lower() == ".pdf":
-            print("That file is already in pdf format")
-            return False
-    except Exception:
-        pass
+    if Path(html_path).suffix.lower() == ".pdf":
+        print("That file is already in pdf format")
+        return False
 
     # Build full input path
     full_input_path = Path(html_path) if os.path.isabs(str(html_path)) else input_dir / html_path

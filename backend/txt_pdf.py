@@ -41,13 +41,9 @@ def convert_txt_to_pdf(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # if the provided path already points to a PDF let user know and return False
-    try:
-        provided_suffix = Path(txt_path).suffix.lower()
-        if provided_suffix == ".pdf":
-            print("That file is already in pdf format")
-            return False
-    except Exception:
-        pass
+    if Path(txt_path).suffix.lower() == ".pdf":
+        print("That file is already in pdf format")
+        return False
 
     # Build full input path
     full_input_path = Path(txt_path) if os.path.isabs(str(txt_path)) else input_dir / txt_path

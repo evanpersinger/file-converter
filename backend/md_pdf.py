@@ -997,12 +997,9 @@ def convert_md_to_pdf(
         True if the conversion succeeded, False otherwise.
     """
     # If the provided path already points to a PDF, bail out early
-    try:
-        if Path(md_path).suffix.lower() == ".pdf":
-            print("That file is already in pdf format")
-            return False
-    except Exception:
-        pass
+    if Path(md_path).suffix.lower() == ".pdf":
+        print("That file is already in pdf format")
+        return False
 
     full_input_path = (Path(md_path) if os.path.isabs(str(md_path))
                        else Path(input_dir) / md_path)

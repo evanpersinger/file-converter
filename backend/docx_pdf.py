@@ -104,13 +104,9 @@ def convert_docx_to_pdf(docx_path: str, output_path: str | None = None, input_di
         output_dir = Path(output_dir)
 
     # if the provided path already points to a PDF let user know and return False
-    try:
-        provided_suffix = Path(docx_path).suffix.lower()
-        if provided_suffix == ".pdf":
-            print("That file is already in pdf format")
-            return False
-    except Exception:
-        pass
+    if Path(docx_path).suffix.lower() == ".pdf":
+        print("That file is already in pdf format")
+        return False
 
     # Build full input path
     full_input_path = Path(docx_path) if os.path.isabs(str(docx_path)) else input_dir / docx_path

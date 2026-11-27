@@ -30,12 +30,9 @@ def convert_notebook_to_pdf(
         bool: True if conversion successful, False otherwise
     """
     # Early guard: if the provided path is already a PDF, stop
-    try:
-        if Path(notebook_path).suffix.lower() == ".pdf":
-            print("That file is already in pdf format")
-            return False
-    except Exception:
-        pass
+    if Path(notebook_path).suffix.lower() == ".pdf":
+        print("That file is already in pdf format")
+        return False
 
     input_dir, output_dir = Path(input_dir), Path(output_dir)
     

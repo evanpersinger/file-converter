@@ -71,12 +71,9 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
     output_dir.mkdir(exist_ok=True)
 
     # if the provided path already points to a PDF, stop
-    try:
-        if Path(rmd_path).suffix.lower() == ".pdf":
-            print("That file is already in pdf format")
-            return False
-    except Exception:
-        pass
+    if Path(rmd_path).suffix.lower() == ".pdf":
+        print("That file is already in pdf format")
+        return False
 
     # Build full input path
     full_input_path = Path(rmd_path) if os.path.isabs(str(rmd_path)) else input_dir / rmd_path
