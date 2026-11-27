@@ -261,8 +261,7 @@ def capture_output(buffer: io.StringIO) -> Iterator[None]:
 def via_model_params(call: Callable):
     """The LLM conversions: the converter takes input_dir / output_dir / should_cancel
     arguments, and the user picks the model. `call` receives the staged path, the model
-    name, the job's folders and the cancel check. `should_cancel` defaults to a no-op so
-    this still works for callers (tests) that don't pass one.
+    name, the job's folders and the cancel check.
 
     The OpenAI path in llm_pdf_md only imports vision_parse when it runs, so a uvloop event
     loop breaks that one conversion at call time instead of at server startup. Run with
@@ -270,7 +269,7 @@ def via_model_params(call: Callable):
     """
     def invoke(
         job_in: Path, job_out: Path, staged: Path, model: str,
-        should_cancel: Callable[[], bool] = lambda: False,
+        should_cancel: Callable[[], bool],
     ):
         return call(staged, model, job_in, job_out, should_cancel)
     return invoke
