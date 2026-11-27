@@ -50,7 +50,7 @@ dependencies = [
     "pymupdf4llm>=0.0.17",
 
     # Document Processing
-    "python-docx>=1.1.2",
+    "python-docx>=1.1.2",  # only the tests import it (pdf2docx needs it too)
     "python-pptx>=1.0.2",
     "pdf2docx>=0.5.13",
     "mistune>=3.0,<4",  # md_toon.py parses Markdown tables with it, nbconvert pulls it in too

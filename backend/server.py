@@ -539,8 +539,8 @@ REGISTRY: list[Conversion] = [
                requires=("pandoc",),
                note="Documents with images come back as a zip, with the images in a folder"),
     Conversion((".docx",), "docx->pdf", "PDF", ".pdf",
-               via_params(lambda s, i, o: docx_pdf.convert_docx_to_pdf(
-                   str(s), None, input_dir=str(i), output_dir=str(o)))),
+               via_params(lambda s, i, o: docx_pdf.convert_docx_to_pdf(i, o)),
+               requires=("libreoffice",)),
 
     # --- images --------------------------------------------------------------
     Conversion((".heic",), "heic->jpg", "JPG", ".jpg",

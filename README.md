@@ -58,7 +58,7 @@ brew install libmagic                   # web UI server, always needed
 brew install tesseract                  # OCR
 brew install pandoc                     # Word and Markdown conversions
 brew install --cask mactex              # Markdown and Jupyter to PDF
-brew install --cask libreoffice         # PowerPoint
+brew install --cask libreoffice         # Word to PDF, PowerPoint
 brew install r                          # R Markdown, plus the rmarkdown R package
 brew install ollama                     # local LLM
 ```

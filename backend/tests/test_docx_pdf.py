@@ -1,150 +1,78 @@
-"""Tests for docx_pdf.py, which rebuilds a Word document as a PDF with reportlab.
+"""Tests for docx_pdf.py, which has headless LibreOffice render each Word file to a PDF.
 
-It has its own loop rather than convert_files: it returns True or False and prints.
+The command is checked with a fake run_tool. The real runs are skipped without LibreOffice.
 """
 
-from collections.abc import Callable
+import shutil
+import subprocess
 from pathlib import Path
 
 import fitz
 import pytest
 from docx import Document
-from docx.oxml import OxmlElement
-from docx.shared import Inches
-from PIL import Image
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 import docx_pdf
+import pptx_pdf
 
 WorkDirs = tuple[Path, Path]
-WriteImage = Callable[..., Path]
+
+needs_libreoffice = pytest.mark.skipif(
+    not any(shutil.which(name) for name in ("libreoffice", "soffice")),
+    reason="LibreOffice is not on PATH",
+)
 
 
-def convert(work_dirs: WorkDirs, document: Document) -> Path:
-    """Save the document as report.docx, convert it, and return the PDF path."""
+def test_libreoffice_is_told_to_read_the_file_as_word(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
     input_dir, output_dir = work_dirs
-    output_dir.mkdir(exist_ok=True)
+    (input_dir / "report.docx").write_bytes(b"placeholder")
+    commands: list[list[str]] = []
+
+    def run(command: list[str]) -> subprocess.CompletedProcess:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(pptx_pdf, "_find_libreoffice", lambda: "soffice")
+    monkeypatch.setattr(pptx_pdf, "run_tool", run)
+
+    docx_pdf.convert_docx_to_pdf(input_dir, output_dir)
+
+    assert "--infilter=MS Word 2007 XML" in commands[0]
+    assert commands[0][-1] == str(input_dir / "report.docx")
+
+
+@needs_libreoffice
+def test_real_libreoffice_keeps_inserted_text_list_numbers_and_markup_characters(
+    work_dirs: WorkDirs,
+) -> None:
+    input_dir, output_dir = work_dirs
+    document = Document()
+    paragraph = document.add_paragraph("before ")
+    paragraph._p.append(parse_xml(
+        f'<w:ins {nsdecls("w")} w:id="1" w:author="a" w:date="2026-01-01T00:00:00Z">'
+        "<w:r><w:t>inserted</w:t></w:r></w:ins>"
+    ))
+    document.add_paragraph("alpha item", style="List Number")
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "x<y"
     document.save(input_dir / "report.docx")
-    assert docx_pdf.convert_docx_to_pdf("report.docx", None, input_dir, output_dir) is True
-    return output_dir / "report.pdf"
+
+    summary = docx_pdf.convert_docx_to_pdf(input_dir, output_dir)
+
+    assert "report.pdf" in summary
+    with fitz.open(output_dir / "report.pdf") as pdf:
+        text = pdf[0].get_text()
+    assert all(part in text for part in ("inserted", "1.", "alpha item", "x<y"))
 
 
-def pdf_text(path: Path) -> str:
-    with fitz.open(path) as pdf:
-        return "".join(page.get_text() for page in pdf)
-
-
-def test_paragraphs_and_the_title_reach_the_pdf(work_dirs: WorkDirs) -> None:
-    document = Document()
-    document.add_paragraph("first paragraph")
-    document.add_paragraph("second paragraph")
-
-    text = pdf_text(convert(work_dirs, document))
-
-    assert "Document: report" in text
-    assert "first paragraph" in text and "second paragraph" in text
-
-
-def test_bold_and_italic_runs_are_styled(work_dirs: WorkDirs) -> None:
-    document = Document()
-    paragraph = document.add_paragraph("plain ")
-    paragraph.add_run("heavy ").bold = True
-    paragraph.add_run("slanted").italic = True
-
-    with fitz.open(convert(work_dirs, document)) as pdf:
-        fonts = {
-            span["text"].strip(): span["font"]
-            for block in pdf[0].get_text("dict")["blocks"]
-            for line in block.get("lines", [])
-            for span in line["spans"]
-        }
-
-    assert "Bold" in fonts["heavy"]
-    assert "Oblique" in fonts["slanted"]
-
-
-def test_text_inside_a_hyperlink_is_kept(work_dirs: WorkDirs) -> None:
-    """python-docx's paragraph.runs skips runs nested in a hyperlink element."""
-    document = Document()
-    paragraph = document.add_paragraph("See ")
-    hyperlink = OxmlElement("w:hyperlink")
-    run = OxmlElement("w:r")
-    run_text = OxmlElement("w:t")
-    run_text.text = "the docs"
-    run.append(run_text)
-    hyperlink.append(run)
-    paragraph._p.append(hyperlink)
-
-    assert "the docs" in pdf_text(convert(work_dirs, document))
-
-
-def test_a_table_keeps_its_cells(work_dirs: WorkDirs) -> None:
-    document = Document()
-    table = document.add_table(rows=2, cols=2)
-    for (row, column), value in {(0, 0): "Name", (0, 1): "Score", (1, 0): "Evan", (1, 1): "92"}.items():
-        table.cell(row, column).text = value
-
-    text = pdf_text(convert(work_dirs, document))
-
-    assert all(cell in text for cell in ("Name", "Score", "Evan", "92"))
-
-
-def test_an_embedded_image_is_drawn(
-    work_dirs: WorkDirs, write_image: WriteImage, tmp_path: Path
-) -> None:
-    document = Document()
-    document.add_picture(str(write_image(tmp_path / "red.png", "PNG")), width=Inches(1))
-
-    with fitz.open(convert(work_dirs, document)) as pdf:
-        assert len(pdf[0].get_images()) == 1
-
-
-def test_a_phone_photo_is_drawn_the_way_up_it_displays(
-    work_dirs: WorkDirs, tmp_path: Path
-) -> None:
-    """A phone photo is stored sideways with an orientation tag, which reportlab ignores."""
-    exif = Image.Exif()
-    exif[0x0112] = 6
-    photo = tmp_path / "phone.jpg"
-    Image.new("RGB", (20, 40), "red").save(photo, "JPEG", exif=exif)
-    document = Document()
-    document.add_picture(str(photo))
-
-    with fitz.open(convert(work_dirs, document)) as pdf:
-        box = fitz.Rect(pdf[0].get_image_info()[0]["bbox"])
-
-    assert box.width > box.height
-
-
-def test_markup_characters_are_printed_as_text(work_dirs: WorkDirs) -> None:
-    document = Document()
-    document.add_paragraph("1 < 2 & 3 > 2")
-
-    assert "1 < 2 & 3 > 2" in pdf_text(convert(work_dirs, document))
-
-
-def test_a_pdf_path_is_refused(
-    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
-) -> None:
+@needs_libreoffice
+def test_real_libreoffice_refuses_a_file_that_is_not_word(work_dirs: WorkDirs) -> None:
     input_dir, output_dir = work_dirs
+    (input_dir / "junk.docx").write_bytes(b"not a Word file")
 
-    assert docx_pdf.convert_docx_to_pdf("doc.pdf", None, input_dir, output_dir) is False
-    assert "already in pdf format" in capsys.readouterr().out
+    summary = docx_pdf.convert_docx_to_pdf(input_dir, output_dir)
 
-
-def test_a_missing_file_gives_false(
-    work_dirs: WorkDirs, capsys: pytest.CaptureFixture[str]
-) -> None:
-    input_dir, output_dir = work_dirs
-
-    assert docx_pdf.convert_docx_to_pdf("ghost.docx", None, input_dir, output_dir) is False
-    assert "not found" in capsys.readouterr().out
-
-
-def test_an_existing_pdf_is_overwritten(work_dirs: WorkDirs) -> None:
-    _, output_dir = work_dirs
-    output_dir.mkdir()
-    (output_dir / "report.pdf").write_bytes(b"stale")
-    document = Document()
-    document.add_paragraph("fresh text")
-
-    assert "fresh text" in pdf_text(convert(work_dirs, document))
+    assert summary.startswith("No files converted. 1 failed: junk.docx")
+    assert not (output_dir / "junk.pdf").exists()
