@@ -92,7 +92,8 @@ Tests that need a missing tool are skipped, not failed. CI installs `libmagic`, 
   slot, and the progress bar says "Waiting for another conversion...".
 - Long PDFs on the LLM tab: the Claude path caps at about 100 pages (32 MB). A reply cut
   off at the output limit is saved as far as it got, and the result log says so. The OpenAI
-  path can hit a rate limit and fail with no output. Use Claude for long ones.
+  path goes page by page: one that fails (a rate limit, say) is skipped and listed in the
+  result log, and the rest are kept. Use Claude for long ones.
 - The LLM scripts convert every file in `backend/input/`, one at a time. If the files add up to
   more than 100 MB, they wait 30 seconds between files to go easy on memory.
 - Markdown and PDF to TOON convert tables only, and a file with none fails. A PDF table needs ruling

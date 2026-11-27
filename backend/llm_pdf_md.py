@@ -4,6 +4,7 @@ OpenAI path needs OPENAI_API_KEY, Claude path needs ANTHROPIC_API_KEY (env or .e
 cost money. Local path needs Ollama running with a vision model pulled, free.
 """
 
+import asyncio
 import base64
 import os
 import re
@@ -61,30 +62,6 @@ _PAGE_PROMPT = (
 
 
 # OpenAI (via vision-parse)
-def convert_with_retry(parser, pdf_path, max_retries=3, retry_delay=5):
-    """Convert PDF with retry logic for connection errors"""
-    for attempt in range(max_retries):
-        try:
-            # Convert PDF to markdown (returns list of pages)
-            pages = parser.convert_pdf(str(pdf_path))
-            return pages
-        except Exception as e:
-            error_msg = str(e).lower()
-            # Check if it's a connection error
-            if "connection" in error_msg or "timeout" in error_msg or "network" in error_msg:
-                if attempt < max_retries - 1:
-                    print(f"Connection error (attempt {attempt + 1}/{max_retries}). Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                    continue
-                else:
-                    raise Exception(f"Connection failed after {max_retries} attempts: {e}") from e
-            else:
-                # Not a connection error, don't retry
-                raise e
-    return None
-
-
 def _build_parser(api_key: str, model: str):
     """Build the VisionParser, falling back to URL mode if base64 is unavailable.
 
@@ -117,6 +94,29 @@ def _build_parser(api_key: str, model: str):
             enable_concurrency=False,
             custom_prompt=_PAGE_PROMPT,
         )
+
+
+def _convert_pdf_openai(
+    parser, pdf_path: Path, should_cancel: Callable[[], bool] = not_cancelled
+) -> tuple[str, list[int], int]:
+    """Transcribe the PDF with OpenAI one page at a time. See _convert_each_page for what
+    comes back.
+
+    The SDK inside vision_parse already retries rate limits and dropped connections.
+    """
+
+    def convert_page(page: fitz.Page) -> str:
+        try:
+            # The per-page step of parser.convert_pdf. That one returns nothing at all when
+            # any page fails, losing pages already paid for, so the loop is ours.
+            return asyncio.run(parser._convert_page(page, page.number))
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as e:
+            # vision_parse's errors derive from BaseException, so `except Exception` misses them
+            raise RuntimeError(str(e)) from e
+
+    return _convert_each_page(pdf_path, convert_page, should_cancel)
 
 
 # Anthropic (Claude reads the PDF directly)
@@ -262,10 +262,26 @@ def _convert_pdf_local(
 ) -> tuple[str, list[int], int]:
     """Render each page of the PDF to an image and transcribe it with the local Ollama model.
 
-    Page by page, like the OpenAI path, since local vision models handle one image far more
-    reliably than a whole multi-page document at once. A page that fails to convert is
-    left out of the returned text instead of failing the whole file, nothing about the
-    failure is written into the markdown, it's only reported through the returned list.
+    Page by page, since local vision models handle one image far more reliably than a whole
+    multi-page document at once. See _convert_each_page for what comes back.
+    """
+
+    def convert_page(page: fitz.Page) -> str:
+        png_bytes = page.get_pixmap(dpi=local_page_dpi(page)).tobytes("png")
+        return _convert_page_ollama(base64.standard_b64encode(png_bytes).decode("ascii"), model)
+
+    return _convert_each_page(pdf_path, convert_page, should_cancel)
+
+
+# Shared by the two providers that go page by page
+def _convert_each_page(
+    pdf_path: Path, convert_page: Callable[[fitz.Page], str], should_cancel: Callable[[], bool]
+) -> tuple[str, list[int], int]:
+    """Run convert_page over every page of the PDF, in order.
+
+    A page that fails to convert is left out of the returned text instead of failing the
+    whole file, nothing about the failure is written into the markdown, it's only reported
+    through the returned list. Raises that page's error when every page tried has failed.
 
     Returns (markdown, skipped page numbers, pages attempted). Pages attempted is less than
     the PDF's total page count when cancelled early.
@@ -283,16 +299,14 @@ def _convert_pdf_local(
     try:
         for i, page in enumerate(doc, start=1):
             # Checked before each page rather than mid-page: a page already in flight to
-            # Ollama can't be interrupted, so this is the earliest safe stopping point.
+            # the model can't be interrupted, so this is the earliest safe stopping point.
             if should_cancel():
                 print(f"\rCancelled after page {i - 1}/{page_count}")
                 break
             print(f"\rConverting page {i}/{page_count} ({(i - 1) * 100 // page_count}%)", end="", flush=True)
-            png_bytes = page.get_pixmap(dpi=local_page_dpi(page)).tobytes("png")
-            image_b64 = base64.standard_b64encode(png_bytes).decode("ascii")
             attempted += 1
             try:
-                pages.append(_convert_page_ollama(image_b64, model))
+                pages.append(convert_page(page))
             except Exception as e:
                 print(f"\nSkipping page {i}/{page_count}, failed to convert: {e}")
                 skipped.append(i)
@@ -428,7 +442,7 @@ def convert_pdf_to_markdown_openai(
         model: OpenAI model to use.
         input_dir: Folder holding the PDFs.
         output_dir: Folder the Markdown is written to.
-        should_cancel: Checked before each file, true stops the batch.
+        should_cancel: Checked before each file and page, true keeps the pages finished.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -441,7 +455,7 @@ def convert_pdf_to_markdown_openai(
 
     parser = _build_parser(api_key, model)
     return _convert_all(
-        lambda pdf_path: ("\n\n".join(convert_with_retry(parser, pdf_path) or []), [], None),
+        lambda pdf_path: _convert_pdf_openai(parser, pdf_path, should_cancel),
         input_dir, output_dir, should_cancel,
     )
 

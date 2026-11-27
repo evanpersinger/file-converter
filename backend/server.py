@@ -1002,8 +1002,9 @@ def progress(job_id: str) -> dict:
 
     The percent is None when the job isn't running (not started yet, still waiting for
     a free slot, or finished) or its converter prints no percentage, which is every
-    converter except the local-model and video ones and PDF to Markdown on scanned pages.
-    `queued` is True while the job waits for a free slot behind other conversions.
+    converter except the page-by-page LLM ones (local, handwriting, OpenAI), video, and
+    PDF to Markdown on scanned pages. `queued` is True while the job waits for a free slot
+    behind other conversions.
     """
     output = _JOB_OUTPUT.get(job_id)
     return {
