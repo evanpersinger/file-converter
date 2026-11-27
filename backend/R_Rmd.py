@@ -4,6 +4,7 @@ For each .R file in input/, rewrites the source as an R Markdown document and wr
 the .Rmd to output/.
 """
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -273,71 +274,37 @@ def convert_r_to_rmd(r_path: str, output_path: str | None = None,
 
 
 def main():
-    parser = None
-    try:
-        import argparse
-        parser = argparse.ArgumentParser(description="Convert R files to R Markdown")
-        parser.add_argument("r_file", nargs="?", help="R file to convert (optional)")
-        parser.add_argument("output_file", nargs="?", help="Output Rmd filename (optional)")
-        parser.add_argument("--input-dir", default=SCRIPT_DIR / "input", help="Input directory (default: backend/input)")
-        parser.add_argument("--output-dir", default=SCRIPT_DIR / "output", help="Output directory (default: backend/output)")
-    except ImportError:
-        pass
-    
-    if parser:
-        args = parser.parse_args()
-        input_dir = Path(args.input_dir)
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(exist_ok=True)
-        
-        if args.r_file:
-            # Convert specific file
-            success = convert_r_to_rmd(args.r_file, args.output_file, input_dir, output_dir)
-            if not success:
-                sys.exit(1)
-        else:
-            # Convert all .R files in input/
-            r_files = [Path(p) for p in find_files(input_dir, ".R")]
-            if not r_files:
-                print(f"No .R files found in {input_dir} folder")
-                print("Usage: python R_Rmd.py <file.R> [output.Rmd] [--input-dir DIR] [--output-dir DIR]")
-                print("Example: python R_Rmd.py script.R")
-                print("Example: python R_Rmd.py script.R output.Rmd")
-                return
-            any_failed = False
-            for r_file in r_files:
-                ok = convert_r_to_rmd(r_file.name, None, input_dir, output_dir)
-                if not ok:
-                    any_failed = True
-            if any_failed:
-                sys.exit(1)
-    else:
-        # Fallback to simple argument parsing
-        if len(sys.argv) < 2:
-            # No args: convert all .R files in input/ (resolved relative to this script)
-            script_dir = Path(__file__).resolve().parent
-            input_dir = script_dir / "input"
-            output_dir = script_dir / "output"
-            output_dir.mkdir(exist_ok=True)
-            r_files = [Path(p) for p in find_files(input_dir, ".R")]
-            if not r_files:
-                print("No .R files found in input folder")
-                print("Usage: python R_Rmd.py <file.R> [output.Rmd]")
-                print("Example: python R_Rmd.py script.R")
-                return
-            any_failed = False
-            for r_file in r_files:
-                ok = convert_r_to_rmd(r_file.name, None, input_dir, output_dir)
-                if not ok:
-                    any_failed = True
-            if any_failed:
-                sys.exit(1)
-            return
-        
-        r_file = sys.argv[1]
-        output_file = sys.argv[2] if len(sys.argv) > 2 else None
-        success = convert_r_to_rmd(r_file, output_file)
+    parser = argparse.ArgumentParser(description="Convert R files to R Markdown")
+    parser.add_argument("r_file", nargs="?", help="R file to convert (optional)")
+    parser.add_argument("output_file", nargs="?", help="Output Rmd filename (optional)")
+    parser.add_argument("--input-dir", default=SCRIPT_DIR / "input", help="Input directory (default: backend/input)")
+    parser.add_argument("--output-dir", default=SCRIPT_DIR / "output", help="Output directory (default: backend/output)")
+
+    args = parser.parse_args()
+    input_dir = Path(args.input_dir)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(exist_ok=True)
+
+    if args.r_file:
+        # Convert specific file
+        success = convert_r_to_rmd(args.r_file, args.output_file, input_dir, output_dir)
         if not success:
+            sys.exit(1)
+    else:
+        # Convert all .R files in input/
+        r_files = [Path(p) for p in find_files(input_dir, ".R")]
+        if not r_files:
+            print(f"No .R files found in {input_dir} folder")
+            print("Usage: python R_Rmd.py <file.R> [output.Rmd] [--input-dir DIR] [--output-dir DIR]")
+            print("Example: python R_Rmd.py script.R")
+            print("Example: python R_Rmd.py script.R output.Rmd")
+            return
+        any_failed = False
+        for r_file in r_files:
+            ok = convert_r_to_rmd(r_file.name, None, input_dir, output_dir)
+            if not ok:
+                any_failed = True
+        if any_failed:
             sys.exit(1)
 
 
