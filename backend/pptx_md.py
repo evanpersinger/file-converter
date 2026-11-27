@@ -5,22 +5,16 @@ heading, promotes large-font text to subheadings, and writes the text to output/
 first saved as a .pptx by LibreOffice, since python-pptx can't read the old format.
 """
 
-import io
 import re
-import shutil
 import tempfile
 from pathlib import Path
 
 from pptx import Presentation
 from pptx.shapes.group import GroupShape
 
-import compress
 import pptx_pdf
 from batch_convert import INPUT_DIR, OUTPUT_DIR, convert_files
 from external_tool import run_tool
-
-# Where python-pptx keeps embedded pictures inside the .pptx zip.
-_MEDIA_PREFIX = "ppt/media/"
 
 # These start emphasis, code, links or raw HTML wherever they appear in a line
 _INLINE_SPECIALS = re.compile(r'([\\`*\[\]<])')
@@ -134,26 +128,6 @@ def extract_text_from_pptx(pptx_file):
     return ''.join(markdown_content)
 
 
-def _extract_with_compression(pptx_file: str) -> str:
-    """Extract text from `pptx_file`, compressing a throwaway copy first when it has
-    images worth downscaling, so a large deck is cheaper to load. The real file in
-    input/ is never modified: compression runs on a temp copy, which is discarded
-    after extraction either way.
-    """
-    path = Path(pptx_file)
-    if not compress.has_compressible_media(path, _MEDIA_PREFIX):
-        return extract_text_from_pptx(pptx_file)
-
-    with tempfile.TemporaryDirectory() as tmp:
-        staged = Path(tmp) / path.name
-        shutil.copyfile(path, staged)
-        compress.compress_office_zip(
-            staged, _MEDIA_PREFIX,
-            sanity_check=lambda payload: Presentation(io.BytesIO(payload)),
-        )
-        return extract_text_from_pptx(str(staged))
-
-
 def _ppt_to_pptx(source: Path, outdir: Path) -> Path:
     """Have headless LibreOffice save an old .ppt as a .pptx in `outdir`, and return its path."""
     executable = pptx_pdf._find_libreoffice()
@@ -178,7 +152,7 @@ def _write_markdown(source: Path, dest: Path) -> None:
         if source.suffix.lower() == '.ppt':
             source = _ppt_to_pptx(source, Path(tmp))
         # Extract text and format as markdown
-        dest.write_text(_extract_with_compression(str(source)), encoding='utf-8')
+        dest.write_text(extract_text_from_pptx(str(source)), encoding='utf-8')
 
 
 def convert_pptx_to_markdown(
