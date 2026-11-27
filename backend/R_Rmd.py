@@ -136,8 +136,6 @@ def convert_r_to_rmd(r_path: str, output_path: str | None = None,
                 # Count # to determine header level
                 hash_count = len(stripped_line) - len(stripped_line.lstrip('#'))
                 header_text = stripped_line[hash_count:].strip()
-                if header_text.startswith(' '):
-                    header_text = header_text[1:]
                 return f"{'#' * min(hash_count, 6)} {header_text}\n"
             elif 'ANALYSIS' in text.upper() or 'SECTION' in text.upper():
                 # Likely a section header
@@ -155,19 +153,9 @@ def convert_r_to_rmd(r_path: str, output_path: str | None = None,
             # Empty line
             if not stripped:
                 consecutive_empty_lines += 1
-                # Only add empty line if we're not in a code chunk
-                if not in_code_chunk:
-                    # Limit consecutive empty lines
-                    if consecutive_empty_lines <= max_empty_lines:
-                        rmd_lines.append("\n")
-                elif consecutive_empty_lines >= 2:
-                    # Multiple empty lines - close code chunk
-                    flush_code_chunk()
-                    close_code_chunk()
-                    # Add one empty line after closing code chunk
-                    if consecutive_empty_lines == 2:
-                        rmd_lines.append("\n")
-                    consecutive_empty_lines = 0
+                # Limit consecutive empty lines
+                if consecutive_empty_lines <= max_empty_lines:
+                    rmd_lines.append("\n")
                 continue
             
             consecutive_empty_lines = 0
