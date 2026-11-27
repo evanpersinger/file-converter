@@ -409,21 +409,6 @@ def test_page_sends_an_ocr_model_the_short_prompt(
     assert sent == [expected_prompt]
 
 
-def test_page_turns_chandras_html_into_markdown(monkeypatch: pytest.MonkeyPatch) -> None:
-    reply = (
-        '<div data-label="Text"><p>Notes on <math>x_{i1}</math></p></div>'
-        '<div data-label="Equation-Block"><math display="block">\\hat{Y} = X\\hat{\\beta}</math></div>'
-        '<div data-label="Image"><img alt="A scatter plot"/></div>'
-    )
-    monkeypatch.setattr(
-        llm_pdf_md.requests, "post", lambda *a, **k: FakeResponse({"message": {"content": reply}})
-    )
-
-    result = llm_pdf_md._convert_page_ollama("img", "fredrezones55/chandra-ocr-2:patch")
-
-    assert result == "Notes on $x_{i1}$\n\n$$\\hat{Y} = X\\hat{\\beta}$$\n\nA scatter plot"
-
-
 def test_local_continues_after_one_pdf_fails_mid_batch(
     work_dirs, ollama_reachable, monkeypatch: pytest.MonkeyPatch
 ) -> None:

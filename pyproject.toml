@@ -42,7 +42,6 @@ dependencies = [
     "anthropic>=1.0",
     "vision-parse>=0.1.13",
     "python-dotenv>=1.1.1",
-    "markdownify>=1.2.4",  # llm_pdf_md.py turns Chandra's HTML replies into Markdown with it
 
     # PDF Generation & Manipulation
     "reportlab>=4.4.4",
