@@ -18,6 +18,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: brew install libmagic tesseract pandoc
+      - run: brew install --cask libreoffice
       - run: uv sync
       - run: uv run ruff check backend
       - run: uv run pytest

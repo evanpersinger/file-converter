@@ -76,8 +76,8 @@ uv run pytest
 cd frontend && pnpm lint && pnpm build
 ```
 
-Tests that need a missing tool are skipped, not failed. CI installs `libmagic`, `tesseract` and
-`pandoc` first.
+Tests that need a missing tool are skipped, not failed. CI installs `libmagic`, `tesseract`,
+`pandoc` and LibreOffice first.
 
 ## Good to know
 
