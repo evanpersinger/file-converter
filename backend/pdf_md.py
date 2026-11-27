@@ -349,10 +349,7 @@ def apply_scripts(text, scripts):
 def ocr_page(page):
     """Render a page to an image and OCR it."""
     pix = page.get_pixmap(dpi=OCR_DPI)
-    mode = "RGBA" if pix.alpha else "RGB"
-    img = Image.frombytes(mode, (pix.width, pix.height), pix.samples)
-    if mode == "RGBA":
-        img = img.convert("RGB")
+    img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
     return ocr_text(img, config=TESSERACT_CONFIG, lang=TESSERACT_LANG)
 
 
