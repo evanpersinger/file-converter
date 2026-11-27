@@ -8,6 +8,7 @@ from pathlib import Path
 import fitz
 import pytest
 
+import pdf_md
 import pdf_txt
 
 WorkDirs = tuple[Path, Path]
@@ -29,7 +30,7 @@ def test_a_searchable_page_is_read_without_ocr(
     work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_dir, output_dir = work_dirs
-    monkeypatch.setattr(pdf_txt, "ocr_page", lambda page: pytest.fail("OCR was used"))
+    monkeypatch.setattr(pdf_md, "ocr_page", lambda page: pytest.fail("OCR was used"))
     write_pdf(input_dir / "doc.pdf", [SEARCHABLE_TEXT])
 
     pdf_txt.convert_pdf_to_txt(input_dir, output_dir)
@@ -41,7 +42,7 @@ def test_a_page_with_no_text_is_ocred_and_stays_in_page_order(
     work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_dir, output_dir = work_dirs
-    monkeypatch.setattr(pdf_txt, "ocr_page", lambda page: "words from the scan")
+    monkeypatch.setattr(pdf_md, "ocr_page", lambda page: "words from the scan")
     write_pdf(input_dir / "mixed.pdf", [SEARCHABLE_TEXT, ""])
 
     pdf_txt.convert_pdf_to_txt(input_dir, output_dir)

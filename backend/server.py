@@ -457,8 +457,8 @@ REGISTRY: list[Conversion] = [
                via_cancel_params(lambda s, i, o, cancel: pdf_md.convert_pdf_to_markdown(i, o, cancel)),
                requires=("tesseract",), takes_cancel=True),
     Conversion((".pdf",), "pdf->txt", "TXT", ".txt",
-               via_params(lambda s, i, o: pdf_txt.convert_pdf_to_txt(i, o)),
-               requires=("tesseract",)),
+               via_cancel_params(lambda s, i, o, cancel: pdf_txt.convert_pdf_to_txt(i, o, cancel)),
+               requires=("tesseract",), takes_cancel=True),
     Conversion((".pdf",), "pdf->docx", "DOCX", ".docx",
                via_params(lambda s, i, o: pdf_docx.convert_pdf_to_docx(i, o)),
                note="Keeps the layout. Scanned PDFs are not read with OCR"),
@@ -1003,8 +1003,8 @@ def progress(job_id: str) -> dict:
     The percent is None when the job isn't running (not started yet, still waiting for
     a free slot, or finished) or its converter prints no percentage, which is every
     converter except the page-by-page LLM ones (local, handwriting, OpenAI), video, and
-    PDF to Markdown on scanned pages. `queued` is True while the job waits for a free slot
-    behind other conversions.
+    PDF to Markdown or text on scanned pages. `queued` is True while the job waits for a
+    free slot behind other conversions.
     """
     output = _JOB_OUTPUT.get(job_id)
     return {
@@ -1016,9 +1016,9 @@ def progress(job_id: str) -> dict:
 @app.post("/api/convert/{job_id}/cancel")
 def cancel_convert(job_id: str):
     """Signal a conversion to stop. A job still waiting for a slot never starts. A running
-    one stops only if its converter checks the flag (the LLM, video and PDF to Markdown
-    converters do, between pages, frames or files); the others ignore it and run to
-    completion."""
+    one stops only if its converter checks the flag (the LLM, video, and PDF to Markdown
+    or text converters do, between pages, frames or files); the others ignore it and run
+    to completion."""
     event = _JOB_CANCEL.get(job_id)
     if event is None:
         return _error("No conversion is running for that job.", status=404)

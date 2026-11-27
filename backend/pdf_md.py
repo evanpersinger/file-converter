@@ -8,7 +8,7 @@ import re
 import shutil
 import unicodedata
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -367,6 +367,26 @@ def ocr_page(page):
     return ocr_text(img, config=TESSERACT_CONFIG, lang=TESSERACT_LANG)
 
 
+def ocr_until_cancelled(
+    doc: fitz.Document, page_numbers: list[int], should_cancel: Callable[[], bool]
+) -> Iterator[tuple[int, str]]:
+    """OCR those pages one at a time, yielding (page number, text), until should_cancel().
+
+    Prints the progress, and where a cancel stopped it, in the form server.py reads.
+    """
+    n_pages = doc.page_count
+    for done, i in enumerate(page_numbers):
+        if should_cancel():
+            converted = n_pages - len(page_numbers) + done
+            print(f"\rCancelled after page {i}/{n_pages}")
+            print(f"Converted {Path(doc.name).name} ({converted}/{n_pages} pages succeeded)")
+            return
+        print(f"\rConverting page {i + 1}/{n_pages} ({done * 100 // len(page_numbers)}%)", end="", flush=True)
+        yield i, ocr_page(doc[i])
+    if page_numbers:
+        print(f"\rConverting page {n_pages}/{n_pages} (100%)")
+
+
 def pdf_to_markdown(pdf_path, image_dir=None, should_cancel: Callable[[], bool] = lambda: False):
     """Convert a single PDF to a markdown string. image_dir is where extracted images go.
 
@@ -405,26 +425,14 @@ def pdf_to_markdown(pdf_path, image_dir=None, should_cancel: Callable[[], bool] 
                 text = apply_scripts(text, find_scripts(doc[page_no]))
             md_by_page[page_no] = normalize_math(text, ocr=False)
 
-    # Scanned/image pages -> OCR, one at a time so a cancel keeps the pages already read
-    unread = []
-    for done, i in enumerate(ocr_pages):
-        if should_cancel():
-            unread = ocr_pages[done:]
-            break
-        print(f"\rConverting page {i + 1}/{n_pages} ({done * 100 // len(ocr_pages)}%)", end="", flush=True)
-        raw = ocr_page(doc[i])
+    # Scanned/image pages -> OCR
+    for i, raw in ocr_until_cancelled(doc, ocr_pages, should_cancel):
         md_by_page[i] = normalize_math(raw.strip(), ocr=True)
 
     doc.close()
 
-    if unread:
-        # server.py reads these two lines into the result log
-        print(f"\rCancelled after page {unread[0]}/{n_pages}")
-        if not any(md_by_page.values()):
-            raise RuntimeError("Cancelled")
-        print(f"Converted {Path(pdf_path).name} ({n_pages - len(unread)}/{n_pages} pages succeeded)")
-    elif ocr_pages:
-        print(f"\rConverting page {n_pages}/{n_pages} (100%)")
+    if should_cancel() and not any(md_by_page.values()):
+        raise RuntimeError("Cancelled")
 
     kind = "searchable" if not ocr_pages else ("scanned" if not text_pages else "mixed")
     print(f"{n_pages} page(s): {len(text_pages)} searchable, {len(ocr_pages)} OCR ({kind})")

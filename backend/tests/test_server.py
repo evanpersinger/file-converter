@@ -647,8 +647,13 @@ def test_a_cancelled_video_says_so_in_the_log() -> None:
     assert server._plain_log(output) == [server.mp4_md.CANCELLED_NOTE]
 
 
-def test_cancelling_pdf_to_markdown_returns_the_pages_already_read(
-    client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [("pdf->md", "<!-- page 1 -->\n\nfirst page\n"), ("pdf->txt", "first page\n")],
+)
+def test_cancelling_a_scanned_pdf_returns_the_pages_already_read(
+    client: TestClient, jobs_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    target: str, expected: str,
 ) -> None:
     monkeypatch.setitem(server.DEPS, "tesseract", lambda: True)
 
@@ -666,12 +671,12 @@ def test_cancelling_pdf_to_markdown_returns_the_pages_already_read(
 
     response = client.post(
         "/api/convert",
-        data={"target": "pdf->md", "job_id": "pdf-job"},
+        data={"target": target, "job_id": "pdf-job"},
         files={"file": ("scan.pdf", pdf_path.read_bytes())},
     )
 
     assert response.status_code == 200
-    assert response.text == "<!-- page 1 -->\n\nfirst page\n"
+    assert response.text == expected
     assert json.loads(response.headers["X-Conversion-Log"]) == [
         "Cancelled after page 1 of 3.",
         "1 of 3 pages converted.",
