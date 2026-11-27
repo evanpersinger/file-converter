@@ -5,7 +5,7 @@ const POLL_MS = 1000
 
 /**
  * Live numbers for a running conversion: elapsed seconds, the percent the backend
- * reports (null when it has none, which is every conversion except the local-model one),
+ * reports (null when it has none, as only some conversions report one),
  * and whether it is still queued behind another conversion.
  * Pass null when nothing is running and all of them reset.
  */
