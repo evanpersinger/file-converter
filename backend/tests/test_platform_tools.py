@@ -127,5 +127,5 @@ def test_install_hints_match_the_os(platform: str, expected: str) -> None:
 
 @pytest.mark.parametrize("platform", ["darwin", "linux", "win32"])
 def test_every_tool_has_a_hint_on_every_os(platform: str) -> None:
-    for tool in ("tesseract", "pandoc", "latex", "libreoffice", "chrome", "wkhtmltopdf"):
+    for tool in ("tesseract", "pandoc", "latex", "libreoffice", "chrome"):
         assert platform_tools.install_hint(tool, platform)

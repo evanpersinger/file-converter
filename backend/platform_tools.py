@@ -95,7 +95,6 @@ _HINTS = {
         "latex": "brew install --cask mactex",
         "libreoffice": "brew install --cask libreoffice",
         "chrome": "brew install --cask google-chrome",
-        "wkhtmltopdf": "brew install wkhtmltopdf",
     },
     "linux": {
         "tesseract": "sudo apt install tesseract-ocr (or your distro's package)",
@@ -103,7 +102,6 @@ _HINTS = {
         "latex": "sudo apt install texlive-xetex (or your distro's package)",
         "libreoffice": "sudo apt install libreoffice (or your distro's package)",
         "chrome": "install Google Chrome or Chromium, or set CHROME_PATH",
-        "wkhtmltopdf": "sudo apt install wkhtmltopdf (or your distro's package)",
     },
     "win32": {
         "tesseract": "winget install UB-Mannheim.TesseractOCR",
@@ -111,7 +109,6 @@ _HINTS = {
         "latex": "winget install MiKTeX.MiKTeX",
         "libreoffice": "winget install TheDocumentFoundation.LibreOffice",
         "chrome": "winget install Google.Chrome, or set CHROME_PATH",
-        "wkhtmltopdf": "winget install wkhtmltopdf.wkhtmltox",
     },
 }
 
