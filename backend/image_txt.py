@@ -378,14 +378,13 @@ def preprocess_cell_image(cell_img):
     return Image.fromarray(sharpened)
 
 
-def group_cells_into_rows(table_cells, row_tolerance=None):
+def group_cells_into_rows(table_cells):
     """Group (x, y, w, h) cells into rows by their y-coordinate."""
     if not table_cells:
         return []
 
-    if row_tolerance is None:
-        avg_height = sum(h for _, _, _, h in table_cells) / len(table_cells)
-        row_tolerance = max(avg_height * 0.5, 15)
+    avg_height = sum(h for _, _, _, h in table_cells) / len(table_cells)
+    row_tolerance = max(avg_height * 0.5, 15)
 
     sorted_cells = sorted(table_cells, key=lambda cell: (cell[1], cell[0]))
 
