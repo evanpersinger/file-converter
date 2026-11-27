@@ -642,6 +642,11 @@ def test_a_capped_log_keeps_the_cancel_line() -> None:
     assert capped[-3].startswith("...and ")
 
 
+def test_a_cancelled_video_says_so_in_the_log() -> None:
+    output = f"\rConverting video (62%)\r{server.mp4_md.CANCELLED_NOTE}\n"
+    assert server._plain_log(output) == [server.mp4_md.CANCELLED_NOTE]
+
+
 _HANDWRITING_CAPTION = "Used for pictures of handwriting"
 
 

@@ -928,6 +928,8 @@ def _plain_log(output: str) -> list[str]:
             lines.append(f"Page {match[1]} of {match[2]} could not be converted: {reason}")
         elif match := _CANCELLED_AT.search(raw):
             lines.append(f"Cancelled after page {match[1]} of {match[2]}.")
+        elif raw == mp4_md.CANCELLED_NOTE:
+            lines.append(raw)
         elif match := _PAGES_SUCCEEDED.search(raw):
             lines.append(f"{match[1]} of {match[2]} pages converted.")
         elif match := _MISSING_IMAGES.match(raw):

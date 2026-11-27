@@ -47,6 +47,8 @@ SCREEN_SHARE = 50
 # The most words handed to Whisper as spelling hints. They share its prompt (about 224 tokens)
 # with the text it has just written.
 MAX_HINT_WORDS = 30
+# Printed when Cancel cuts a file short. server.py repeats it in the result log.
+CANCELLED_NOTE = "Cancelled partway, the file only holds what was converted before that."
 
 _MARKDOWN_SPECIALS = re.compile(r"([\\`*_\[\]<])")
 _WORD = re.compile(r"[A-Za-z]+(?:[-'’][A-Za-z]+)*")
@@ -96,9 +98,7 @@ def _screen_text(path: Path, should_cancel: Callable[[], bool]) -> list[tuple[fl
         last_picture = None
         last_text = ""
         second = 0.0
-        while second < duration:
-            if should_cancel():
-                raise RuntimeError("Cancelled")
+        while second < duration and not should_cancel():
             _report(int(SCREEN_SHARE * second / duration))
 
             video.set(cv2.CAP_PROP_POS_MSEC, second * 1000)
@@ -156,12 +156,14 @@ def _speech(
     segments, info = whisper.transcribe(str(path), vad_filter=True, hotwords=hints or None)
     said = []
     for segment in segments:
-        if should_cancel():
-            raise RuntimeError("Cancelled")
         if segment.text.strip():
             said.append((segment.start, segment.text.strip()))
         if info.duration:
             _report(start_percent + int((100 - start_percent) * segment.end / info.duration))
+        # Checked after the segment is kept, since it is already transcribed. Stopping here
+        # means the next one never is.
+        if should_cancel():
+            break
     return said
 
 
@@ -198,8 +200,8 @@ def convert_mp4_to_markdown(
         model: Whisper size, one of WHISPER_MODELS.
         input_dir: Folder holding the MP4s and audio files.
         output_dir: Folder the Markdown is written to.
-        should_cancel: Checked before each frame and each speech segment, true stops the
-            file and discards what it had so far.
+        should_cancel: Checked between frames and speech segments. True stops there, and
+            the file is written with what had been read and transcribed by then.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -212,10 +214,15 @@ def convert_mp4_to_markdown(
         whisper = WhisperModel(model, device="cpu", compute_type="int8")
         is_audio = source.suffix.lower() in AUDIO_EXTS
         shown = [] if is_audio else _screen_text(source, should_cancel)
-        start_percent = 0 if is_audio else SCREEN_SHARE
-        said = _speech(source, whisper, should_cancel, _hint_words(shown), start_percent)
-        print("\rConverting video (100%)")
+        said = []
+        if not should_cancel():
+            start_percent = 0 if is_audio else SCREEN_SHARE
+            said = _speech(source, whisper, should_cancel, _hint_words(shown), start_percent)
+        cancelled = should_cancel()
+        print(f"\r{CANCELLED_NOTE}" if cancelled else "\rConverting video (100%)")
         if not shown and not said:
+            if cancelled:
+                raise RuntimeError("Cancelled")
             raise ValueError("no speech found" if is_audio else "no speech or on-screen text found")
         dest.write_text(_timeline(said, shown), encoding="utf-8")
 

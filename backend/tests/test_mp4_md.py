@@ -4,7 +4,8 @@ Whisper and Tesseract are faked, so no model is downloaded. The video is real: o
 tiny one that is white for 3 seconds and then black for 3, so the frame reading is exercised.
 """
 
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -51,7 +52,7 @@ def words(text: str, confidence: float = 95) -> Words:
 
 
 class FakeWhisper:
-    def __init__(self, model: str, segments: list[Segment]) -> None:
+    def __init__(self, model: str, segments: Iterable[Segment]) -> None:
         self.model = model
         self.segments = segments
         self.hotwords: object = "not asked"
@@ -63,7 +64,7 @@ class FakeWhisper:
 
 def use_fakes(
     monkeypatch: pytest.MonkeyPatch,
-    segments: list[Segment],
+    segments: Iterable[Segment],
     reading: Callable[[np.ndarray], Words],
 ) -> list[FakeWhisper]:
     """Swap in the fake Whisper and OCR. Returns the fake models Whisper was asked to load."""
@@ -328,7 +329,49 @@ def test_a_video_with_nothing_to_read_or_hear_is_reported_as_failed(
     assert not (output_dir / "clip.md").exists()
 
 
-def test_cancelling_drops_the_file_instead_of_writing_part_of_it(
+def test_cancelling_during_screen_reading_keeps_the_screen_text_and_skips_speech(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir, output_dir = work_dirs
+    write_video(input_dir / "clip.mp4")
+    cancel = threading.Event()
+
+    def reading(image: np.ndarray) -> Words:
+        cancel.set()  # Cancel arrives while the first frame is being read
+        return slide(image)
+
+    whispers = use_fakes(monkeypatch, [Segment(start=1.0, end=2.0, text="Hello")], reading)
+
+    mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir, should_cancel=cancel.is_set)
+
+    assert (output_dir / "clip.md").read_text(encoding="utf-8") == "**00:00** On screen: SLIDE ONE"
+    assert whispers[0].hotwords == "not asked"
+
+
+def test_cancelling_during_speech_keeps_what_was_transcribed(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    input_dir, output_dir = work_dirs
+    (input_dir / "memo.mp3").write_bytes(b"audio, only the fake Whisper opens it")
+    cancel = threading.Event()
+
+    def segments() -> Iterator[Segment]:
+        yield Segment(start=1.0, end=2.0, text="One")
+        cancel.set()  # Cancel arrives while Whisper works on the second stretch
+        yield Segment(start=3.0, end=4.0, text="Two")
+        yield Segment(start=5.0, end=6.0, text="Three")
+
+    use_fakes(monkeypatch, segments(), slide)
+
+    mp4_md.convert_mp4_to_markdown("base", input_dir, output_dir, should_cancel=cancel.is_set)
+
+    assert (output_dir / "memo.md").read_text(encoding="utf-8") == (
+        "**00:01** Said: One\n\n**00:03** Said: Two"
+    )
+    assert mp4_md.CANCELLED_NOTE in capsys.readouterr().out
+
+
+def test_cancelling_before_anything_is_read_writes_no_file(
     work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     input_dir, output_dir = work_dirs
