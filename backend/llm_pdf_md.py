@@ -17,6 +17,7 @@ import anthropic
 import fitz  # PyMuPDF
 import requests
 from dotenv import load_dotenv
+from markdownify import MarkdownConverter
 
 from batch_convert import INPUT_DIR, OUTPUT_DIR
 
@@ -45,6 +46,7 @@ CUT_OFF_NOTE = "Cut off partway, the PDF is too long for one reply. The file onl
 MIN_ECHO_CHARS = 20  # a reply's first paragraph shorter than this is never taken for an echo of the prompt
 OCR_MODEL_PREFIX = "glm-ocr"  # OCR models can't follow a long instruction, they echo it back
 OCR_PROMPT = "Text Recognition:"  # the short fixed prompt glm-ocr is built for
+HTML_MODEL_MARKER = "chandra-ocr"  # models with this in their name reply in HTML whatever the prompt says
 
 _DOCUMENT_PROMPT = (
     "Convert this PDF to Markdown. Reproduce the text faithfully and completely, do not "
@@ -180,7 +182,8 @@ def local_page_dpi(page: fitz.Page) -> int:
 def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT) -> str:
     """Send one image to the local Ollama vision model and return its Markdown.
 
-    An OCR model gets OCR_PROMPT instead of the prompt passed in.
+    An OCR model gets OCR_PROMPT instead of the prompt passed in, and a reply in HTML from
+    Chandra is converted.
     """
     if model.startswith(OCR_MODEL_PREFIX):
         prompt = OCR_PROMPT
@@ -203,7 +206,8 @@ def _convert_page_ollama(image_b64: str, model: str, prompt: str = _PAGE_PROMPT)
         timeout=OLLAMA_PAGE_TIMEOUT_SECONDS,
     )
     _raise_for_ollama_error(response)
-    return _strip_markdown_fence(_strip_echoed_prompt(response.json()["message"]["content"], prompt))
+    reply = _strip_markdown_fence(_strip_echoed_prompt(response.json()["message"]["content"], prompt))
+    return _html_to_markdown(reply) if HTML_MODEL_MARKER in model else reply
 
 
 def _strip_echoed_prompt(text: str, prompt: str) -> str:
@@ -255,6 +259,24 @@ def _strip_markdown_fence(text: str) -> str:
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
     return "\n".join(lines)
+
+
+class _ChandraMarkdown(MarkdownConverter):
+    """markdownify, with Chandra's math and picture tags handled."""
+
+    def convert_math(self, el, text, parent_tags) -> str:
+        latex = el.get_text().strip()  # not `text`, which has Markdown escapes added to it
+        return f"\n\n$${latex}$$\n\n" if el.get("display") == "block" else f"${latex}$"
+
+    def convert_img(self, el, text, parent_tags) -> str:
+        return el.get("alt", "")  # Chandra describes a picture in alt and gives it no file
+
+
+def _html_to_markdown(reply: str) -> str:
+    """Return an HTML reply as Markdown. A reply that isn't HTML comes back unchanged."""
+    if not reply.lstrip().startswith("<"):
+        return reply
+    return _ChandraMarkdown(heading_style="ATX", bullets="-").convert(reply).strip()
 
 
 def _convert_pdf_local(
