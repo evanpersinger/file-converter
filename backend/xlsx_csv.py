@@ -3,22 +3,13 @@
 For each .xlsx in input/, reads it with pandas and writes a .csv to output/.
 """
 
-import io
 import pandas as pd
 import os
 import re
-import shutil
-import tempfile
 from pathlib import Path
 
-import openpyxl
-
-import compress
 from batch_convert import INPUT_DIR, OUTPUT_DIR
 from find_files import find_files
-
-# Where openpyxl keeps embedded pictures inside the .xlsx zip.
-_MEDIA_PREFIX = "xl/media/"
 
 
 def _safe_name(sheet_name: str) -> str:
@@ -41,26 +32,6 @@ def _trim_midnight(sheets: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         name: df.replace(to_replace=r"^(\d{4}-\d{2}-\d{2})" + _MIDNIGHT, value=r"\1", regex=True)
         for name, df in sheets.items()
     }
-
-
-def _read_excel_with_compression(path: str) -> dict[str, pd.DataFrame]:
-    """Read every sheet of `path`, compressing a throwaway copy first when it has
-    images worth downscaling, so a large image-heavy workbook is cheaper to load.
-    The real file in input/ is never modified: compression runs on a temp copy,
-    which is discarded after reading either way.
-    """
-    file_path = Path(path)
-    if not compress.has_compressible_media(file_path, _MEDIA_PREFIX):
-        return _trim_midnight(pd.read_excel(path, sheet_name=None, dtype=str))
-
-    with tempfile.TemporaryDirectory() as tmp:
-        staged = Path(tmp) / file_path.name
-        shutil.copyfile(file_path, staged)
-        compress.compress_office_zip(
-            staged, _MEDIA_PREFIX,
-            sanity_check=lambda payload: openpyxl.load_workbook(io.BytesIO(payload), read_only=True),
-        )
-        return _trim_midnight(pd.read_excel(staged, sheet_name=None, dtype=str))
 
 
 def convert_xlsx_to_csv(
@@ -106,7 +77,7 @@ def convert_xlsx_to_csv(
             # as something else: '007' as the number 7, 'TRUE' as the word True. There
             # is nothing to lose by reading as text here, since the output is a CSV and
             # a CSV carries no types either way.
-            sheets = _read_excel_with_compression(file)
+            sheets = _trim_midnight(pd.read_excel(file, sheet_name=None, dtype=str))
 
             for sheet_name, df in sheets.items():
                 # A single-sheet workbook keeps the plain name. Naming it after the
