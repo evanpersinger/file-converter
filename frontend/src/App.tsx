@@ -143,7 +143,6 @@ const MODEL_LABELS: Record<string, string> = {
   'claude-sonnet-5': 'sonnet 5',
   'glm-ocr:latest': 'glm-ocr:0.9b',
   'glm-ocr:q8_0': 'glm-ocr:0.9b q8',
-  'fredrezones55/chandra-ocr-2:patch': 'chandra-ocr:5b',
 }
 
 function cloudGroup(
