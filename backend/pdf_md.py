@@ -5,7 +5,6 @@ Searchable pages go through pymupdf4llm, scanned pages through Tesseract OCR (En
 
 import os
 import re
-import shutil
 import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterator
@@ -13,7 +12,6 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 import pymupdf4llm
-import pytesseract
 from PIL import Image
 from pymupdf4llm.helpers import utils as pymupdf4llm_utils
 
@@ -31,12 +29,6 @@ EDGE_LINES = 3                     # page numbers/headers only sit in a page's f
 MIN_HEADER_PAGES = 3               # an edge line repeating on this many pages is a running header
 SCRIPT_SIZE_RATIO = 0.85           # a span smaller than this share of its line's font size may be a super/subscript
 SCRIPT_MIN_SHIFT = 0.15            # ...if its baseline is also moved by this share of the line's font size
-
-# Point pytesseract at the tesseract binary if it's on PATH.
-# (Correct attribute is `tesseract_cmd`; the old code set `pytesseract_cmd`, a no-op.)
-_tesseract_path = shutil.which("tesseract")
-if _tesseract_path:
-    pytesseract.pytesseract.tesseract_cmd = _tesseract_path
 
 # pymupdf4llm rewrites a lone ">" or "*" followed by a space as a "- " bullet, even
 # mid-sentence, so "p = 0.28 > 0.05" came out as "p = 0.28 - 0.05".
