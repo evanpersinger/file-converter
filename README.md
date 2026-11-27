@@ -90,8 +90,9 @@ Tests that need a missing tool are skipped, not failed. CI installs `libmagic`, 
 - A file to convert is capped at 500 MB, and a video or audio file at 5 GB. Combine takes up to 500 MB across all its files.
 - The web UI runs up to 4 conversions at once. A fifth (another tab, say) waits for a free
   slot, and the progress bar says "Waiting for another conversion...".
-- Long PDFs on the LLM tab: the Claude path caps at about 100 pages (32 MB), and the
-  OpenAI path can hit a rate limit and fail with no output. Use Claude for long ones.
+- Long PDFs on the LLM tab: the Claude path caps at about 100 pages (32 MB). A reply cut
+  off at the output limit is saved as far as it got, and the result log says so. The OpenAI
+  path can hit a rate limit and fail with no output. Use Claude for long ones.
 - The LLM scripts convert every file in `backend/input/`, one at a time. If the files add up to
   more than 100 MB, they wait 30 seconds between files to go easy on memory.
 - Markdown and PDF to TOON convert tables only, and a file with none fails. A PDF table needs ruling

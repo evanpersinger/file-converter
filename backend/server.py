@@ -928,8 +928,8 @@ _LOG_LINE_MAX = 200
 def _plain_log(output: str) -> list[str]:
     """The lines of a converter's printed output that tell the user what happened to their
     file, reworded as plain sentences: which pages failed and why, how many pages made it,
-    where a cancel stopped, any note the model left about its transcription, and which linked
-    images were not added. The progress lines are left out, the progress bar already shows
+    where a cancel or an output limit stopped it, any note the model left about its
+    transcription, and which linked images were not added. The progress lines are left out, the progress bar already shows
     those."""
     lines = []
     for raw in re.split(r"[\r\n]+", output):
@@ -943,7 +943,7 @@ def _plain_log(output: str) -> list[str]:
             lines.append(f"Page {match[1]} of {match[2]} could not be converted: {reason}")
         elif match := _CANCELLED_AT.search(raw):
             lines.append(f"Cancelled after page {match[1]} of {match[2]}.")
-        elif raw == mp4_md.CANCELLED_NOTE:
+        elif raw in (mp4_md.CANCELLED_NOTE, llm_pdf_md.CUT_OFF_NOTE):
             lines.append(raw)
         elif match := _PAGES_SUCCEEDED.search(raw):
             lines.append(f"{match[1]} of {match[2]} pages converted.")

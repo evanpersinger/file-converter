@@ -39,6 +39,8 @@ MAX_LOCAL_PAGE_PIXELS = 4_000_000  # Letter and A4 at 200 DPI fit (about 3.7M an
 OLLAMA_PAGE_TIMEOUT_SECONDS = 60  # a page taking longer than this is treated as stuck, not just slow
 BATCH_PAUSE_BYTES = 100 * 1024 * 1024  # a batch totalling more than this gets a rest between files
 PAUSE_SECONDS = 30
+# Printed when Claude hits its output limit. server.py repeats it in the result log.
+CUT_OFF_NOTE = "Cut off partway, the PDF is too long for one reply. The file only holds what Claude wrote before that."
 MIN_ECHO_CHARS = 20  # a reply's first paragraph shorter than this is never taken for an echo of the prompt
 OCR_MODEL_PREFIX = "glm-ocr"  # OCR models can't follow a long instruction, they echo it back
 OCR_PROMPT = "Text Recognition:"  # the short fixed prompt glm-ocr is built for
@@ -152,10 +154,16 @@ def _convert_pdf_anthropic(client: anthropic.Anthropic, pdf_path: Path, model: s
 
     if message.stop_reason == "refusal":
         raise RuntimeError("Claude declined to process this PDF")
-    if message.stop_reason == "max_tokens":
-        raise RuntimeError("output was cut off, the PDF is too long (roughly 100 pages max, fewer if dense)")
 
-    return "".join(block.text for block in message.content if block.type == "text")
+    text = "".join(block.text for block in message.content if block.type == "text")
+    # Roughly 100 pages fit in one reply, fewer if dense. What came back is already paid
+    # for, so it is kept.
+    if message.stop_reason == "max_tokens":
+        if not text.strip():
+            raise RuntimeError("output was cut off before any text came back, the PDF is too long")
+        print(CUT_OFF_NOTE)
+
+    return text
 
 
 def local_page_dpi(page: fitz.Page) -> int:
@@ -449,7 +457,7 @@ def convert_pdf_to_markdown_anthropic(
     Higher quality than the local pdf_md.py converter, but slower and it costs money.
     Requires ANTHROPIC_API_KEY to be set in the environment or a .env file.
     Handles roughly 100 pages per PDF, fewer for dense text or tables. Longer PDFs
-    hit the 64K output cap and fail.
+    are cut off at the 64K output cap, and the file holds what came before it.
 
     Args:
         model: Anthropic model to use.
