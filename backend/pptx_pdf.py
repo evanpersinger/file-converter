@@ -28,12 +28,15 @@ def _find_libreoffice() -> str | None:
     return None
 
 
-def convert_pptx_to_pdf(
-    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+def convert_with_libreoffice(
+    input_dir: str | Path,
+    output_dir: str | Path,
+    source_exts: tuple[str, ...],
+    options: tuple[str, ...] = (),
 ) -> str:
-    """Convert all PPTX and PPT files in the input folder to PDF files in the output folder.
+    """Convert every source_exts file in input_dir to a PDF with a headless LibreOffice.
 
-    Requires LibreOffice to be installed.
+    `options` are extra command line arguments, such as the reader to open the files with.
 
     Returns:
         A summary of what was converted, suitable for showing to a caller.
@@ -56,15 +59,28 @@ def convert_pptx_to_pdf(
         def render(source: Path, dest: Path) -> None:
             # LibreOffice names the PDF after the source, which is what dest is already called.
             result = run_tool(
-                [executable, '--headless', f'-env:UserInstallation={profile}',
+                [executable, '--headless', f'-env:UserInstallation={profile}', *options,
                  '--convert-to', 'pdf', '--outdir', str(dest.parent), str(source)],
             )
             if result.returncode != 0:
                 raise RuntimeError(result.stderr.strip())
 
         return convert_files(
-            input_dir, output_dir, ('.pptx', '.ppt'), ('.pdf',), render, precheck=find_executable
+            input_dir, output_dir, source_exts, ('.pdf',), render, precheck=find_executable
         )
+
+
+def convert_pptx_to_pdf(
+    input_dir: str | Path = INPUT_DIR, output_dir: str | Path = OUTPUT_DIR
+) -> str:
+    """Convert all PPTX and PPT files in the input folder to PDF files in the output folder.
+
+    Requires LibreOffice to be installed.
+
+    Returns:
+        A summary of what was converted, suitable for showing to a caller.
+    """
+    return convert_with_libreoffice(input_dir, output_dir, ('.pptx', '.ppt'))
 
 
 if __name__ == "__main__":
