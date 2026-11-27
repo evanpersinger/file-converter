@@ -3,7 +3,6 @@
 Searchable pages go through pymupdf4llm, scanned pages through Tesseract OCR (English only).
 """
 
-import os
 import re
 import unicodedata
 from collections import Counter
@@ -23,8 +22,6 @@ OCR_DPI = 300                      # 300 is the OCR sweet spot; 600 is 4x slower
 TEXT_MIN_CHARS = 20                # a page with fewer real chars is treated as scanned -> OCR
 TESSERACT_CONFIG = r"--oem 3 --psm 3"  # psm 3 = auto page layout, good for full pages
 TESSERACT_LANG = "eng"
-ENABLE_MATH = True                 # normalize math notation to unicode
-EXTRACT_IMAGES = False             # if True, save embedded images and link them in the markdown
 EDGE_LINES = 3                     # page numbers/headers only sit in a page's first/last N non-blank lines
 MIN_HEADER_PAGES = 3               # an edge line repeating on this many pages is a running header
 SCRIPT_SIZE_RATIO = 0.85           # a span smaller than this share of its line's font size may be a super/subscript
@@ -185,7 +182,7 @@ def normalize_math(text, ocr=False):
     and their LaTeX contents preserved so a math-aware viewer renders them.
     Any remaining loose notation in plain text is converted to unicode.
     """
-    if not ENABLE_MATH or not text:
+    if not text:
         return text
 
     protected = []
@@ -379,8 +376,8 @@ def ocr_until_cancelled(
         print(f"\rConverting page {n_pages}/{n_pages} (100%)")
 
 
-def pdf_to_markdown(pdf_path, image_dir=None, should_cancel: Callable[[], bool] = lambda: False):
-    """Convert a single PDF to a markdown string. image_dir is where extracted images go.
+def pdf_to_markdown(pdf_path, should_cancel: Callable[[], bool] = lambda: False):
+    """Convert a single PDF to a markdown string.
 
     should_cancel is checked before each page that needs OCR. True stops there, and the
     string holds the pages finished by then. Raises RuntimeError if that is none of them.
@@ -406,15 +403,12 @@ def pdf_to_markdown(pdf_path, image_dir=None, should_cancel: Callable[[], bool] 
 
     # Searchable pages -> real markdown via pymupdf4llm
     if text_pages:
-        md_kwargs = dict(pages=text_pages, page_chunks=True, show_progress=False)
-        if EXTRACT_IMAGES and image_dir is not None:
-            os.makedirs(image_dir, exist_ok=True)
-            md_kwargs.update(write_images=True, image_path=str(image_dir), image_format="png")
-        chunks = pymupdf4llm.to_markdown(doc, **md_kwargs)
+        chunks = pymupdf4llm.to_markdown(
+            doc, pages=text_pages, page_chunks=True, show_progress=False
+        )
         texts = strip_repeated_headers([strip_page_numbers(chunk["text"].strip()) for chunk in chunks])
         for page_no, text in zip(text_pages, texts):
-            if ENABLE_MATH:
-                text = apply_scripts(text, find_scripts(doc[page_no]))
+            text = apply_scripts(text, find_scripts(doc[page_no]))
             md_by_page[page_no] = normalize_math(text, ocr=False)
 
     # Scanned/image pages -> OCR
@@ -451,7 +445,7 @@ def convert_pdf_to_markdown(
     """
 
     def write(source: Path, dest: Path) -> None:
-        markdown = pdf_to_markdown(str(source), dest.parent / "images", should_cancel)
+        markdown = pdf_to_markdown(str(source), should_cancel)
         dest.write_text(markdown, encoding="utf-8")
 
     return convert_files(input_dir, output_dir, (".pdf",), (".md",), write)
