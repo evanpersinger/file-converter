@@ -104,8 +104,7 @@ def test_md_pdf_reads_a_windows_1252_file(
 
 @needs_rmd_to_pdf
 def test_rmd_pdf_reads_a_windows_1252_file(work_dirs: WorkDirs) -> None:
-    """Both routes into this converter read the file the same way, so a Windows-1252 file
-    used to fail the rmarkdown render and the pandoc fallback, leaving no way through."""
+    """A Windows-1252 file used to fail the render, so the converter re-saves it as UTF-8."""
     input_dir, output_dir = work_dirs
     _write_cp1252(input_dir / "doc.Rmd", "---\ntitle: Café\n---\n\nTexte: naïve résumé\n")
 

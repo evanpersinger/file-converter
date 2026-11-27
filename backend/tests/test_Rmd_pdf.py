@@ -1,12 +1,11 @@
-"""Tests for Rmd_pdf.py, which fills in Sys.Date() and renders an Rmd to PDF.
+"""Tests for Rmd_pdf.py, which renders an Rmd to PDF with R's rmarkdown.
 
 It has its own loop rather than convert_files: it returns True or False and prints. Only
-the date replacement, the early exits and the pandoc fallback's command are tested,
-because a real render needs the rmarkdown R package or LaTeX packages (microtype and
-more) that a bare xelatex lacks.
+the early exits and a failed render are tested, because a real render needs the rmarkdown
+R package.
 """
 
-from datetime import date
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -14,24 +13,6 @@ import pytest
 import Rmd_pdf
 
 WorkDirs = tuple[Path, Path]
-
-TODAY = date.today().strftime("%Y-%m-%d")
-
-
-def test_inline_sys_date_becomes_todays_date() -> None:
-    assert Rmd_pdf.replace_sys_date("Run on `r Sys.Date()`.") == f"Run on {TODAY}."
-
-
-def test_bare_sys_date_becomes_todays_date() -> None:
-    assert Rmd_pdf.replace_sys_date('date: "Sys.Date()"') == f'date: "{TODAY}"'
-
-
-def test_sys_date_with_spaces_inside_the_brackets_is_replaced() -> None:
-    assert Rmd_pdf.replace_sys_date("Sys.Date( )") == TODAY
-
-
-def test_text_without_sys_date_is_unchanged() -> None:
-    assert Rmd_pdf.replace_sys_date("Plain text with `r 1 + 1`.") == "Plain text with `r 1 + 1`."
 
 
 def test_a_pdf_path_is_refused(
@@ -52,24 +33,17 @@ def test_a_missing_file_gives_false(
     assert "not found" in capsys.readouterr().out
 
 
-def test_pandoc_fallback_uses_a_highlight_flag_old_pandoc_accepts(
-    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch
+def test_a_failed_render_gives_false_and_shows_rs_error(
+    work_dirs: WorkDirs, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """--syntax-highlighting only exists in pandoc 3.8+, so 3.1 (Debian/Ubuntu) rejected
-    every conversion. --no-highlight works on both."""
     input_dir, output_dir = work_dirs
-    (input_dir / "doc.Rmd").write_text("# Title\n\nText.\n", encoding="utf-8")
-    commands: list[list[str]] = []
+    (input_dir / "doc.Rmd").write_text("Text.\n", encoding="utf-8")
 
-    def fake_run_tool(cmd, *args, **kwargs):
-        commands.append(cmd)
-        return type("Result", (), {"returncode": 1, "stdout": "", "stderr": "stub"})()
+    def fake_run_tool(cmd: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(cmd, 1, "", "object 'x' not found")
 
-    monkeypatch.setattr(Rmd_pdf, "command_exists", lambda cmd: cmd == "pandoc")
+    monkeypatch.setattr(Rmd_pdf, "which", lambda tool: f"/usr/bin/{tool}")
     monkeypatch.setattr(Rmd_pdf, "run_tool", fake_run_tool)
 
-    Rmd_pdf.convert_rmd_to_pdf("doc.Rmd", None, input_dir, output_dir)
-
-    pandoc_cmd = next(cmd for cmd in commands if cmd[0] == "pandoc")
-    assert "--no-highlight" in pandoc_cmd
-    assert not any(arg.startswith("--syntax-highlighting") for arg in pandoc_cmd)
+    assert Rmd_pdf.convert_rmd_to_pdf("doc.Rmd", None, input_dir, output_dir) is False
+    assert "object 'x' not found" in capsys.readouterr().out

@@ -1,17 +1,16 @@
 """Convert R Markdown (.Rmd) files to PDF.
 
-For each .Rmd in input/ (or a file passed as an argument), substitutes Sys.Date()
-with today's date, then renders it to a PDF in output/.
+For each .Rmd in input/ (or a file passed as an argument), renders it with R's rmarkdown,
+which runs the code chunks, to a PDF in output/.
 """
 
 
 import os
 import sys
 import argparse
+import tempfile
 from pathlib import Path
 from shutil import which
-from datetime import date
-import re
 
 from batch_convert import read_text
 from external_tool import run_tool
@@ -22,28 +21,12 @@ from find_files import find_files
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 
-def command_exists(cmd):
-    return which(cmd) is not None
-
-def replace_sys_date(content):
-    """Replace Sys.Date() with the actual current date in YYYY-MM-DD format."""
-    current_date = date.today().strftime('%Y-%m-%d')
-    # Replace inline R code chunks like `r Sys.Date()` with just the date
-    # Pattern matches: `r Sys.Date()` or `r Sys.Date() ` with optional spaces
-    inline_pattern = r'`r\s+Sys\.Date\s*\(\s*\)\s*`'
-    content = re.sub(inline_pattern, current_date, content)
-    # Also replace standalone Sys.Date() (handles various spacing)
-    # Pattern matches Sys.Date() with optional spaces inside parentheses
-    standalone_pattern = r'Sys\.Date\s*\(\s*\)'
-    content = re.sub(standalone_pattern, current_date, content)
-    return content
-
 # convert an R markdown file to a pdf file
 def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
                        input_dir: str | None = None, output_dir: str | None = None) -> bool:
     """Convert an R Markdown file to PDF.
 
-    Prefers R's rmarkdown (which executes R code chunks) and falls back to pandoc.
+    Needs R with the rmarkdown package. A render that fails is reported with R's error.
 
     Args:
         rmd_path: Path to the .Rmd file (relative to input folder or absolute)
@@ -89,211 +72,60 @@ def convert_rmd_to_pdf(rmd_path: str, output_path: str | None = None,
     full_output_path = output_dir / pdf_name
     existed_before = full_output_path.exists()
 
-    # Try via R + rmarkdown (best for .Rmd with code chunks)
-    if command_exists("Rscript"):
-        import tempfile
-        temp_path = None
-        try:
-            # Create a modified version with better formatting to prevent text overflow
-            content = read_text(full_input_path, translate_newlines=True)
-            
-            # Replace Sys.Date() with actual date
-            content = replace_sys_date(content)
-            
-            # Check if YAML header exists and add geometry settings for proper margins
-            if content.startswith('---'):
-                # Find the end of YAML header
-                yaml_end = content.find('---', 3)
-                if yaml_end != -1:
-                    yaml_header = content[:yaml_end + 3]
-                    # Add geometry settings if not already present
-                    if 'geometry:' not in yaml_header and 'margin' not in yaml_header.lower():
-                        yaml_header = yaml_header.replace('\n---', '\ngeometry: margin=1in\n---')
-                        content = yaml_header + content[yaml_end + 3:]
-            else:
-                # No YAML header, prepend one
-                content = '---\ngeometry: margin=1in\n---\n\n' + content
-            
-            # Create temp file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.Rmd', delete=False, encoding='utf-8') as tmp:
-                tmp.write(content)
-                temp_path = tmp.name
-            
-            r_expr = (
-                "rmarkdown::render("
-                f"\"{temp_path}\", "
-                "output_format=\"pdf_document\", "
-                f"output_file=\"{pdf_name}\", "
-                f"output_dir=\"{str(output_dir)}\")"
-            )
-            cmd = [
-                "Rscript",
-                "-e",
-                r_expr,
-            ]
-            print(f"Converting {full_input_path.name} to pdf")
-            result = run_tool(cmd)
-            if result.returncode == 0 and full_output_path.exists():
-                print(f"Converted {full_input_path.name} to {full_output_path.name}")
-                if existed_before:
-                    print(f"Overwrote existing file: {full_output_path.name}")
-                # Clean up temp file
-                if temp_path and os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                return True
-            else:
-                # Surface stderr for easier debugging
-                if result.stderr:
-                    print(f"rmarkdown stderr: {result.stderr.strip()}")
-                print("rmarkdown conversion did not produce output; will try pandoc fallback if available.")
-        except Exception as e:
-            print(f"rmarkdown failed with error: {e}")
-        finally:
-            # Clean up temp file on error
-            if temp_path and os.path.exists(temp_path):
-                os.unlink(temp_path)
+    if not which("Rscript"):
+        print("R not found. Install R, then run: Rscript -e 'install.packages(\"rmarkdown\")'")
+        return False
 
-    # Fallback to pandoc (works for plain Markdown; R chunks won't execute)
-    if command_exists("pandoc"):
-        import tempfile
-        header_path = None
-        modified_input_path = None
-        try:
-            # Pre-process the Rmd file to break long lines
-            content = read_text(full_input_path, translate_newlines=True)
-            
-            # Replace Sys.Date() with actual date
-            content = replace_sys_date(content)
-            
-            # Break long lines by inserting spaces every 80 characters for regular text
-            # (but not inside code blocks or YAML headers)
-            # Also escape # characters in code blocks to prevent LaTeX errors
-            lines = content.split('\n')
-            processed_lines = []
-            in_code_block = False
-            in_yaml = False
-            
-            for line in lines:
-                # Check if we're entering/exiting code blocks
-                if line.strip().startswith('```'):
-                    in_code_block = not in_code_block
-                    processed_lines.append(line)
-                    continue
-                
-                # Check if we're in YAML header
-                if line.strip() == '---':
-                    in_yaml = not in_yaml
-                    processed_lines.append(line)
-                    continue
-                
-                if in_code_block:
-                    # Escape special LaTeX characters in code blocks
-                    # Double backslashes first (so \n becomes \\n)
-                    line = line.replace('\\', '\\\\')
-                    # Escape $ to prevent math mode interpretation
-                    line = line.replace('$', '\\$')
-                    # Escape # to prevent macro parameter errors
-                    line = line.replace('#', '\\#')
-                    processed_lines.append(line)
-                elif not in_yaml:
-                    # Break very long lines (over 70 chars) at word boundaries
-                    if len(line) > 70 and not line.strip().startswith('#'):
-                        # Insert a line break after appropriate length
-                        words = line.split()
-                        if len(words) > 1:
-                            current_line = ""
-                            for word in words:
-                                if len(current_line) + len(word) + 1 > 70 and current_line:
-                                    processed_lines.append(current_line)
-                                    current_line = word
-                                else:
-                                    current_line = current_line + " " + word if current_line else word
-                            if current_line:
-                                processed_lines.append(current_line)
-                        else:
-                            processed_lines.append(line)
-                    else:
-                        processed_lines.append(line)
-                else:
-                    processed_lines.append(line)
-            
-            modified_content = '\n'.join(processed_lines)
-            
-            # Create a temporary LaTeX header for better text wrapping
-            header_content = r"""\usepackage{microtype}
-\usepackage{xurl}
-\usepackage{fvextra}
-\usepackage{seqsplit}
-\usepackage{url}
-\PassOptionsToPackage{hyphens}{url}
-\sloppy
-\emergencystretch=3em
-\setlength{\emergencystretch}{3em}
-\hyphenpenalty=50
-\hbadness=10000
-\tolerance=9999
-\overfullrule=0pt
-\interlinepenalty=10000
-\pretolerance=1000
-"""
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.tex', delete=False, encoding='utf-8') as tmp:
-                tmp.write(header_content)
-                header_path = tmp.name
-            
-            # Create temp modified Rmd file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.Rmd', delete=False, encoding='utf-8') as tmp:
-                tmp.write(modified_content)
-                modified_input_path = tmp.name
-            
-            cmd = [
-                "pandoc",
-                modified_input_path,
-                "-f", "markdown",  # Use standard markdown (math will work in text, code blocks are protected)
-                "-o",
-                str(full_output_path),
-                "--pdf-engine=xelatex",
-                "--standalone",
-                # --no-highlight works on every pandoc; 3.8+ still accepts it as an alias of
-                # --syntax-highlighting=none, which older pandoc (3.1 on Debian/Ubuntu) rejects.
-                "--no-highlight",  # Disable highlighting to use plain verbatim
-                "-V", "geometry:margin=1in",  # Set 1 inch margins
-                "-V", "fontsize=11pt",  # Set readable font size
-                "-H", header_path,  # Include LaTeX header for text wrapping
-            ]
-            print(f"Converting {full_input_path.name} to pdf")
-            result = run_tool(cmd)
-            
-            # Clean up temp files
-            if os.path.exists(header_path):
-                os.unlink(header_path)
-            if os.path.exists(modified_input_path):
-                os.unlink(modified_input_path)
-            
-            if result.returncode == 0 and full_output_path.exists():
-                print(f"Converted {full_input_path.name} to {full_output_path.name}")
-                if existed_before:
-                    print(f"Overwrote existing file: {full_output_path.name}")
-                return True
-            else:
-                print(f"pandoc failed: {result.stderr.strip() if result.stderr else 'unknown error'}")
-                return False
-        except FileNotFoundError:
-            print("Error: pandoc not found.")
-            return False
-        except Exception as e:
-            print(f"Unexpected error running pandoc: {e}")
-            return False
-        finally:
-            # Clean up temp files on error
-            if header_path and os.path.exists(header_path):
-                os.unlink(header_path)
-            if modified_input_path and os.path.exists(modified_input_path):
-                os.unlink(modified_input_path)
+    temp_path = None
+    try:
+        content = read_text(full_input_path, translate_newlines=True)
 
-    print("Neither Rscript (rmarkdown) nor pandoc found. Please install one of them to convert .Rmd to PDF.")
-    print("- Install R + rmarkdown: Rscript -e 'install.packages(\"rmarkdown\")'")
-    print("- Or install pandoc: see https://pandoc.org/installing.html")
-    return False
+        # Check if YAML header exists and add geometry settings for proper margins
+        if content.startswith('---'):
+            # Find the end of YAML header
+            yaml_end = content.find('---', 3)
+            if yaml_end != -1:
+                yaml_header = content[:yaml_end + 3]
+                # Add geometry settings if not already present
+                if 'geometry:' not in yaml_header and 'margin' not in yaml_header.lower():
+                    yaml_header = yaml_header.replace('\n---', '\ngeometry: margin=1in\n---')
+                    content = yaml_header + content[yaml_end + 3:]
+        else:
+            # No YAML header, prepend one
+            content = '---\ngeometry: margin=1in\n---\n\n' + content
+
+        # R renders this copy, so the margins don't change the original file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.Rmd', delete=False, encoding='utf-8') as tmp:
+            tmp.write(content)
+            temp_path = tmp.name
+
+        r_expr = (
+            "rmarkdown::render("
+            f"\"{temp_path}\", "
+            "output_format=\"pdf_document\", "
+            f"output_file=\"{pdf_name}\", "
+            f"output_dir=\"{str(output_dir)}\")"
+        )
+        cmd = [
+            "Rscript",
+            "-e",
+            r_expr,
+        ]
+        print(f"Converting {full_input_path.name} to pdf")
+        result = run_tool(cmd)
+        if result.returncode == 0 and full_output_path.exists():
+            print(f"Converted {full_input_path.name} to {full_output_path.name}")
+            if existed_before:
+                print(f"Overwrote existing file: {full_output_path.name}")
+            return True
+        print(f"rmarkdown failed: {result.stderr.strip() or 'unknown error'}")
+        return False
+    except Exception as e:
+        print(f"rmarkdown failed with error: {e}")
+        return False
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 def main():
