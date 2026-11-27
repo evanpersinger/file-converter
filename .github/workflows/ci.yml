@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   backend:
-    # macOS because md_pdf.py needs the Menlo font and html_svg.py hardcodes the macOS Chrome path
+    # macOS because that is the only system the app is built and tested on
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
